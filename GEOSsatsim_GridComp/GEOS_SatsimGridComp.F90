@@ -479,6 +479,8 @@ contains
         VLOCATION  = MAPL_VLocationNone,                  __RC__  )
 
 !   fq_isccp(5,4)
+    call MAPL_AddExportSpec(GC,                                   &
+        SHORT_NAME ='ISCCP_AST_OB',                               &
         LONG_NAME  ='isccp_fraction_of_thick_higher_altostratus', &
         UNITS      ='1',                                          &
         DIMS       = MAPL_DimsHorzOnly,                           &
