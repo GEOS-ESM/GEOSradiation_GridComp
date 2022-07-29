@@ -191,7 +191,9 @@ contains
       real :: ztrad  (nlay+1,ngptsw,pncol)  ! diffuse     transmissivity
 
       logical :: recalc (ncol) 
-      integer, allocatable(:) :: irc
+      integer, allocatable :: irc(:)
+      real, dimension(:,:  ), allocatable :: ssi_rc, zsflxzen_rc
+      real, dimension(:,:,:), allocatable :: ztaug_rc, ztaur_rc
       integer :: nrc
 
       ! ------------------------------------------------------------------
@@ -222,12 +224,15 @@ contains
             ssi, zsflxzen, ztaug, ztaur)
       else
          ! FAR asynchronous recalculation of uninitialized or old values
-         recalc = (taumol_age(1:ncol) < 0.) .or. (taulmol_age(1:ncol) > taumol_age_limit)
+         recalc = (taumol_age(1:ncol) < 0.) .or. (taumol_age(1:ncol) > taumol_age_limit)
          if (any(recalc)) then
             ! get number of recalculated columns and their indicies irc
             nrc = count(recalc)
             allocate(irc(nrc))
-            irc = pack([1:ncol],recalc)
+            irc = pack([1:ncol],mask=recalc)
+            ! working space (is there a faster way? pmn)
+            allocate(ssi_rc(ngptsw,nrc),zsflxzen_rc(ngptsw,nrc))
+            allocate(ztaug_rc(nlay,ngptsw,nrc),ztaur_rc(nlay,ngptsw,nrc))
             ! recalculate columns needed
             call taumol_sw( &
                nrc, nrc, nlay, &
@@ -238,11 +243,16 @@ contains
                selffac(:,irc), selffrac(:,irc), indself(:,irc), &
                forfac(:,irc), forfrac(:,irc), indfor(:,irc), &
                isolvar, svar_f, svar_s, svar_i, svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-               ssi(:,irc), zsflxzen(:,irc), ztaug(:,:,irc), ztaur(:,:,irc))
+               ssi_rc, zsflxzen_rc, ztaug_rc, ztaur_rc)
+            ! unpack outputs
+            ssi     (:,irc) =      ssi_rc
+            zsflxzen(:,irc) = zsflxzen_rc
+            ztaug (:,:,irc) =    ztaug_rc
+            ztaur (:,:,irc) =    ztaur_rc
             ! recalculated values are now brand new
             taumol_age(irc) = 0.
             ! clean up
-            deallocate(irc)
+            deallocate (irc, ssi_rc, zsflxzen_rc, ztaug_rc, ztaur_rc)
          end if
       endif
 

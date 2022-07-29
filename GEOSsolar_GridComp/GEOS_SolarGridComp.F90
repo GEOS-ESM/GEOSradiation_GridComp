@@ -707,7 +707,6 @@ contains
              DEFAULT    = -1.,                                                  &
              DIMS       = MAPL_DimsHorzOnly,                                    &
              VLOCATION  = MAPL_VLocationNone,                             __RC__)
-uNpackIt and default ?????
 
           call MAPL_AddInternalSpec(GC,                                         &
              SHORT_NAME = 'FAR_SFLXZEN',                                        &
@@ -1504,7 +1503,7 @@ uNpackIt and default ?????
     type (ESMF_Alarm)                   :: ALARM
     type (ESMF_State)                   :: INTERNAL
     type (ESMF_Time)                    :: currentTime
-    type (ESMF_TimeInterval)            :: intDT
+    type (ESMF_TimeInterval)            :: intDT, TINT
     integer                             :: IM, JM, LM
     type (MAPL_SunOrbit)                :: ORBIT
     type (MAPL_VarSpec), pointer        :: ImportSpec(:)   => null()
@@ -1515,6 +1514,7 @@ uNpackIt and default ?????
 
     real, pointer, dimension(:,:,:)     :: ptr3d
     real, pointer, dimension(:,:  )     :: ptr2d
+    real, pointer, dimension(:,:  )     :: FAR_taumol_age
 
     type (ESMF_State)                     :: AERO
     character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME   
@@ -1579,7 +1579,7 @@ uNpackIt and default ?????
     logical                        :: PersistSolar
 
     logical :: do_no_aero_calc, do_FAR
-    real :: FAR_taumol_age_limit
+    real :: FAR_dt, FAR_taumol_age_limit
 
     ! list of strings facility
     integer :: i
@@ -1838,8 +1838,40 @@ uNpackIt and default ?????
 
     ! FAR timing
     if (do_FAR) then
-       call MAPL_GetResource (MAPL, FAR_taumol_age_limit, &
+
+       ! FAR_dt, _taumol_age, _taumol_age_limit all in seconds
+       call MAPL_GetResource (MAPL, FAR_dt, Label="RUN_DT:", __RC__)
+       call MAPL_GetPointer(INTERNAL, FAR_taumol_age, "FAR_TAUMOL_AGE", __RC__)
+       call MAPL_GetResource(MAPL, FAR_taumol_age_limit, &
           "FAR_TAUMOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
+
+       ! Heartbeat interval for "instantaneous" FAR Solar footprint ...
+       ! [In FAR mode, the goal is to include at least the solar pathlength and
+       ! surface albedo variations at the heartbeat. Other fields (such as the
+       ! gaseous absorption and Rayleigh scattering in rrtmg_sw_taumol) are
+       ! calculated asynchronously (when needed) and saved and re-used (thus
+       ! speeding up the full calculation) until they become too old and must
+       ! be calculated again. This is the basis of the name "Fast Asynchronous
+       ! Refreshes". But, even in FAR mode, actual exports are still produced
+       ! in UPDATE_EXPORT().]
+     
+       call ESMF_ClockGet(CLOCK, timeSTEP=TINT, __RC__)
+
+    else
+
+       ! Longer solar ring interval for legacy (non-FAR) solar super-footprint ...
+       ! [This longer REFRESH interval forms the basis of a normalized full solar
+       ! calculation that is simply scaled at each hearbeat (in UPDATE_EXPORT())
+       ! by the TOA projected solar input. This scaled update is extremely quick,
+       ! but it lacks some important aspects of the full calculation, namely the
+       ! pathlength (cf. projection) effect of the updated solar position, and
+       ! all the changes caused by variations in surface albedo and atmospheric
+       ! properties within the REFRESH period. Because the REFRESH interval is
+       ! [longer than the heartbeat, its solar footprint is a superset (union)
+       ! of each of the UPDATE (hearbeat) solar footprints that fall within it.]
+
+       call ESMF_AlarmGet(ALARM, ringInterval=TINT, __RC__)
+
     end if
 
     ! Determine calling sequence ...
@@ -1871,8 +1903,6 @@ uNpackIt and default ?????
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)
 
-up to here ... still need to resolve ZTH_SUPER or not , etc.
-
        ! Set offset INTDT from current time for beginning of refresh period.
        if (UPDATE_FIRST) then
           ! The update is already done, so the refresh interval should start one
@@ -1883,9 +1913,6 @@ up to here ... still need to resolve ZTH_SUPER or not , etc.
           ! periods should begin at the current time.
           call ESMF_TimeIntervalSet(INTDT, s=0, __RC__)
        end if
-need to get pointer to FAR_TAUMOL_AGE
-and add RUN_DT to >=0 partsd after SORADCORE calls somewhere
-also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
 
 !pmn with aerosols and many other optical components must in do_FAR save them in the internal
 !pmn state on REFRESH_FLUXES and when .not.REFRESH_FLUXES draw on these internals
@@ -2006,10 +2033,11 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
           ! do a calculation without aerosols:
           !   this just sets the no-aerosol internals ---
           !   the exports are derived from the internals in update_export()
-          call SORADCORE(IM,JM,LM,            &
-               include_aerosols = .false.,    &
-               CURRTIME = CURRENTTIME+INTDT,  &
-               LoadBalance = LoadBalance,     &
+          call SORADCORE(IM,JM,LM,           &
+               include_aerosols = .false.,   &
+               CURRTIME = CURRENTTIME+INTDT, &
+               INTERVAL = TINT,              &
+               LoadBalance = LoadBalance,    &
                __RC__)
        else
 
@@ -2025,10 +2053,11 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
 
        ! Regular with-aerosol calculations
        ! ---------------------------------
-       call SORADCORE(IM,JM,LM,                    &
-                      include_aerosols = .true.,   &
-                      CURRTIME = CURRENTTIME+INTDT,&
-                      LoadBalance = LoadBalance,   &
+       call SORADCORE(IM,JM,LM,                     &
+                      include_aerosols = .true.,    &
+                      CURRTIME = CURRENTTIME+INTDT, &
+                      INTERVAL = TINT,              &
+                      LoadBalance = LoadBalance,    &
                       __RC__)
 
        ! Clean up aerosol optical properties
@@ -2049,6 +2078,12 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
        call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
 
+    ! update FAR ages
+    if (do_FAR) then
+      where (FAR_taumol_age >= 0.) &
+         FAR_taumol_age = FAR_taumol_age + FAR_dt
+    end if
+
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
     RETURN_(ESMF_SUCCESS)
 
@@ -2056,7 +2091,7 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,LoadBalance,RC)
+    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,INTERVAL,LoadBalance,RC)
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
@@ -2093,18 +2128,18 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
 
       implicit none
 
-      integer,           intent(IN ) :: IM, JM, LM
-      logical,           intent(IN ) :: include_aerosols
-      type (ESMF_Time),  intent(IN ) :: CURRTIME
-      logical,           intent(IN ) :: LoadBalance
-      integer, optional, intent(OUT) :: RC
+      integer,                   intent(IN ) :: IM, JM, LM
+      logical,                   intent(IN ) :: include_aerosols
+      type (ESMF_Time),          intent(IN ) :: CURRTIME
+      type (ESMF_TimeInterval),  intent(IN ) :: INTERVAL
+      logical,                   intent(IN ) :: LoadBalance
+      integer, optional,         intent(OUT) :: RC
 
 !  Locals
 
       character(len=ESMF_MAXSTR)      :: IAm
       integer                         :: STATUS
 
-      type (ESMF_TimeInterval)        :: TINT
       type (ESMF_DELayout)            :: LAYOUT
       type (ESMF_Array)               :: ARRAY
       type (ESMF_FieldBundle)         :: BUNDLE
@@ -2113,7 +2148,7 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       type (ESMF_VM)                  :: VM
       integer                         :: COMM
 
-      real,    dimension(IM,JM)       :: ZTH, SLR, ZTH_SUPER, SLR_SUPER
+      real,    dimension(IM,JM)       :: ZTH, SLR
       logical, dimension(IM,JM)       :: daytime
 
       ! Daytime ONLY copy of variables
@@ -2160,7 +2195,7 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       real, parameter :: N2 = 0.7906400E+00 ! approx from rrtmgp input file
       real, parameter :: CO = 0.0           ! currently zero
 
-      real    :: ADJES, DIST, DIST_SUPER
+      real    :: ADJES, DIST
       integer :: DYOFYR
       integer :: NCOL
       integer :: RPART, IAER, NORMFLX
@@ -2169,6 +2204,8 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       real, dimension(2)        :: INDSOLVAR
       real, dimension(nb_rrtmg) :: BNDSOLVAR
       real                      :: SOLCYCFRAC
+
+      type (ESMF_TimeInterval)       :: INTERVAL_
 
       ! variables for RRTMGP code
       ! -------------------------
@@ -2294,7 +2331,7 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       integer :: NumImp, NumInt, NumInp, NumInOut, NumOut
       integer :: NumMax, HorzDims(2)
       integer :: ibinary
-      real :: internalDefault
+      real :: def
 
 ! helper for testing RRTMGP error status on return
 ! allows line number reporting cf. original call method
@@ -2310,69 +2347,19 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       FAR_SFLXZEN    => null()
       FAR_SSI        => null()
 
-! Get the average insolation for the next alarm "REFRESH" interval
-!-----------------------------------------------------------------
-! @ In standard (legacy) mode, this longer REFRESH interval forms the basis of
-! a normalized full solar calculation that is simply scaled at each hearbeat (in
-! UPDATE_EXPORTS) by the TOA projected solar input. This scaled update is extremely
-! quick, but it lacks some important aspects of the full calculation, namely the
-! pathlength (cf. projection) effect of the updated solar position, and all the
-! changes caused by variations in surface albedo and atmospheric properties within
-! the REFRESH period.
-! @ Note: Because the REFRESH interval is longer than the heartbeat, its solar
-! footprint (ZTH_SUPER > 0) is a superset (union) of each of the UPDATE (hearbeat)
-! solar footprints that fall within it.
-! @ In FAR mode, the goal is to include at least the solar pathlength and surface
-! albedo variations within the REFRESH period. We use the same super-footprint as
-! in non-FAR mode to save pre-calculated fields which are not dependent on solar
-! position or surface albedo. We use this larger footprint so that we have the
-! precalculated fields on the superset footprint, not because we use ZTH_SUPER
-! explicitly as a solar zenith angle. But on each hearbeat we do an (accelerated)
-! full solar calculation (and then normalization) for the heartbeat solar footprint
-! (ZTH > 0). The actual exports are still produced in UPDATE_EXPORT() as always.
-! The reason the asynchronous (heartbeat) refreshes are accelerated (the so-called
-! "Fast Asynchronous Refreshes") is that they use the REFRESH-only pre-calculated
-! fields.
+      ! PMN: This line is only needed because MAPL_SunGetInsolation()
+      ! declares INTV as InOut. Doesn't appear this needs to be the case.
+      INTERVAL_ = INTERVAL
 
-      if (REFRESH_FLUXES) then
-        ! prepare solar super-footprint for longer solar ring interval
-        call ESMF_AlarmGet(ALARM, RINGINTERVAL=TINT, __RC__)
-        call MAPL_SunGetInsolation(   &
-                LONS, LATS, ORBIT,    &
-                ZTH_SUPER, SLR_SUPER, &
-                INTV = TINT,          &
-                currTime = currTime,  &
-                TIME = SUNFLAG,       &
-                DIST = DIST_SUPER,    &
-                __RC__)
-        ! this super-footprint is used in non-FAR mode
-        if (.not.do_FAR) then
-          ZTH  =  ZTH_SUPER
-          SLR  =  SLR_SUPER
-          DIST = DIST_SUPER
-        endif
-      endif
-!!! does _SUPER need to be saved as well in internals??
-
-      if (do_FAR) then
-        ! with FAR every SORADCORE is for a timestep whether
-        ! its a full or an accelerated solar calculation
-        call ESMF_ClockGet(CLOCK, TIMESTEP=TINT, __RC__)
-        call MAPL_SunGetInsolation(  &
-                LONS, LATS, ORBIT,   &
-                ZTH, SLR,            &
-                INTV = TINT,         &
-                currTime = currTime, &
-                TIME = SUNFLAG,      &
-                DIST = DIST,         &
-                __RC__)
-      endif
-!!! this is all very complicated ...
-!!! need to know if precalculated fields are available
-!!! need them for both regular case and no-aerosol case and those fields in common to both
-!!! have to resolve update_first issue 
-!!! need to set flag on first full refresh ... if not set the no precalcs so like a non-FAR case
-!!! ... But FIRST that need to focus on whether sufficient time-savings can be achieved anyway?
+      ! average solar insolation for interval
+      call MAPL_SunGetInsolation(  &
+              LONS, LATS, ORBIT,   &
+              ZTH, SLR,            &
+              INTV = INTERVAL_,    &
+              currTime = currTime, &
+              TIME = SUNFLAG,      &
+              DIST = DIST,         &
+              __RC__)
 
       ! convert SLR to an ABSOLUTE downward flux [W/m2] for normalization purposes later
       ! (SLR from MAPL_SunGetInsolation() already contains the DIST and ZTH effects)
@@ -4207,61 +4194,58 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
       ! Unpack the results. Fills "masked" (night) locations with default value from internal state
       !--------------------------------------------------------------------------------------------
       ! resulting internals are then contiguous versions
+      ! Note: InOut variables do not fill unmasked locations with a default,
+      ! since the unmasked locations may contain potentially useful aged data.
 
       i1InOut = 1; i1Out = 1
       INT_VARS_3: do k=1,NumInt
          if (SlicesInt(k) == 0) cycle
 
-         ! default from internal State Spec
-         call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=internalDefault,__RC__)
-
          if (IntInOut(k)) then
-            buf => bufInOut; pi1 => i1InOut
+            pi1 => i1InOut
          else
-            buf => bufOut;   pi1 => i1Out
+            pi1 => i1Out
+            call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=def,__RC__)
          endif
 
          if (ugDim(k) > 0) then
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
-                  do j=1,ugDim(k)
-!pmn compiler       call UnPackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-!pmn compiler          daytime,NumMax,HorzDims,size(ptr4,3),InternalDefault)
-                    if (IntInOut(k)) then
-                       call UnPackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                          daytime,NumMax,HorzDims,size(ptr4,3),InternalDefault)
-                    else
-                       call UnPackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                          daytime,NumMax,HorzDims,size(ptr4,3),InternalDefault)
-                    endif
-                  end do
+                  if (IntInOut(k)) then
+                     do j=1,ugDim(k)
+                        call UnPackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
+                           daytime,NumMax,HorzDims,size(ptr4,3))
+                     end do
+                  else
+                     do j=1,ugDim(k)
+                        call UnPackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
+                           daytime,NumMax,HorzDims,size(ptr4,3),def)
+                     end do
+                  endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call UnPackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),InternalDefault)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),InternalDefault)
+                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
                   else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),InternalDefault)
+                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),def)
                   endif
             end select
          else
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call UnPackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),internalDefault)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),internalDefault)
+                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                   else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),internalDefault)
+                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),def)
                   endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
-!pmn compiler     call UnPackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1,internalDefault)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1,internalDefault)
+                     call UnPackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
                   else
-                     call UnPackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1,internalDefault)
+                     call UnPackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1,def)
                   endif
             end select
          end if
@@ -5461,13 +5445,6 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
     real, optional, intent(IN) :: DEFAULT
 
     integer :: I, J, L, M
-    real :: usableDefault
-
-    if (PRESENT(DEFAULT)) then
-      usableDefault = DEFAULT
-    else
-      usableDefault = 0
-    end if
 
     do L = 1,LM
       M = 1
@@ -5476,8 +5453,8 @@ also fix up ZTGH ... if (do_FAR) need only timestep UPDATE ZTH
           if (MSK(I,J)) then
             Unpacked(I,J,L) = Packed(M,L)
             M = M+1
-          else
-            UnPacked(I,J,L) = usableDefault
+          elseif (PRESENT(DEFAULT)) then
+            UnPacked(I,J,L) = DEFAULT
           end if
         end do
       end do
