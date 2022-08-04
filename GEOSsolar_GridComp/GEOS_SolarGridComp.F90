@@ -692,6 +692,7 @@ contains
 ! ----------------------------------------------------------------------
 
     if (do_FAR) then
+
        if (USE_RRTMG) then
 
           ! FAR taumol internal state
@@ -741,6 +742,56 @@ contains
              VLOCATION  = MAPL_VLocationCenter,                           __RC__)
 
        endif  ! RRTMG
+
+       ! FAR aerosol internal state ...
+       ! Note: Currently aerosols are input-only to the loadBalancer because they
+       ! are calculated externally to SORADCORE on the whole globe. But we treat
+       ! them as InOut because they are part of the Internal state, and because 
+       ! it would be more efficient to calculate them only on the aged sunlit
+       ! locations (i.e., only where needed) if we can later get the aero provider
+       ! method to cooperate with a 1D list of gridcolumns. PMN.
+
+       ! FAR_AEROSOL_AGE must have an explicit negative DEFAULT. This triggers
+       ! asynchronous initialization after a boostrapped restart. When the age
+       ! is non-negative, it keeps track of how old each gridcolumn's internal
+       ! aerosol calculation is (so it can be recalculated when too old).
+       call MAPL_AddInternalSpec(GC,                                         &
+          SHORT_NAME = 'FAR_AEROSOL_AGE',                                    &
+          LONG_NAME  = 'age_of_stored_aerosol_internals_for_FAR',            &
+          UNITS      = 's',                                                  &
+          DEFAULT    = -1.,                                                  &
+          DIMS       = MAPL_DimsHorzOnly,                                    &
+          VLOCATION  = MAPL_VLocationNone,                             __RC__)
+ 
+       call MAPL_AddInternalSpec(GC,                                         &
+          SHORT_NAME = 'FAR_TAUA',                                           &
+          LONG_NAME  = 'aerosol_optical_thickness_for_FAR',                  &
+          UNITS      = '1',                                                  &
+          DEFAULT    = 0.,                                                   &
+          DIMS       = MAPL_DimsHorzVert,                                    &
+          UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                            &
+          VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+       ! scaled means TAUA*SSA
+       call MAPL_AddInternalSpec(GC,                                         &
+          SHORT_NAME = 'FAR_SSAA',                                           &
+          LONG_NAME  = 'aerosol_scaled_single_scattering_albedo_for_FAR',    &
+          UNITS      = '1',                                                  &
+          DEFAULT    = 0.,                                                   &
+          DIMS       = MAPL_DimsHorzVert,                                    &
+          UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                            &
+          VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+       ! scaled means TAUA*SSA*ASYA
+       call MAPL_AddInternalSpec(GC,                                         &
+          SHORT_NAME = 'FAR_ASYA',                                           &
+          LONG_NAME  = 'aerosol_scaled_asymmetry_parameter_for_FAR',         &
+          UNITS      = '1',                                                  &
+          DEFAULT    = 0.,                                                   &
+          DIMS       = MAPL_DimsHorzVert,                                    &
+          UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                            &
+          VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
     endif  ! FAR
 
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1401,6 +1452,13 @@ contains
     call MAPL_TimerAdd(GC, name="--SORAD_DEALLOC"         , __RC__)
     call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_PART"           , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_FLIP"            , __RC__)
     call MAPL_TimerAdd(GC, name="-RRTMGP"                 , __RC__)
@@ -1514,7 +1572,8 @@ contains
 
     real, pointer, dimension(:,:,:)     :: ptr3d
     real, pointer, dimension(:,:  )     :: ptr2d
-    real, pointer, dimension(:,:  )     :: FAR_taumol_age
+
+    real, pointer, dimension(:,:) :: FAR_taumol_age, FAR_aerosol_age
 
     type (ESMF_State)                     :: AERO
     character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME   
@@ -1530,8 +1589,11 @@ contains
     real, allocatable, dimension(:,:,:,:) :: AEROSOL_SSA
     real, allocatable, dimension(:,:,:,:) :: AEROSOL_ASY
 
+    real, pointer, dimension(:,:,:,:) :: &
+       FAR_TAUA, FAR_SSAA, FAR_ASYA
+
     integer :: band
-    logical :: implements_aerosol_optics
+    logical :: implements_aerosol_optics, update_aerosols
     logical :: USE_RRTMGP, USE_RRTMGP_IRRAD, NEED_RRTMGP
     logical :: USE_RRTMG,  USE_RRTMG_IRRAD,  NEED_RRTMG
     logical :: USE_CHOU,   USE_CHOU_IRRAD,   NEED_CHOU
@@ -1560,7 +1622,7 @@ contains
     integer :: SUNFLAG
     real, pointer, dimension(:) :: PREF
 
-    logical :: REFRESH_FLUXES
+    logical :: SOLAR_ALARM_RINGING
     logical :: UPDATE_FIRST
 
     real, external :: getco2
@@ -1579,7 +1641,7 @@ contains
     logical                        :: PersistSolar
 
     logical :: do_no_aero_calc, do_FAR
-    real :: FAR_dt, FAR_taumol_age_limit
+    real :: FAR_dt, FAR_taumol_age_limit, FAR_aerosol_age_limit
 
     ! list of strings facility
     integer :: i
@@ -1833,45 +1895,19 @@ contains
     ! do Fast Asynchronous Refreshes?
     ! -------------------------------
     call MAPL_GetResource (MAPL, do_FAR, "DO_FAR:", DEFAULT=.FALSE., __RC__)
-    ! >> Currently only for RRTMG
-    do_FAR = do_FAR .and. USE_RRTMG
 
     ! FAR timing
     if (do_FAR) then
-
-       ! FAR_dt, _taumol_age, _taumol_age_limit all in seconds
+       ! FAR_dt, _age, _age_limit all in seconds
        call MAPL_GetResource (MAPL, FAR_dt, Label="RUN_DT:", __RC__)
-       call MAPL_GetPointer(INTERNAL, FAR_taumol_age, "FAR_TAUMOL_AGE", __RC__)
-       call MAPL_GetResource(MAPL, FAR_taumol_age_limit, &
-          "FAR_TAUMOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
-
-       ! Heartbeat interval for "instantaneous" FAR Solar footprint ...
-       ! [In FAR mode, the goal is to include at least the solar pathlength and
-       ! surface albedo variations at the heartbeat. Other fields (such as the
-       ! gaseous absorption and Rayleigh scattering in rrtmg_sw_taumol) are
-       ! calculated asynchronously (when needed) and saved and re-used (thus
-       ! speeding up the full calculation) until they become too old and must
-       ! be calculated again. This is the basis of the name "Fast Asynchronous
-       ! Refreshes". But, even in FAR mode, actual exports are still produced
-       ! in UPDATE_EXPORT().]
-     
-       call ESMF_ClockGet(CLOCK, timeSTEP=TINT, __RC__)
-
-    else
-
-       ! Longer solar ring interval for legacy (non-FAR) solar super-footprint ...
-       ! [This longer REFRESH interval forms the basis of a normalized full solar
-       ! calculation that is simply scaled at each hearbeat (in UPDATE_EXPORT())
-       ! by the TOA projected solar input. This scaled update is extremely quick,
-       ! but it lacks some important aspects of the full calculation, namely the
-       ! pathlength (cf. projection) effect of the updated solar position, and
-       ! all the changes caused by variations in surface albedo and atmospheric
-       ! properties within the REFRESH period. Because the REFRESH interval is
-       ! [longer than the heartbeat, its solar footprint is a superset (union)
-       ! of each of the UPDATE (hearbeat) solar footprints that fall within it.]
-
-       call ESMF_AlarmGet(ALARM, ringInterval=TINT, __RC__)
-
+       if (use_RRTMG) then
+          call MAPL_GetPointer(INTERNAL, FAR_taumol_age, "FAR_TAUMOL_AGE", __RC__)
+          call MAPL_GetResource(MAPL, FAR_taumol_age_limit, &
+             "FAR_TAUMOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
+       end if
+       call MAPL_GetPointer(INTERNAL, FAR_aerosol_age, "FAR_AEROSOL_AGE", __RC__)
+       call MAPL_GetResource(MAPL, FAR_aerosol_age_limit, &
+          "FAR_AEROSOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
     end if
 
     ! Determine calling sequence ...
@@ -1886,24 +1922,27 @@ contains
 
     call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
 
-    ! Update the Sun position and weigh the export variables
+    ! Update the Sun position and weight the export variables
+    ! -------------------------------------------------------
     if (UPDATE_FIRST) then
        call MAPL_TimerOn  (MAPL,"UPDATE",__RC__) 
        call UPDATE_EXPORT (IM,JM,LM,__RC__) 
        call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
 
-    ! Periodically, refresh the internal state with a full solar calculation
-    ! ----------------------------------------------------------------------
-    REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
-       
-    REFRESH: if (REFRESH_FLUXES .or. do_FAR) then
+    ! Periodically, refresh the internal state with a full solar calc
+    ! ---------------------------------------------------------------
+    ! do either if do_FAR, or if not, if SOLAR alarm is ringing
+
+    SOLAR_ALARM_RINGING = ESMF_AlarmIsRinging (ALARM, __RC__)
+    REFRESH: if (do_FAR .or. SOLAR_ALARM_RINGING) then
        call MAPL_TimerOn (MAPL,"REFRESH",__RC__) 
 
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)
 
-       ! Set offset INTDT from current time for beginning of refresh period.
+       ! Set offset INTDT from current time for beginning of refresh period
+       ! ------------------------------------------------------------------
        if (UPDATE_FIRST) then
           ! The update is already done, so the refresh interval should start one
           ! timestep beyond current time so it is constent with the NEXT update.
@@ -1914,95 +1953,148 @@ contains
           call ESMF_TimeIntervalSet(INTDT, s=0, __RC__)
        end if
 
-!pmn with aerosols and many other optical components must in do_FAR save them in the internal
-!pmn state on REFRESH_FLUXES and when .not.REFRESH_FLUXES draw on these internals
+       ! Decide on time interval for solar illumination inside SORADCORE
+       ! ---------------------------------------------------------------
+       if (do_FAR) then
+          ! Heartbeat interval for "instantaneous" FAR Solar footprint ...
+          ! [In FAR mode, the goal is to include at least the solar pathlength and
+          ! surface albedo variations at the heartbeat. Other fields (such as the
+          ! gaseous absorption and Rayleigh scattering in rrtmg_sw_taumol) are
+          ! calculated asynchronously (when needed) and saved and re-used (thus
+          ! speeding up the full calculation) until they become too old and must
+          ! be calculated again. This is the basis of the name "Fast Asynchronous
+          ! Refreshes". But, even in FAR mode, actual exports are still produced
+          ! in UPDATE_EXPORT().]
+          call ESMF_ClockGet(CLOCK, timeSTEP=TINT, __RC__)
+       else
+          ! Longer solar ring interval for legacy (non-FAR) solar super-footprint ...
+          ! [This longer REFRESH interval forms the basis of a normalized full solar
+          ! calculation that is simply scaled at each hearbeat (in UPDATE_EXPORT())
+          ! by the TOA projected solar input. This scaled update is extremely quick,
+          ! but it lacks some important aspects of the full calculation, namely the
+          ! pathlength (cf. projection) effect of the updated solar position, and
+          ! all the changes caused by variations in surface albedo and atmospheric
+          ! properties within the REFRESH period. Because the REFRESH interval is
+          ! [longer than the heartbeat, its solar footprint is a superset (union)
+          ! of each of the UPDATE (hearbeat) solar footprints that fall within it.]
+          call ESMF_AlarmGet(ALARM, ringInterval=TINT, __RC__)
+       end if
+
        ! Get optical properties of radiatively active aerosols
        ! -----------------------------------------------------
-       call MAPL_TimerOn (MAPL,"-AEROSOLS", __RC__)
+       call MAPL_TimerOn (MAPL,"-AEROSOLS",__RC__)
+       call ESMF_StateGet(IMPORT,'AERO',AERO,__RC__)
+       call ESMF_AttributeGet(AERO, &
+          name='implements_aerosol_optics_method', &
+          value=implements_aerosol_optics,__RC__)
+       if (implements_aerosol_optics) then
 
-       call ESMF_StateGet(IMPORT, 'AERO', AERO, __RC__)
+          ! decide if need to update aerosols
+          update_aerosols = .not.do_FAR  ! => SOLAR_ALARM_RINGING, so update aerosols;
+          if (.not.update_aerosols) then ! now do_FAR, but is an aerosol update NEEDED?
+             ! FAR asynchronous recalculation of uninitialized or old values:
+             ! Note: until can call the aero provider on a sunlit-only list of
+             ! gridcolumns from inside SORADCORE, we do this for all the globe.
+             update_aerosols = any(FAR_aerosol_age < 0.) &
+                .or. any(FAR_aerosol_age > FAR_aerosol_age_limit)
+          endif
+          if (update_aerosols) then
 
-       call ESMF_AttributeGet(AERO, name='implements_aerosol_optics_method', &
-                                    value=implements_aerosol_optics, __RC__)
-
-       RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
-
-          ! set RH for aerosol optics
-          call ESMF_AttributeGet(AERO, name='relative_humidity_for_aerosol_optics', &
-                                       value=AS_FIELD_NAME, __RC__)
-
-          if (AS_FIELD_NAME /= '') then
-             call MAPL_GetPointer(IMPORT, AS_PTR_PLE, 'PLE', __RC__)
-             call MAPL_GetPointer(IMPORT, AS_PTR_Q,   'QV',  __RC__)
-             call MAPL_GetPointer(IMPORT, AS_PTR_T,   'T',   __RC__)
-
-             allocate(AS_ARR_RH(IM,JM,LM), AS_ARR_PL(IM,JM,LM), __STAT__)
-             AS_ARR_PL = 0.5*(AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
-             AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-     
-             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-             AS_PTR_3D = AS_ARR_RH
-     
-             deallocate(AS_ARR_RH, AS_ARR_PL, __STAT__)
-          end if
-
-          ! set PLE for aerosol optics
-          call ESMF_AttributeGet(AERO, name='air_pressure_for_aerosol_optics', &
-                                       value=AS_FIELD_NAME, __RC__)
-
-          if (AS_FIELD_NAME /= '') then
-             call MAPL_GetPointer(IMPORT, AS_PTR_PLE, 'PLE', __RC__)
-             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-             AS_PTR_3D = AS_PTR_PLE
-          end if
-
-          ! allocate memory for total aerosol ext, ssa and asy at all solar bands
-          allocate(AEROSOL_EXT(IM,JM,LM,NUM_BANDS_SOLAR), &
-                   AEROSOL_SSA(IM,JM,LM,NUM_BANDS_SOLAR), &
-                   AEROSOL_ASY(IM,JM,LM,NUM_BANDS_SOLAR), __STAT__)
-
-          AEROSOL_EXT = 0.
-          AEROSOL_SSA = 0.
-          AEROSOL_ASY = 0.
-
-          ! compute aerosol optics at all solar bands
-          SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
-             call ESMF_AttributeSet(AERO, name='band_for_aerosol_optics', &
-                                          value=(BANDS_SOLAR_OFFSET+band), __RC__)
-
-             ! execute the aero provider's optics method 
-             call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=AS_STATUS, RC=STATUS)
-             VERIFY_(AS_STATUS)
-             VERIFY_(STATUS)
-
-             ! EXT from AERO_PROVIDER
-             call ESMF_AttributeGet(AERO, name='extinction_in_air_due_to_ambient_aerosol', &
-                                          value=AS_FIELD_NAME, __RC__)
+             ! set RH for aerosol optics
+             call ESMF_AttributeGet(AERO, &
+                name='relative_humidity_for_aerosol_optics', &
+                value=AS_FIELD_NAME,__RC__)
              if (AS_FIELD_NAME /= '') then
-                call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
+                call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
+                call MAPL_GetPointer(IMPORT,AS_PTR_Q,  'QV', __RC__)
+                call MAPL_GetPointer(IMPORT,AS_PTR_T,  'T',  __RC__)
+                allocate(AS_ARR_RH(IM,JM,LM),AS_ARR_PL(IM,JM,LM),__STAT__)
+                AS_ARR_PL = 0.5 * (AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
+                AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T,PL=AS_ARR_PL)
+                call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                AS_PTR_3D = AS_ARR_RH
+                deallocate(AS_ARR_RH,AS_ARR_PL,__STAT__)
              end if
 
-             ! SSA from AERO_PROVIDER
-             call ESMF_AttributeGet(AERO, name='single_scattering_albedo_of_ambient_aerosol', &
-                                          value=AS_FIELD_NAME, __RC__)
+             ! set PLE for aerosol optics
+             call ESMF_AttributeGet(AERO, &
+                name='air_pressure_for_aerosol_optics', &
+                value=AS_FIELD_NAME,__RC__)
              if (AS_FIELD_NAME /= '') then
-                call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
+                call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
+                call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                AS_PTR_3D = AS_PTR_PLE
              end if
 
-             ! ASY from AERO_PROVIDER
-             call ESMF_AttributeGet(AERO, name='asymmetry_parameter_of_ambient_aerosol', &
-                                          value=AS_FIELD_NAME, __RC__)
-             if (AS_FIELD_NAME /= '') then
-                call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
-             end if    
-          end do SOLAR_BANDS
+             ! memory for TOTAL aerosol ext, ssa & asy at all solar bands
+             allocate(AEROSOL_EXT(IM,JM,LM,NUM_BANDS_SOLAR), &
+                      AEROSOL_SSA(IM,JM,LM,NUM_BANDS_SOLAR), &
+                      AEROSOL_ASY(IM,JM,LM,NUM_BANDS_SOLAR), __STAT__)
 
-       end if RADIATIVELY_ACTIVE_AEROSOLS
+             ! zero by default
+             ! (in case aero provider can't provide some of them)
+             AEROSOL_EXT = 0.
+             AEROSOL_SSA = 0.
+             AEROSOL_ASY = 0.
 
-       call MAPL_TimerOff(MAPL,"-AEROSOLS", __RC__)
+             ! compute aerosol optics at all solar bands
+             SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
+                call ESMF_AttributeSet(AERO, &
+                   name='band_for_aerosol_optics', &
+                   value=(BANDS_SOLAR_OFFSET+band),__RC__)
+
+                ! execute the aero provider's optics method 
+                call ESMF_MethodExecute(AERO, &
+                   label="run_aerosol_optics", &
+                   userRC=AS_STATUS, RC=STATUS)
+                VERIFY_(AS_STATUS)
+                VERIFY_(STATUS)
+
+                ! EXT from AERO_PROVIDER
+                call ESMF_AttributeGet(AERO, &
+                   name='extinction_in_air_due_to_ambient_aerosol', &
+                   value=AS_FIELD_NAME,__RC__)
+                if (AS_FIELD_NAME /= '') then
+                   call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                   if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
+                end if
+
+                ! SSA from AERO_PROVIDER (actually EXT * SSA)
+                call ESMF_AttributeGet(AERO, &
+                   name='single_scattering_albedo_of_ambient_aerosol', &
+                   value=AS_FIELD_NAME,__RC__)
+                if (AS_FIELD_NAME /= '') then
+                   call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                   if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
+                end if
+
+                ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
+                call ESMF_AttributeGet(AERO, &
+                   name='asymmetry_parameter_of_ambient_aerosol', &
+                   value=AS_FIELD_NAME,__RC__)
+                if (AS_FIELD_NAME /= '') then
+                   call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                   if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
+                end if    
+
+             end do SOLAR_BANDS
+
+             ! write to FAR internal state
+             if (do_FAR) then
+                call MAPL_GetPointer(INTERNAL,FAR_TAUA,"FAR_TAUA",__RC__)
+                call MAPL_GetPointer(INTERNAL,FAR_SSAA,"FAR_SSAA",__RC__)
+                call MAPL_GetPointer(INTERNAL,FAR_ASYA,"FAR_ASYA",__RC__)
+                FAR_TAUA = AEROSOL_EXT
+                FAR_SSAA = AEROSOL_SSA
+                FAR_ASYA = AEROSOL_ASY
+                ! mark newly calculated aerosols as young
+                FAR_AEROSOL_AGE = 0.
+             end if
+
+          end if  ! update aerosols?
+       end if  ! aerosol optics implemented?
+
+       call MAPL_TimerOff(MAPL,"-AEROSOLS",__RC__)
 
        ! Optional without-aerosol diagnostics
        ! ------------------------------------
@@ -2063,15 +2155,18 @@ contains
        ! Clean up aerosol optical properties
        ! -----------------------------------
        if (implements_aerosol_optics) then
-           deallocate(AEROSOL_EXT, __STAT__)
-           deallocate(AEROSOL_SSA, __STAT__)
-           deallocate(AEROSOL_ASY, __STAT__)
+          if (update_aerosols) then
+             deallocate(AEROSOL_EXT, __STAT__)
+             deallocate(AEROSOL_SSA, __STAT__)
+             deallocate(AEROSOL_ASY, __STAT__)
+          endif
        end if
 
        call MAPL_TimerOff(MAPL,"REFRESH",__RC__)
     endif REFRESH
 
-    ! Update the Sun position and weigh the export variables
+    ! Update the Sun position and weight the export variables
+    ! -------------------------------------------------------
     if (.not.UPDATE_FIRST) then
        call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)
        call UPDATE_EXPORT (IM,JM,LM,     __RC__)
@@ -2079,9 +2174,14 @@ contains
     end if
 
     ! update FAR ages
+    ! ---------------
     if (do_FAR) then
-      where (FAR_taumol_age >= 0.) &
-         FAR_taumol_age = FAR_taumol_age + FAR_dt
+       if (USE_RRTMG) then
+          where (FAR_taumol_age >= 0.) &
+             FAR_taumol_age = FAR_taumol_age + FAR_dt
+       end if
+       where (FAR_aerosol_age >= 0.) &
+          FAR_aerosol_age = FAR_aerosol_age + FAR_dt
     end if
 
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
@@ -2166,7 +2266,7 @@ contains
       real, pointer, dimension(:)     :: UVRR, UVRF, PARR, PARF, NIRR, NIRF
 
       ! InOuts
-      real, pointer, dimension(:)     :: FAR_TAUMOL_AGE
+      real, pointer, dimension(:)     :: FAR_TAUMOL_AGE, FAR_AEROSOL_AGE
       real, pointer, dimension(:,:,:) :: FAR_TAUR, FAR_TAUG
       real, pointer, dimension(:,:)   :: FAR_SFLXZEN, FAR_SSI
 
@@ -2465,6 +2565,13 @@ contains
 
       HorzDims = (/IM,JM/)
 
+      ! num_aero_vars for aerosol optics from aerosol bundle
+      if (include_aerosols .and. implements_aerosol_optics) then
+         num_aero_vars = 3
+      else
+         num_aero_vars = 0
+      end if
+
 ! @@@@@@@@@@@@@@
 ! @@@ Inputs @@@
 ! @@@@@@@@@@@@@@
@@ -2500,23 +2607,18 @@ contains
             cycle
          end if
 
-         ! If Import is the aerosol bundle, we need to set num_aero_vars and the
-         ! list of aerosol names. Note that we are assuming all aerosol species
-         ! are dimensions by LM levels. This will be asserted later.
+         ! If Import is aerosol bundle, make space for aerosol optical props.
+         ! Note: assume all aerosol species are dimensioned by LM levels.
+         !    This will be asserted later.
+         ! Note: FAR case is handled instead through InoUt Internals.
 
          if (NamesInp(k) == "AERO") then
 
-            if (.not. include_aerosols) then
-               ! This is a no aerosol call done for "clean" diagnostics
-               num_aero_vars = 0
-            else
-               if (implements_aerosol_optics) then
-                  num_aero_vars = 3
-               else
-                  num_aero_vars = 0
-               end if
+            if (do_FAR) then
+               SlicesInp(k) = 0
+               cycle
             end if
-
+           
             SlicesInp(k) = LM * num_aero_vars * NUM_BANDS_SOLAR
 
          else  ! Non-aerosol input
@@ -2738,6 +2840,16 @@ contains
             cycle
          end if
 
+         ! Exclude FAR_ aerosol internals if not needed
+         if (num_aero_vars == 0 .and. &
+                   ('FAR_TAUA' == short_name  &
+               .or. 'FAR_SSAA' == short_name  &
+               .or. 'FAR_ASYA' == short_name) &
+         ) then
+            SlicesInt(k) = 0
+            cycle
+         end if
+
          if (associated(ugdims)) then
             ! ungridded dims are present, make sure just one
             _ASSERT(size(ugdims)==1,'Only one ungridded dimension allowed')
@@ -2848,13 +2960,21 @@ contains
             case('FAR_TAUMOL_AGE')
                FAR_TAUMOL_AGE => ptr2(1:Num2do,1)
             case('FAR_TAUR')
-               FAR_TAUR    => ptr3(1:Num2do,:,:)
+               FAR_TAUR       => ptr3(1:Num2do,:,:)
             case('FAR_TAUG')
-               FAR_TAUG    => ptr3(1:Num2do,:,:)
+               FAR_TAUG       => ptr3(1:Num2do,:,:)
             case('FAR_SFLXZEN')
-               FAR_SFLXZEN => ptr2(1:Num2do,:)
+               FAR_SFLXZEN    => ptr2(1:Num2do,:)
             case('FAR_SSI')
-               FAR_SSI     => ptr2(1:Num2do,:)
+               FAR_SSI        => ptr2(1:Num2do,:)
+            case('FAR_AEROSOL_AGE')
+               FAR_AEROSOL_AGE => ptr2(1:Num2do,1)
+            case('FAR_TAUA')
+               BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
+            case('FAR_SSAA')
+               BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
+            case('FAR_ASYA')
+               BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
             case('FSWN')    
                FSW         => ptr2(1:Num2do,:)   
             case('FSCN')    
@@ -2992,7 +3112,7 @@ contains
       allocate(ASYA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
 
       ! Zero out aerosol arrays.
-      ! If num_aero_vars == 0, these zeroes are then used inside the code.
+      ! If num_aero_vars == 0, these zeroes are used inside code.
       TAUA = 0.
       SSAA = 0.
       ASYA = 0.
@@ -3862,13 +3982,13 @@ contains
       ! ------------------------
 
       if (num_aero_vars > 0) then
-         where (TAUA > 0.0 .and. SSAA > 0.0 )
+         where (TAUA > 0. .and. SSAA > 0. )
             ASYA = ASYA/SSAA
             SSAA = SSAA/TAUA
          elsewhere
-            TAUA = 0.0
-            SSAA = 0.0
-            ASYA = 0.0
+            TAUA = 0.
+            SSAA = 0.
+            ASYA = 0.
          end where
       end if
 
@@ -4069,7 +4189,7 @@ contains
       ! call RRTMG SW
       ! -------------
 
-      call RRTMG_SW ( &
+      call RRTMG_SW ( MAPL, &
          RPART, NCOL, LM, &
          SC, ADJES, ZT, ISOLVAR, &
          PL_R, PLE_R, T_R, &
@@ -4085,7 +4205,8 @@ contains
          TAUTP, TAUHP, TAUMP, TAULP, &
          do_FAR, FAR_TAUMOL_AGE, FAR_taumol_age_limit, &
          FAR_TAUR, FAR_TAUG, FAR_SFLXZEN, FAR_SSI, &
-         BNDSOLVAR, INDSOLVAR, SOLCYCFRAC)
+         BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+         __RC__)
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")

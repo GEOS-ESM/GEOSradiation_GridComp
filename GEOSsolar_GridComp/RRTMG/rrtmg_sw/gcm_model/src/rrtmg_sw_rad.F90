@@ -44,8 +44,12 @@
 ! *                                                                          *
 ! ****************************************************************************
 
+#include "MAPL_Generic.h"
     
 module rrtmg_sw_rad
+
+   use ESMF
+   use MAPL
 
    use rrsw_vsn
    use cloud_subcol_gen, only: &
@@ -61,7 +65,7 @@ module rrtmg_sw_rad
 
 contains
 
-   subroutine rrtmg_sw ( &
+   subroutine rrtmg_sw (MAPL, &
       rpart, ncol, nlay, &
       scon, adjes, coszen, isolvar, &
       play, plev, tlay, &
@@ -77,12 +81,14 @@ contains
       tautp, tauhp, taump, taulp, &
       do_FAR, taumol_age, taumol_age_limit, &
       taur, taug, sflxzen, ssi, &
-      ! optional inputs
-      bndscl, indsolvar, solcycfrac)
+      bndscl, indsolvar, solcycfrac, &  ! optional inputs
+      RC)
 
       use parrrsw, only : nbndsw, ngptsw
 
       ! ----- Inputs -----
+
+      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
       ! dimensions
       ! ----------
@@ -254,6 +260,8 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (ncol) :: tautp, tauhp, taump, taulp
 
+      integer, intent(out), optional :: RC  ! return code
+
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
       ! NB: the tau[rg] are in GEOS (unflipped) top->bot order
@@ -265,147 +273,41 @@ contains
       ! ----- Locals -----
 
       integer :: pncol
+      integer :: STATUS  ! for MAPL error reporting
       
       ! ASSERTs to catch unphysical or invalid inputs
-
-      if (any(play   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(play):', minval(play)
-        error stop 'negative values in input: play'
-      end if
-      if (any(plev   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(plev):', minval(plev)
-        error stop 'negative values in input: plev'
-      end if
-      if (any(tlay   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(tlay):', minval(tlay)
-        error stop 'negative values in input: tlay'
-      end if
-      if (any(h2ovmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(h2ovmr):', minval(h2ovmr)
-        error stop 'negative values in input: h2ovmr'
-      end if
-      if (any(o3vmr  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(o3vmr):', minval(o3vmr)
-        error stop 'negative values in input: o3vmr'
-      end if
-      if (any(co2vmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(co2vmr):', minval(co2vmr)
-        error stop 'negative values in input: co2vmr'
-      end if
-      if (any(ch4vmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ch4vmr):', minval(ch4vmr)
-        error stop 'negative values in input: ch4vmr'
-      end if
-      if (any(o2vmr  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(o2vmr):', minval(o2vmr)
-        error stop 'negative values in input: o2vmr'
-      end if
-      if (any(asdir  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(asdir):', minval(asdir)
-        error stop 'negative values in input: asdir'
-      end if
-      if (any(aldir  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(aldir):', minval(aldir)
-        error stop 'negative values in input: aldir'
-      end if
-      if (any(asdif  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(asdif):', minval(asdif)
-        error stop 'negative values in input: asdif'
-      end if
-      if (any(aldif  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(aldif):', minval(aldif)
-        error stop 'negative values in input: aldif'
-      end if
-      if (any(cld    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(cld):', minval(cld)
-        error stop 'negative values in input: cld'
-      end if
-      if (any(ciwp   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ciwp):', minval(ciwp)
-        error stop 'negative values in input: ciwp'
-      end if
-      if (any(clwp   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(clwp):', minval(clwp)
-        error stop 'negative values in input: clwp'
-      end if
-      if (any(rei    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(rei):', minval(rei)
-        error stop 'negative values in input: rei'
-      end if
-      if (any(rel    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(rel):', minval(rel)
-        error stop 'negative values in input: rel'
-      end if
-      if (any(tauaer < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(tauaer):', minval(tauaer)
-        error stop 'negative values in input: tauaer'
-      end if
-      if (any(ssaaer < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ssaaer):', minval(ssaaer)
-        error stop 'negative values in input: ssaaer'
-      end if
+      _ASSERT(all(play   >= 0.), 'negative values in input:   play')
+      _ASSERT(all(plev   >= 0.), 'negative values in input:   plev')
+      _ASSERT(all(tlay   >= 0.), 'negative values in input:   tlay')
+      _ASSERT(all(h2ovmr >= 0.), 'negative values in input: h2ovmr')
+      _ASSERT(all( o3vmr >= 0.), 'negative values in input:  o3vmr')
+      _ASSERT(all(co2vmr >= 0.), 'negative values in input: co2vmr')
+      _ASSERT(all(ch4vmr >= 0.), 'negative values in input: ch4vmr')
+      _ASSERT(all( o2vmr >= 0.), 'negative values in input:  o2vmr')
+      _ASSERT(all( asdir >= 0.), 'negative values in input:  asdir')
+      _ASSERT(all( aldir >= 0.), 'negative values in input:  aldir')
+      _ASSERT(all( asdif >= 0.), 'negative values in input:  asdif')
+      _ASSERT(all( aldif >= 0.), 'negative values in input:  aldif')
+      _ASSERT(all(   cld >= 0.), 'negative values in input:    cld')
+      _ASSERT(all(  ciwp >= 0.), 'negative values in input:   ciwp')
+      _ASSERT(all(  clwp >= 0.), 'negative values in input:   clwp')
+      _ASSERT(all(   rei >= 0.), 'negative values in input:    rei')
+      _ASSERT(all(   rel >= 0.), 'negative values in input:    rel')
+      _ASSERT(all(tauaer >= 0.), 'negative values in input: tauaer')
+      _ASSERT(all(ssaaer >= 0.), 'negative values in input: ssaaer')
 
       ! check FAR inputs
       if (do_FAR) then
-         if (.not.associated(taumol_age)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'not associated when do_FAR: taumol_age'
-         end if
-         if (any(shape(taumol_age) /= [ncol])) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'mal-dimensioned: taumol_age'
-         end if
-         if (.not.associated(taur)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'not associated when do_FAR: taur'
-         end if
-         if (any(shape(taur) /= [ncol,nlay,ngptsw])) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'mal-dimensioned: taur'
-         end if
-         if (.not.associated(taug)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'not associated when do_FAR: taug'
-         end if
-         if (any(shape(taug) /= [ncol,nlay,ngptsw])) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'mal-dimensioned: taug'
-         end if
-         if (.not.associated(sflxzen)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'not associated when do_FAR: sflxzen'
-         end if
-         if (any(shape(sflxzen) /= [ncol,ngptsw])) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'mal-dimensioned: sflxzen'
-         end if
-         if (.not.associated(ssi)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'not associated when do_FAR: ssi'
-         end if
-         if (any(shape(ssi) /= [ncol,ngptsw])) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'mal-dimensioned: ssi'
-         end if
+         _ASSERT(associated(taumol_age),'not associated when do_FAR: taumol_age')
+         _ASSERT(all(shape(taumol_age) == [ncol]),'mal-dimensioned: taumol_age')
+         _ASSERT(associated(taur),'not associated when do_FAR: taur')
+         _ASSERT(all(shape(taur) == [ncol,nlay,ngptsw]),'mal-dimensioned: taur')
+         _ASSERT(associated(taug),'not associated when do_FAR: taug')
+         _ASSERT(all(shape(taug) == [ncol,nlay,ngptsw]),'mal-dimensioned: taug')
+         _ASSERT(associated(sflxzen),'not associated when do_FAR: sflxzen')
+         _ASSERT(all(shape(sflxzen) == [ncol,ngptsw]),'mal-dimensioned: sflxzen')
+         _ASSERT(associated(ssi),'not associated when do_FAR: ssi')
+         _ASSERT(all(shape(ssi) == [ncol,ngptsw]),'mal-dimensioned: ssi')
       end if
 
       ! set column partition size pncol
@@ -416,7 +318,7 @@ contains
       end if
       
       ! do partitions
-      call rrtmg_sw_sub ( &
+      call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
          scon, adjes, coszen, isolvar, &
          play, plev, tlay, &
@@ -432,13 +334,14 @@ contains
          tautp, tauhp, taump, taulp, &
          do_FAR, taumol_age, taumol_age_limit, &
          taur, taug, sflxzen, ssi, &
-         ! optional inputs
-         bndscl, indsolvar, solcycfrac)
+         bndscl, indsolvar, solcycfrac, &  ! optional inputs
+         __RC__)
                                                       
+      _RETURN(_SUCCESS)
    end subroutine rrtmg_sw                                                     
 
 
-   subroutine rrtmg_sw_sub ( &
+   subroutine rrtmg_sw_sub (MAPL, &
       pncol, gncol, nlay, &
       scon, adjes, gcoszen, isolvar, &
       gplay, gplev, gtlay, &
@@ -454,8 +357,8 @@ contains
       tautp, tauhp, taump, taulp, &
       do_FAR, taumol_age, taumol_age_limit, &
       taur, taug, sflxzen, ssi, &
-      ! optional inputs
-      bndscl, indsolvar, solcycfrac)
+      bndscl, indsolvar, solcycfrac, &  ! optional inputs
+      RC)
 
 
      ! ----- Modules -----
@@ -473,6 +376,8 @@ contains
 
       ! ----- Inputs -----
       ! (see rrtmg_sw() for more detailed comments)
+
+      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
       ! dimensions
       integer, intent(in) :: pncol                     ! Nominal horiz cols in a partition
@@ -560,6 +465,8 @@ contains
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (gncol) :: tautp, tauhp, taump, taulp
+
+      integer, intent(out), optional :: RC  ! return code
 
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
@@ -714,6 +621,8 @@ contains
 
       real :: solcycfr, Mg_now, SB_now
       real :: scon_int, svar_r
+ 
+      integer :: STATUS  ! for MAPL error reporting
 
       ! Initializations
       ! ---------------
@@ -736,8 +645,7 @@ contains
 
          ! require solcycfrac present, else what's the point of using isolvar=1 ?
          if (.not.present(solcycfrac)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'RRTMG_SW: isolvar == 1 requires solcycfrac present!'
+            _FAIL('isolvar == 1 requires solcycfrac present!')
          end if
          solcycfr = solcycfrac
 
@@ -860,9 +768,7 @@ contains
             enddo
 
          else
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            write(error_unit,*) 'bad isolvar value:', isolvar
-            error stop 'RRTMG_SW: invalid isolvar'
+            _FAIL('invalid isolvar')
          endif 
 
       elseif (scon > 0.) then 
@@ -942,14 +848,11 @@ contains
             enddo
 
          else
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            write(error_unit,*) 'bad isolvar value:', isolvar
-            error stop 'RRTMG_SW: invalid isolvar'
+            _FAIL('invalid isolvar')
          endif 
 
       else
-         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-         error stop 'RRTMG_SW: scon cannot be negative!'
+         _FAIL('scon cannot be negative!')
       endif
 
       ! Earth-Sun distance adjustment
@@ -1010,6 +913,8 @@ contains
 
          ! loop over partitions
          do ipart = 0,npart-1
+
+            call MAPL_TimerOn (MAPL,"---RRTMG_PART",__RC__)
 
             ! partition dimensions
             cols = ipart * pncol + 1
@@ -1193,6 +1098,8 @@ contains
 
             end if  ! clear or cloudy gridcolumns
 
+            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
             ! limit tiny cosine zenith angles
             do icol = 1,ncol
                cossza(icol) = max(zepzen,coszen(icol))
@@ -1223,6 +1130,7 @@ contains
             if (cc == 2) then
 
                ! McICA subcolumn generation
+               call MAPL_TimerOn (MAPL,"---RRTMG_CLDSGEN",__RC__)
                call generate_stochastic_clouds( &
                   pncol, ncol, ngptsw, nlay, &
                   zm, alat, dyofyr, &
@@ -1234,12 +1142,16 @@ contains
                call clearCounts_threeBand( &
                   pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
                   p_clearCounts)
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
 
                ! cloud optical property generation
+               call MAPL_TimerOn (MAPL,"---RRTMG_CLDPRMC",__RC__)
                call cldprmc_sw( &
                   pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                   cldymcl, ciwpmcl, clwpmcl, rei, rel, &
                   taormc, taucmc, ssacmc, asmcmc)
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
+
             end if
 
             ! Calculate information needed by the radiative transfer routine
@@ -1247,14 +1159,16 @@ contains
             ! coefficients and indices needed to compute the optical depths
             ! by interpolating data from stored reference atmospheres.
 
+            call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
             call setcoef_sw( &
                pncol, ncol, nlay, play, tlay, coldry, &
                colch4, colco2, colh2o, colmol, colo2, colo3, &
                laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                selffac, selffrac, indself, forfac, forfrac, indfor)
+            call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
 
             ! compute sw radiative fluxes
-            call spcvmc_sw( &
+            call spcvmc_sw (MAPL, &
                cc, pncol, ncol, nlay, &
                albdif, albdir, &
                cldymcl, taucmc, asmcmc, ssacmc, taormc, &
@@ -1270,10 +1184,13 @@ contains
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
                ztautp, ztauhp, ztaump, ztaulp, &
                do_FAR, ztage, taumol_age_limit, &
-               ztaur, ztaug, zsflxzen, zssi)
+               ztaur, ztaug, zsflxzen, zssi, &
+               __RC__)
 
             ! Copy out up and down, clear- and all-sky fluxes to output arrays.
             ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
+
+            call MAPL_TimerOn (MAPL,"---RRTMG_PART",__RC__)
 
             if (cc == 1) then  ! clear gridcolumns
 
@@ -1371,6 +1288,8 @@ contains
 
             endif  ! clear/cloudy
 
+            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
          enddo  ! over partitions
 
       enddo  ! outer loop (cc) over clear then cloudy columns
@@ -1399,6 +1318,7 @@ contains
 
       endif
 
+      _RETURN(_SUCCESS)
    end subroutine rrtmg_sw_sub
 
 
