@@ -6,6 +6,10 @@ set (alldirs
   GEOS_SatsimGridComp
   )
 
+esma_add_subdirectories(
+  Shared
+  )
+
 esma_add_library (${this}
   SRCS GEOS_RadiationGridComp.F90
   SUBCOMPONENTS ${alldirs} GEOS_RadiationShared
