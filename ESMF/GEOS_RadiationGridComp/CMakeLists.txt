@@ -12,6 +12,6 @@ esma_add_subdirectories(
 
 esma_add_library (${this}
   SRCS GEOS_RadiationGridComp.F90
-  SUBCOMPONENTS ${alldirs} GEOS_RadiationShared
-  DEPENDENCIES MAPL GEOS_Shared esmf)
+  SUBCOMPONENTS ${alldirs}
+  DEPENDENCIES MAPL GEOS_Shared esmf GEOS_RadiationShared)
 
