@@ -1,4 +1,4 @@
-esma_set_this ()
+esma_set_this (OVERRIDE GEOS_RadiationShared)
 
 set (srcs
   radconstants.F90
