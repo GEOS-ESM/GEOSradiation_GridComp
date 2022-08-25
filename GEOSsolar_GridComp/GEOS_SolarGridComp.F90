@@ -69,10 +69,13 @@ module GEOS_SolarGridCompMod
 ! assumed, rather the 3-dimensional field of air pressure at the layer
 ! interfaces is a required Import. \newline
 !
-! This module contains only SetServices and Run methods. The Initialize 
-! and Finalize methods being defaulted to the MAPL\_Generic versions. The
-! SetServices method is the only public entity. There are no public types
-! or data. \newline
+! This module contains SetServices, Initialize, Run, and Finalize methods.
+! The Initialize and Finalize methods call the MAPL\_Generic versions but also
+! perform reorderings (if do_FAR) between the standard (X,Y,Z,U) Internal State
+! (X,Y=horiz,Z=vert,U=ungridded=spectral) needed for checkpointing/restarting
+! and the internal private state needed by RRTMG, which is most efficient in
+! the (fZ,U,X,Y) order (fZ=flipped Z). The SetServices method is the only
+! public entity. There are no public types or data. \newline
 !
 ! The contents of the Import, Export, and Internal States are explicitly
 ! described in SetServices and in tables in this documentation. All quantities
@@ -225,19 +228,41 @@ module GEOS_SolarGridCompMod
 
 !EOP
 
-  ! RRTMGP internal state
-  ! This will be attached to the Gridded Component
-  ! used to provide efficient initialization
+  ! RRTMGP internal state:
+  ! Will be attached to the Gridded Component.
+  ! Used to provide efficient initialization
   type ty_RRTMGP_state
     private
     logical :: initialized = .false.
     type (ty_gas_optics_rrtmgp) :: k_dist
   end type ty_RRTMGP_state
 
-  ! wrapper to access RRTMGP internal state
+  ! Wrapper to access RRTMGP internal state
   type ty_RRTMGP_wrap
     type (ty_RRTMGP_state), pointer :: ptr => null()
   end type ty_RRTMGP_wrap
+
+  ! FAR RRTMG internal state:
+  ! Will be attached to the Gridded Component.
+  ! Speeds up FAR hearbeat refreshes by saving aged intermittantly
+  ! (and asynchronously) calculated intermediate quantities to avoid
+  ! hearbeat-frequency calculation.
+  ! PMN: separate from the INTERNAL FAR_ variables because this state
+  ! maintains a cache-efficient repordering. We may later (with Tom
+  ! Clune's help) instead reuse the INTERNAL FAR_ variable space
+  ! with a (possibly inplace) reordering in Initialize/Finalize.
+  type ty_FAR_RRTMG_state
+    private
+    logical :: initialized = .false.
+    ! taumol variables
+    real, allocatable, dimension(:,:,:,:) :: taur, taug    ! (lay,gpt,icol,jcol)
+    real, allocatable, dimension(:,:,:)   :: sflxzen, ssi  ! (    gpt,icol,jcol)
+  end type ty_FAR_RRTMG_state
+
+  ! Wrapper to access FAR RRTMG internal state
+  type ty_FAR_RRTMG_wrap
+    type (ty_FAR_RRTMG_state), pointer :: ptr => null()
+  end type ty_FAR_RRTMG_wrap
 
 contains
 
@@ -255,9 +280,9 @@ contains
     integer, optional                  :: RC  ! return code
 
 ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
-!                the Initialize and Finalize services, as well as allocating
-!   our instance of a MAPL\_MetaComp and putting it in the 
-!   gridded component (GC). Here we only need to register the Run method with ESMF and
+!   the Initialize and Finalize services, as well as allocating our instance of a
+!   MAPL\_MetaComp and putting it in the gridded component (GC). 
+!   Here we only need to register the Run method with ESMF and
 !   register the state variable specifications with MAPL. \newline
 !   
 
@@ -283,13 +308,10 @@ contains
     real    :: DT
 
     logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU, do_FAR
-    real    :: RFLAG
     integer :: NUM_BANDS_SOLAR
 
     type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
     type (ty_RRTMGP_wrap)           :: wrap
-
-    integer :: n
 
 !=============================================================================
 
@@ -319,24 +341,10 @@ contains
     ACCUMINT = nint(DT)
 
     ! Decide which radiation to use for thermodynamics state evolution
-    ! RRTMGP dominates RRTMG dominates Chou-Suarez
-    ! Chou-Suarez is the default if nothing else asked for in Resource file
     ! Needed in SetServices because we Export a per-band flux and the
     !   number of bands differs between codes.
-    !----------------------------------------------------------------------
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-    n = count([USE_CHOU,USE_RRTMG,USE_RRTMGP])
-    _ASSERT(n==1, 'must select exactly one SW code for state evolution')
+    !-----------------------------------------------------------------
+    call choose_solar_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
 
     ! Set number of solar bands
     if (USE_RRTMGP) then
@@ -1440,6 +1448,7 @@ contains
 
     ! Set the Profiling timers
 
+    call MAPL_TimerAdd(GC, name="INITIALIZE"              , __RC__)
     call MAPL_TimerAdd(GC, name="PRELIMS"                 , __RC__)
     call MAPL_TimerAdd(GC, name="REFRESH"                 , __RC__)
     call MAPL_TimerAdd(GC, name="-AEROSOLS"               , __RC__)
@@ -1476,13 +1485,246 @@ contains
     call MAPL_TimerAdd(GC, name="--DESTROY"               , __RC__)
     call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
     call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
+    call MAPL_TimerAdd(GC, name="FINALIZE"                , __RC__)
     
-    ! Set Run method and use generic init and final methods
-    call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
+    ! Set Initialize, Run, and Finalize methods
+    call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_INITIALIZE, Initialize, __RC__)
+    call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN,        Run,        __RC__)
+    call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_FINALIZE,   Finalize,   __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
 
     RETURN_(ESMF_SUCCESS)  
   end subroutine SetServices
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! !IROUTINE: Initialize -- Initialize method for the Solar Gridded Component
+
+! !INTERFACE:
+
+   subroutine Initialize ( GC, IMPORT, EXPORT, CLOCK, RC )
+
+! !ARGUMENTS:
+
+   type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
+   type(ESMF_State),    intent(inout) :: IMPORT ! Import state
+   type(ESMF_State),    intent(inout) :: EXPORT ! Export state
+   type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
+   integer, optional,   intent(  out) :: RC     ! Error code
+
+! !DESCRIPTION: The Initialize method of the Solar Gridded Component.
+
+!EOP
+
+! ErrLog Variables
+
+   character(len=ESMF_MAXSTR) :: IAm
+   character(len=ESMF_MAXSTR) :: COMP_NAME
+   integer                    :: STATUS
+
+! Local derived type aliases
+
+   type (MAPL_MetaComp), pointer :: MAPL => null()
+
+! Locals
+
+    logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU, do_FAR
+    type (ESMF_State) :: INTERNAL
+    integer :: IM, JM, LM
+
+    type (ty_FAR_RRTMG_state), pointer :: far_rrtmg_state => null()
+    type (ty_FAR_RRTMG_wrap)           :: far_rrtmg_wrap
+
+    real, pointer, dimension(:,:,:)   :: FAR_SFLXZEN, FAR_SSI
+    real, pointer, dimension(:,:,:,:) :: FAR_TAUR, FAR_TAUG
+
+!=============================================================================
+
+    ! Get the target component name and set-up traceback handle
+    call ESMF_GridCompGet (GC, name=COMP_NAME, __RC__)
+    Iam = trim(COMP_NAME) // "::" // "Initialize"
+
+    ! Call Generic Initialize to handle restarting, etc.
+    call MAPL_GenericInitialize (GC, IMPORT, EXPORT, CLOCK, __RC__)
+
+    ! Customized Initialize parts ...
+    ! -------------------------------
+
+    ! Get my internal MAPL_Generic state
+    call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
+
+    call MAPL_TimerOn (MAPL,"TOTAL",__RC__)
+    call MAPL_TimerOn (MAPL,"INITIALIZE",__RC__)
+
+    ! Which radiation to use?
+    call choose_solar_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
+
+    ! Do Fast Asynchronous Refreshes?
+    call MAPL_GetResource (MAPL, do_FAR, "DO_FAR:", DEFAULT=.FALSE., __RC__)
+
+    if (do_FAR) then
+       if (USE_RRTMG) then
+
+          ! Allocate FAR RRTMG's private state and save a wrapped
+          ! pointer to it in a user internal state of the GC.
+          allocate(far_rrtmg_state, __STAT__)
+          far_rrtmg_wrap%ptr => far_rrtmg_state
+          call ESMF_UserCompSetInternalState(GC, &
+             'FAR_RRTMG_state', far_rrtmg_wrap, status)
+          VERIFY_(status)
+
+          ! Allocate contents of FAR RRTMG's private state.
+          call MAPL_Get(MAPL, IM=IM, JM=JM, LM=LM, &
+             INTERNAL_ESMF_STATE=INTERNAL, __RC__)
+          allocate(far_rrtmg_state % taur (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % taug (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % sflxzen (ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % ssi     (ngptsw,IM,JM), __STAT__)
+
+          ! Get the (X,Y,Z,U) ordered ESMF internal state.
+          call MAPL_GetPointer(INTERNAL, FAR_TAUR,    'FAR_TAUR',    __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAUG,    'FAR_TAUG',    __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SFLXZEN, 'FAR_SFLXZEN', __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SSI,     'FAR_SSI',     __RC__)
+
+          ! Transpose from ESMF's (X,Y,Z,U) state to FAR RRTMG's (fZ,U,X,Y) private state,
+          ! where X,Y=horizontal, Z=vertical, fZ=flipped vertical, U=ungridded (gpoints).
+          ! PMN: For memory savings, Tom Clune has suggested a way to use the same memory
+          ! for the ESMF and private variable (but with only one available at a time).
+          ! That would remove the need for a second copy of these large variables (i.e.,
+          ! both ESMF and private) and would only require a temporary variable copy at the
+          ! time of each variable's transpose below. In other words, the far_rrtmg_state
+          ! variables would overwrite the space use by the ESMF variables during the time
+          ! in between restarts and checkpoints.
+          ! PMN: if memory is STILL constrained after that change, we may need some
+          ! inplace reorder/transpose routine such as in Intel MKL / BLAS.
+          far_rrtmg_state % sflxzen = reshape(FAR_SFLXZEN,               [ngptsw,IM,JM],order=[2,3,1])
+          far_rrtmg_state % ssi     = reshape(FAR_SSI,                   [ngptsw,IM,JM],order=[2,3,1])
+          far_rrtmg_state % taur    = reshape(FAR_TAUR(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % taug    = reshape(FAR_TAUG(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % initialized = .true.
+
+! PMN: what happens in SS vs initialize
+! PMN: need to add Record() as well for non-final checkpointing
+
+       end if
+    end if
+
+    call MAPL_TimerOff(MAPL,"INITIALIZE",__RC__)
+    call MAPL_TimerOff(MAPL,"TOTAL",__RC__)
+
+    RETURN_(ESMF_SUCCESS)
+ end subroutine Initialize
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! !IROUTINE: Finalize -- Finalize method for the Solar Gridded Component
+
+! !INTERFACE:
+
+   subroutine Finalize ( GC, IMPORT, EXPORT, CLOCK, RC )
+
+! !ARGUMENTS:
+
+   type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
+   type(ESMF_State),    intent(inout) :: IMPORT ! Import state
+   type(ESMF_State),    intent(inout) :: EXPORT ! Export state
+   type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
+   integer, optional,   intent(  out) :: RC     ! Error code
+
+! !DESCRIPTION: The Finalize method of the Solar Gridded Component.
+
+!EOP
+
+! ErrLog Variables
+
+   character(len=ESMF_MAXSTR) :: IAm
+   character(len=ESMF_MAXSTR) :: COMP_NAME
+   integer                    :: STATUS
+
+! Local derived type aliases
+
+   type (MAPL_MetaComp), pointer :: MAPL => null()
+
+! Locals
+
+    logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU, do_FAR
+    type (ESMF_State) :: INTERNAL
+    integer :: IM, JM, LM
+
+    type (ty_FAR_RRTMG_state), pointer :: far_rrtmg_state => null()
+    type (ty_FAR_RRTMG_wrap)           :: far_rrtmg_wrap
+
+    real, pointer, dimension(:,:,:)   :: FAR_SFLXZEN, FAR_SSI
+    real, pointer, dimension(:,:,:,:) :: FAR_TAUR, FAR_TAUG
+
+!=============================================================================
+
+    ! Get the target component name and set-up traceback handle
+    call ESMF_GridCompGet (GC, name=COMP_NAME, __RC__)
+    Iam = trim(COMP_NAME) // "::" // "Finalize"
+
+    ! Customized Finalize parts ...
+    ! -----------------------------
+
+    ! Get my internal MAPL_Generic state
+    call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
+
+    call MAPL_TimerOn (MAPL,"TOTAL",__RC__)
+    call MAPL_TimerOn (MAPL,"FINALIZE",__RC__)
+
+    ! Which radiation to use?
+    call choose_solar_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
+
+    ! Do Fast Asynchronous Refreshes?
+    call MAPL_GetResource (MAPL, do_FAR, "DO_FAR:", DEFAULT=.FALSE., __RC__)
+
+    if (do_FAR) then
+       if (USE_RRTMG) then
+
+          ! Access FAR RRTMG's private state from the GC.
+          call ESMF_UserCompGetInternalState(GC, 'FAR_RRTMG_state', far_rrtmg_wrap, status)
+          VERIFY_(status)
+          far_rrtmg_state => far_rrtmg_wrap%ptr
+
+          ! Get pointers to the ESMF internal state.
+          call MAPL_Get(MAPL, IM=IM, JM=JM, LM=LM, &
+             INTERNAL_ESMF_STATE=INTERNAL, __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAUR,    'FAR_TAUR',    __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAUG,    'FAR_TAUG',    __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SFLXZEN, 'FAR_SFLXZEN', __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SSI,     'FAR_SSI',     __RC__)
+
+          ! Transpose from FAR RRTMG's (fZ,U,X,Y) state back to ESMF's (X,Y,Z,U) state,
+          ! where X,Y=horizontal, Z=vertical, fZ=flipped vertical, U=ungridded (gpoints).
+          FAR_SFLXZEN = reshape(far_rrtmg_state % sflxzen,             [IM,JM,   ngptsw], order=[3,1,2])
+          FAR_SSI     = reshape(far_rrtmg_state % ssi,                 [IM,JM,   ngptsw], order=[3,1,2])
+          FAR_TAUR    = reshape(far_rrtmg_state % taur(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_TAUG    = reshape(far_rrtmg_state % taug(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+
+          ! Deallocate contents of FAR RRTMG private internal state.
+          deallocate(far_rrtmg_state % taur,    __STAT__)
+          deallocate(far_rrtmg_state % taug,    __STAT__)
+          deallocate(far_rrtmg_state % sflxzen, __STAT__)
+          deallocate(far_rrtmg_state % ssi,     __STAT__)
+          far_rrtmg_state % initialized = .false.
+
+          ! nullify private state and wrapper pointers
+          deallocate(far_rrtmg_state, __STAT__)
+          nullify(far_rrtmg_wrap % ptr)
+          ! PMN: Atanas: anything here to nullify ESMF_UserCompSetInternalState(GC, 'FAR_RRTMG_state')) ??
+
+       end if
+    end if
+
+    call MAPL_TimerOff(MAPL,"FINALIZE",__RC__)
+    call MAPL_TimerOff(MAPL,"TOTAL",__RC__)
+
+    ! Call Generic Finalize to handle checkpointing, etc.
+    call MAPL_GenericFinalize (GC, IMPORT, EXPORT, CLOCK, __RC__)
+
+    RETURN_(ESMF_SUCCESS)
+ end subroutine Finalize
+
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -1543,35 +1785,35 @@ contains
 
 ! ErrLog Variables
 
-    character(len=ESMF_MAXSTR)          :: IAm
-    character(len=ESMF_MAXSTR)          :: COMP_NAME
-    integer                             :: STATUS
+    character(len=ESMF_MAXSTR) :: IAm
+    character(len=ESMF_MAXSTR) :: COMP_NAME
+    integer :: STATUS
 
 ! Local derived type aliases
 
-    type (MAPL_MetaComp), pointer       :: MAPL
-    type (ESMF_Grid)                    :: ESMFGRID
-    type (ESMF_Config)                  :: CF
+    type (MAPL_MetaComp), pointer   :: MAPL
+    type (ESMF_Grid)                :: ESMFGRID
+    type (ESMF_Config)              :: CF
 
-    type (ty_RRTMGP_state), pointer     :: rrtmgp_state => null()
-    type (ty_RRTMGP_wrap)               :: wrap
+    type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
+    type (ty_RRTMGP_wrap)           :: wrap
 
 ! Local variables
 
-    type (ESMF_Alarm)                   :: ALARM
-    type (ESMF_State)                   :: INTERNAL
-    type (ESMF_Time)                    :: currentTime
-    type (ESMF_TimeInterval)            :: intDT, TINT
-    integer                             :: IM, JM, LM
-    type (MAPL_SunOrbit)                :: ORBIT
-    type (MAPL_VarSpec), pointer        :: ImportSpec(:)   => null()
-    type (MAPL_VarSpec), pointer        :: ExportSpec(:)   => null()
-    type (MAPL_VarSpec), pointer        :: InternalSpec(:) => null()
-    real, pointer, dimension(:,:)       :: LONS
-    real, pointer, dimension(:,:)       :: LATS
+    type (ESMF_Alarm)             :: ALARM
+    type (ESMF_State)             :: INTERNAL
+    type (ESMF_Time)              :: currentTime
+    type (ESMF_TimeInterval)      :: intDT, TINT
+    integer                       :: IM, JM, LM
+    type (MAPL_SunOrbit)          :: ORBIT
+    type (MAPL_VarSpec), pointer  :: ImportSpec(:)   => null()
+    type (MAPL_VarSpec), pointer  :: ExportSpec(:)   => null()
+    type (MAPL_VarSpec), pointer  :: InternalSpec(:) => null()
+    real, pointer, dimension(:,:) :: LONS
+    real, pointer, dimension(:,:) :: LATS
 
-    real, pointer, dimension(:,:,:)     :: ptr3d
-    real, pointer, dimension(:,:  )     :: ptr2d
+    real, pointer, dimension(:,:,:) :: ptr3d
+    real, pointer, dimension(:,:  ) :: ptr2d
 
     real, pointer, dimension(:,:) :: FAR_taumol_age, FAR_aerosol_age
 
@@ -1594,9 +1836,9 @@ contains
 
     integer :: band
     logical :: implements_aerosol_optics, update_aerosols
-    logical :: USE_RRTMGP, USE_RRTMGP_IRRAD, NEED_RRTMGP
-    logical :: USE_RRTMG,  USE_RRTMG_IRRAD,  NEED_RRTMG
-    logical :: USE_CHOU,   USE_CHOU_IRRAD,   NEED_CHOU
+    logical :: USE_RRTMGP, USE_RRTMGP_IRRAD !, NEED_RRTMGP
+    logical :: USE_RRTMG,  USE_RRTMG_IRRAD  !, NEED_RRTMG
+    logical :: USE_CHOU,   USE_CHOU_IRRAD   !, NEED_CHOU
     integer :: NUM_BANDS_SOLAR, NUM_BANDS, TOTAL_RAD_BANDS
     real    :: RFLAG
 
@@ -1715,38 +1957,12 @@ contains
     end if
 
     ! Decide which radiation to use for thermodynamics state evolution
-    ! RRTMGP dominates RRTMG dominates Chou-Suarez
-    ! Chou-Suarez is the default if nothing else asked for in Resource file
     ! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
     !----------------------------------------------------------------------
-
-    ! first for SORAD
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-    k = count([USE_CHOU,USE_RRTMG,USE_RRTMGP])
-    _ASSERT(k==1, 'must select exactly one SW code for state evolution')
-
-    ! then IRRAD
-    USE_RRTMGP_IRRAD = .false.
-    USE_RRTMG_IRRAD  = .false.
-    USE_CHOU_IRRAD   = .false.
-    call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP_IRRAD = RFLAG /= 0.
-    if (.not. USE_RRTMGP_IRRAD) then
-      call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-      USE_RRTMG_IRRAD = RFLAG /= 0.
-      USE_CHOU_IRRAD  = .not.USE_RRTMG_IRRAD
-    end if
-    k = count([USE_CHOU_IRRAD,USE_RRTMG_IRRAD,USE_RRTMGP_IRRAD])
-    _ASSERT(k==1, 'must select exactly one LW code for state evolution')
+    call choose_solar_scheme (MAPL, &
+      USE_RRTMGP,       USE_RRTMG,       USE_CHOU,       __RC__)
+    call choose_irrad_scheme (MAPL, &
+      USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD, __RC__)
 
     ! Set number of solar bands
     if (USE_RRTMGP) then
@@ -2251,6 +2467,9 @@ contains
       real,    dimension(IM,JM)       :: ZTH, SLR
       logical, dimension(IM,JM)       :: daytime
 
+      type (ty_FAR_RRTMG_state), pointer :: far_rrtmg_state => null()
+      type (ty_FAR_RRTMG_wrap)           :: far_rrtmg_wrap
+
       ! Daytime ONLY copy of variables
       ! ------------------------------
 
@@ -2414,7 +2633,7 @@ contains
       real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
-      integer :: I, J, K, L, i1, iN
+      integer :: I, J, K, L, i1, iN, M
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
@@ -2425,10 +2644,11 @@ contains
       logical, allocatable :: IntInOut(:)
       character(len=ESMF_MAXSTR), allocatable :: NamesInp(:),NamesInt(:)
       integer, allocatable :: SlicesInp(:),SlicesInt(:)
-      real, target, allocatable :: BufInp(:),BufInOut(:),BufOut(:)
+      real, target, allocatable, dimension(:) :: BufInp, BufInOut, BufOut
+      real, target, allocatable, dimension(:) :: SFLXZEN_, SSI_, TAUR_, TAUG_
       integer, allocatable :: rgDim(:),ugDim(:)
       real, pointer :: buf(:)
-      integer :: NumImp, NumInt, NumInp, NumInOut, NumOut
+      integer :: NumImp, NumInt, NumInp
       integer :: NumMax, HorzDims(2)
       integer :: ibinary
       real :: def
@@ -2477,6 +2697,16 @@ contains
           Jg(I,J) = jBeg + J - 1
         end do
       end do
+
+      if (do_FAR) then
+         if (USE_RRTMG) then
+            ! access FAR RRTMG internal state from the GC
+            call ESMF_UserCompGetInternalState(GC, 'FAR_RRTMG_state', far_rrtmg_wrap, status)
+            VERIFY_(status)
+            far_rrtmg_state => far_rrtmg_wrap%ptr
+            _ASSERT(far_rrtmg_state % initialized, 'FAR RRTMG state unitialized!')
+         end if
+      end if
 
       call MAPL_TimerOff(MAPL,"-MISC")
 
@@ -2542,21 +2772,6 @@ contains
       ! Vertical only imports (PREF) are explicitly skipped later.
       NumInp = NumImp + 5
 
-      ! Outputs to load balancing:
-      ! These are all Internals (split into InOut or just Out).
-      ! A 'FAR_' prefix signals an InOut variable.
-      if (do_FAR) then
-         NumInOut = 0
-         do k = 1,NumInt
-            call MAPL_VarSpecGet(InternalSpec(k), SHORT_NAME=short_name, __RC__)
-            if (short_name(1:4) == 'FAR_') NumInOut = NumInOut + 1
-         enddo
-         NumOut = NumInt - NumInOut
-      else
-         NumOut = NumInt
-         NumInOut = 0
-      end if
-
       allocate( &
          SlicesInp(NumInp), NamesInp(NumInp), &
          SlicesInt(NumInt), NamesInt(NumInt), &
@@ -2610,7 +2825,7 @@ contains
          ! If Import is aerosol bundle, make space for aerosol optical props.
          ! Note: assume all aerosol species are dimensioned by LM levels.
          !    This will be asserted later.
-         ! Note: FAR case is handled instead through InoUt Internals.
+         ! Note: FAR case is handled instead through InOut Internals.
 
          if (NamesInp(k) == "AERO") then
 
@@ -2850,6 +3065,17 @@ contains
             cycle
          end if
 
+         ! Exclude far_rrtmg_state variables. These have a different ordering
+         ! and cannot use BufInOut. They are handled more explicitly below.
+         if ('FAR_SFLXZEN' == short_name .or. &
+             'FAR_SSI'     == short_name .or. &
+             'FAR_TAUR'    == short_name .or. &
+             'FAR_TAUG'    == short_name)     &  
+         then
+            SlicesInt(k) = 0
+            cycle
+         end if
+
          if (associated(ugdims)) then
             ! ungridded dims are present, make sure just one
             _ASSERT(size(ugdims)==1,'Only one ungridded dimension allowed')
@@ -2891,6 +3117,67 @@ contains
       ! --------------------------------------------------------------
       iNInOut = 0; iNOut = 0
       INT_VARS_2: do k=1,NumInt
+
+         ! Handle far_rrtmg_state variables first, which use inSize balancing.
+         ! There are only four of these, two (FAR_SFLXZEN|SSI) with inner dimension ngptsw,
+         ! and two (FAR_TAUR|G) with (LM,ngptsw) inner dimensions. Since there are so few
+         ! we will skip the 1D buffer approach and just use a MAPL_BalanceWork for each
+         ! variable.
+         if (NamesInt(k) == 'FAR_SFLXZEN') then
+            allocate(SFLXZEN_(ngptsw * NumMax),__STAT__)
+            FAR_SFLXZEN(1:ngptsw,1:NumMax) => SFLXZEN_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_SFLXZEN(:,M) = far_rrtmg_state % sflxzen(:,I,J)
+                  endif
+               enddo
+            enddo
+!pmn: speed: check if it is faster to load SFLXZEN_ directly using array arithmetic ... cache benefit?
+
+         elseif (NamesInt(k) == 'FAR_SSI') then
+            allocate(SSI_(ngptsw * NumMax),__STAT__)
+            FAR_SSI(1:ngptsw,1:NumMax) => SSI_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_SSI(:,M) = far_rrtmg_state % ssi(:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_TAUR') then
+            allocate(TAUR_(LM * ngptsw * NumMax),__STAT__)
+            FAR_TAUR(1:LM,1:ngptsw,1:NumMax) => TAUR_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_TAUR(:,:,M) = far_rrtmg_state % taur(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_TAUG') then
+            allocate(TAUG_(LM * ngptsw * NumMax),__STAT__)
+            FAR_TAUG(1:LM,1:ngptsw,1:NumMax) => TAUG_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_TAUG(:,:,M) = far_rrtmg_state % taug(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         end if
+
          if (SlicesInt(k) == 0) cycle
 
          if (IntInOut(k)) then
@@ -2906,12 +3193,12 @@ contains
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
                   do j=1,ugDim(k)
-!pmn compiler       call PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    if (IntInOut(k)) then
-                       call PackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    else
-                       call PackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    endif
+!pmn compiler        call PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                     if (IntInOut(k)) then
+                        call PackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                     else
+                        call PackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                     endif
                   end do
                   piN = pi1 + NumMax*size(ptr4,3)*ugDim(k) - 1
                   ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
@@ -2954,19 +3241,11 @@ contains
          end if
 
          ! Handles for the working InOut/Out variables.
-         ! These have an inner dimension of the balanced work. 
+         ! These have an inner dimension of the balanced work.
          ! ---------------------------------------------------
          select case(NamesInt(k))
             case('FAR_TAUMOL_AGE')
                FAR_TAUMOL_AGE => ptr2(1:Num2do,1)
-            case('FAR_TAUR')
-               FAR_TAUR       => ptr3(1:Num2do,:,:)
-            case('FAR_TAUG')
-               FAR_TAUG       => ptr3(1:Num2do,:,:)
-            case('FAR_SFLXZEN')
-               FAR_SFLXZEN    => ptr2(1:Num2do,:)
-            case('FAR_SSI')
-               FAR_SSI        => ptr2(1:Num2do,:)
             case('FAR_AEROSOL_AGE')
                FAR_AEROSOL_AGE => ptr2(1:Num2do,1)
             case('FAR_TAUA')
@@ -3032,10 +3311,38 @@ contains
 
       ! Load balance the InOuts for Input
       !----------------------------------
-      if (NumInOut > 0) then
+      if (size(BufInOut) > 0) then
          call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
          call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+      end if
+
+      ! Explicit inSize LoadBalancing for far_rrtmg_state variables,
+      ! which have the gridcolumn (balanced) dimension outermost,
+      ! and so use the inSize optional facility of MAPL_BalanceWork.
+      !-------------------------------------------------------------
+      if (do_FAR) then
+         if (use_RRTMG) then
+            call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
+
+            call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_SFLXZEN(1:ngptsw,1:Num2do) => SFLXZEN_(1:Num2do*ngptsw)
+
+            call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_SSI(1:ngptsw,1:Num2do) => SSI_(1:Num2do*ngptsw)
+
+            call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUR(1:LM,1:ngptsw,1:Num2do) => TAUR_(1:Num2do*ngptsw*LM)
+
+            call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUG(1:LM,1:ngptsw,1:Num2do) => TAUG_(1:Num2do*ngptsw*LM)
+
+            call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+         end if
       end if
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
@@ -3995,7 +4302,7 @@ contains
       ! Flip in vertical, Convert units, and interpolate T, etc.
       ! --------------------------------------------------------
       ! RRTMG convention is that vertical indices increase from bot->top
-      ! Exception: FAR_TAU[RG] enter/exit RRTMG_SW() in unflipped top->bot state
+      ! Note: FAR_TAU[RG] are already flipped
 
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
 
@@ -4300,16 +4607,40 @@ contains
 
       call MAPL_TimerOn(MAPL,"-BALANCE")
 
-      if (NumOut > 0) then
+      if (size(BufOut) > 0) then
          call MAPL_TimerOn (MAPL,"--RETRIEVE")
          call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"--RETRIEVE")
       end if
 
-      if (NumInOut > 0) then
+      if (size(BufInOut) > 0) then
          call MAPL_TimerOn (MAPL,"--RETRIEVE")
          call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      end if
+
+      if (do_FAR) then
+         if (use_RRTMG) then
+            call MAPL_TimerOn (MAPL,"--RETRIEVE")
+
+            call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_SFLXZEN(1:ngptsw,1:NumMax) => SFLXZEN_
+
+            call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_SSI(1:ngptsw,1:NumMax) => SSI_
+
+            call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUR(1:LM,1:ngptsw,1:NumMax) => TAUR_
+
+            call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUG(1:LM,1:ngptsw,1:NumMax) => TAUG_
+
+            call MAPL_TimerOff(MAPL,"--RETRIEVE")
+         end if
       end if
 
       ! Unpack the results. Fills "masked" (night) locations with default value from internal state
@@ -4320,6 +4651,57 @@ contains
 
       i1InOut = 1; i1Out = 1
       INT_VARS_3: do k=1,NumInt
+
+         if (NamesInt(k) == 'FAR_SFLXZEN') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % sflxzen(:,I,J) = FAR_SFLXZEN(:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(SFLXZEN_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_SSI') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % ssi(:,I,J) = FAR_SSI(:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(SSI_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_TAUR') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % taur(:,:,I,J) = FAR_TAUR(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(TAUR_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_TAUG') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % taug(:,:,I,J) = FAR_TAUG(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(TAUG_,__STAT__)
+
+         end if
+
          if (SlicesInt(k) == 0) cycle
 
          if (IntInOut(k)) then
@@ -5534,6 +5916,9 @@ contains
 
   end subroutine RUN
 
+!pmn: consider rewriting interms of FORTRAN intrinsics?
+!pmn: perhaps just replace with a PACK/UNPACK intrinsic
+
   ! Pack masked locations into buffer
   subroutine PackIt (Packed, UnPacked, MSK, Pdim, Udim, LM)
     integer, intent(IN   ) :: Pdim, Udim(2), LM
@@ -5582,6 +5967,63 @@ contains
     end do
 
   end subroutine UnPackIt
+
+
+  ! Decide which radiation to use for thermodynamics state evolution.
+  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
+  ! Chou-Suarez is the default if nothing else asked for in Resource file.
+  !----------------------------------------------------------------------
+
+  subroutine choose_solar_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    real :: RFLAG
+    integer :: STATUS
+
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+
+    _RETURN(_SUCCESS)  
+  end subroutine choose_solar_scheme
+
+  subroutine choose_irrad_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    character(len=ESMF_MAXSTR) :: IAm
+    real :: RFLAG
+    integer :: STATUS
+
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+
+    _RETURN(_SUCCESS)  
+  end subroutine choose_irrad_scheme
 
 end module GEOS_SolarGridCompMod
 

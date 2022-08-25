@@ -264,11 +264,10 @@ contains
 
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
-      ! NB: the tau[rg] are in GEOS (unflipped) top->bot order
 
-      real, intent(inout), dimension(:),     pointer :: taumol_age    ! (ncol)             if (do_FAR)
-      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (ncol,nlay,ngptsw) if (do_FAR)
-      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (ncol,     ngptsw) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taumol_age    !             (ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (nlay,ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (     ngptsw,ncol) if (do_FAR)
 
       ! ----- Locals -----
 
@@ -301,13 +300,13 @@ contains
          _ASSERT(associated(taumol_age),'not associated when do_FAR: taumol_age')
          _ASSERT(all(shape(taumol_age) == [ncol]),'mal-dimensioned: taumol_age')
          _ASSERT(associated(taur),'not associated when do_FAR: taur')
-         _ASSERT(all(shape(taur) == [ncol,nlay,ngptsw]),'mal-dimensioned: taur')
+         _ASSERT(all(shape(taur) == [nlay,ngptsw,ncol]),'mal-dimensioned: taur')
          _ASSERT(associated(taug),'not associated when do_FAR: taug')
-         _ASSERT(all(shape(taug) == [ncol,nlay,ngptsw]),'mal-dimensioned: taug')
+         _ASSERT(all(shape(taug) == [nlay,ngptsw,ncol]),'mal-dimensioned: taug')
          _ASSERT(associated(sflxzen),'not associated when do_FAR: sflxzen')
-         _ASSERT(all(shape(sflxzen) == [ncol,ngptsw]),'mal-dimensioned: sflxzen')
+         _ASSERT(all(shape(sflxzen) == [ngptsw,ncol]),'mal-dimensioned: sflxzen')
          _ASSERT(associated(ssi),'not associated when do_FAR: ssi')
-         _ASSERT(all(shape(ssi) == [ncol,ngptsw]),'mal-dimensioned: ssi')
+         _ASSERT(all(shape(ssi) == [ngptsw,ncol]),'mal-dimensioned: ssi')
       end if
 
       ! set column partition size pncol
@@ -470,17 +469,16 @@ contains
 
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
-      ! NB: the tau[rg] are in GEOS (unflipped) top->bot order
 
-      real, intent(inout), dimension(:),     pointer :: taumol_age    ! (gncol)             if (do_FAR)
-      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (gncol,nlay,ngptsw) if (do_FAR)
-      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (gncol,     ngptsw) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taumol_age    !             (gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (nlay,ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (     ngptsw,gncol) if (do_FAR)
 
       ! ----- Locals -----
 
       ! Control
-      real, parameter :: zepzen = 1.e-10   ! very small cossza
-      integer :: ibnd, icol, ilay, ilev    ! various indices
+      real, parameter :: zepzen = 1.e-10  ! very small cossza
+      integer :: ibnd, icol, ilay, ilev   ! various indices
 
       ! Atmosphere
       real :: coldry (nlay,pncol)        ! dry air column amount
@@ -572,7 +570,6 @@ contains
       real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
       
       ! FAR taumol partitioned fields
-      ! Note: ztau[rg] are in RRTMG bot->top order unlike tau[rg]
       real, dimension(pncol) :: ztage
       real, dimension(nlay,ngptsw,pncol) :: ztaur, ztaug
       real, dimension(ngptsw,pncol) :: zsflxzen, zssi
@@ -611,6 +608,7 @@ contains
       ! ncol is the actual number of gridcols in a partition, cf. pncol,
       ! the maximum number. May have ncol < pncol on final partition.
       integer :: ncol
+      integer, allocatable :: idx(:)
 
       ! other solar variability locals
       ! ------------------------------
@@ -921,6 +919,7 @@ contains
             cole = (ipart + 1) * pncol
             if (cole > col_last) cole = col_last
             ncol = cole - cols + 1
+            allocate(idx(ncol),__STAT__)
 
             ! copy inputs into partition
             ! --------------------------
@@ -993,19 +992,16 @@ contains
                   colo2 (:,icol) = go2vmr (gicol,1:nlay)   
                 end do
 
-               ! copy in FAR taumol InOuts
+!pmn:??speed investigate efficiency in other copy-in/out sections
+
+               ! copy in FAR taumol InOuts:
                if (do_FAR) then
-                  do icol = 1,ncol
-                     gicol = gicol_clr(icol + cols - 1)
-                     ztage(icol) = taumol_age(gicol)
-                     do ilay = 1,nlay
-                        ztaur(nlay+1-ilay,:,icol) = taur(gicol,ilay,:)
-                        ztaug(nlay+1-ilay,:,icol) = taug(gicol,ilay,:)
-                     enddo
-!pmn: check copy efficiency here and elsewhere for ztau[rg]
-                     zsflxzen(:,icol) = sflxzen(gicol,:)
-                     zssi    (:,icol) = ssi    (gicol,:)
-                  end do
+                  idx = gicol_clr(cols:cole)
+                  ztage     (1:ncol) = taumol_age(idx)
+                  zsflxzen(:,1:ncol) = sflxzen (:,idx)
+                  zssi    (:,1:ncol) = ssi     (:,idx)
+                  ztaur (:,:,1:ncol) = taur  (:,:,idx)
+                  ztaug (:,:,1:ncol) = taug  (:,:,idx)
                end if
 
             else
@@ -1084,16 +1080,12 @@ contains
 
                ! copy in FAR taumol InOuts
                if (do_FAR) then
-                  do icol = 1,ncol
-                     gicol = gicol_cld(icol + cols - 1)
-                     ztage(icol) = taumol_age(gicol)
-                     do ilay = 1,nlay
-                        ztaur(nlay+1-ilay,:,icol) = taur(gicol,ilay,:)
-                        ztaug(nlay+1-ilay,:,icol) = taug(gicol,ilay,:)
-                     enddo
-                     zsflxzen(:,icol) = sflxzen(gicol,:)
-                     zssi    (:,icol) = ssi    (gicol,:)
-                  end do
+                  idx = gicol_cld(cols:cole)
+                  ztage     (1:ncol) = taumol_age(idx)
+                  zsflxzen(:,1:ncol) = sflxzen (:,idx)
+                  zssi    (:,1:ncol) = ssi     (:,idx)
+                  ztaur (:,:,1:ncol) = taur  (:,:,idx)
+                  ztaug (:,:,1:ncol) = taug  (:,:,idx)
                end if
 
             end if  ! clear or cloudy gridcolumns
@@ -1231,16 +1223,12 @@ contains
 
                ! copy out FAR taumol InOuts
                if (do_FAR) then
-                  do icol = 1,ncol
-                     gicol = gicol_clr(icol + cols - 1)
-                     taumol_age(gicol) = ztage(icol)
-                     do ilay = 1,nlay
-                        taur(gicol,ilay,:) = ztaur(nlay+1-ilay,:,icol)
-                        taug(gicol,ilay,:) = ztaug(nlay+1-ilay,:,icol)
-                     enddo
-                     sflxzen(gicol,:) = zsflxzen(:,icol)
-                     ssi    (gicol,:) = zssi    (:,icol)
-                  end do
+                  idx = gicol_clr(cols:cole)
+                  taumol_age(idx) = ztage     (1:ncol)
+                  sflxzen (:,idx) = zsflxzen(:,1:ncol)
+                  ssi     (:,idx) = zssi    (:,1:ncol)
+                  taur  (:,:,idx) = ztaur (:,:,1:ncol)
+                  taug  (:,:,idx) = ztaug (:,:,1:ncol)
                end if
 
             else ! cloudy columns
@@ -1274,20 +1262,17 @@ contains
 
                ! copy out FAR taumol InOuts
                if (do_FAR) then
-                  do icol = 1,ncol
-                     gicol = gicol_cld(icol + cols - 1)
-                     taumol_age(gicol) = ztage(icol)
-                     do ilay = 1,nlay
-                        taur(gicol,ilay,:) = ztaur(nlay+1-ilay,:,icol)
-                        taug(gicol,ilay,:) = ztaug(nlay+1-ilay,:,icol)
-                     enddo
-                     sflxzen(gicol,:) = zsflxzen(:,icol)
-                     ssi    (gicol,:) = zssi    (:,icol)
-                  end do
+                  idx = gicol_cld(cols:cole)
+                  taumol_age(idx) = ztage     (1:ncol)
+                  sflxzen (:,idx) = zsflxzen(:,1:ncol)
+                  ssi     (:,idx) = zssi    (:,1:ncol)
+                  taur  (:,:,idx) = ztaur (:,:,1:ncol)
+                  taug  (:,:,idx) = ztaug (:,:,1:ncol)
                end if
 
             endif  ! clear/cloudy
 
+            deallocate(idx,__STAT__)
             call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
 
          enddo  ! over partitions
