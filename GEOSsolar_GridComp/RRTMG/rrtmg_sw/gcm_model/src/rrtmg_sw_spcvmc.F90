@@ -24,6 +24,7 @@ module rrtmg_sw_spcvmc
    use parrrsw, only : nbndsw, ngptsw, jpband
    use rrsw_tbl, only : od_lo
    use rrsw_wvn, only : ngb
+   use rrtmg_sw_setcoef, only: setcoef_sw
    use rrtmg_sw_taumol, only: taumol_sw
 
    implicit none
@@ -33,16 +34,14 @@ contains
    ! ---------------------------------------------------------------------------
    subroutine spcvmc_sw (MAPL, &
       cc, pncol, ncol, nlay, &
+      play, tlay, coldry, &
       palbd, palbp, &
       pcldymc, ptaucmc, pasycmc, pomgcmc, ptaormc, &
       ptaua, pasya, pomga, prmu0, adjflux, &
       isolvar, svar_f, svar_s, svar_i, &
       svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-      laytrop, jp, jt, jt1, &
-      colch4, colco2, colh2o, colmol, colo2, colo3, &
-      fac00, fac01, fac10, fac11, &
+      colch4, colco2, colh2o, colo2, colo3, &
       cloudLM, cloudMH, & 
-      selffac, selffrac, indself, forfac, forfrac, indfor, &
       pbbfd, pbbfu, pbbcd, pbbcu, pbbfddir, pbbcddir, &
       znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
       ztautp, ztauhp, ztaump, ztaulp, &
@@ -87,28 +86,27 @@ contains
 
       type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
-      integer, intent(in) :: pncol, ncol, cc
-      integer, intent(in) :: nlay
-      integer, intent(in) :: laytrop (pncol)
+      integer, intent(in) :: cc, pncol, ncol, nlay
 
-      integer, intent(in) :: jp  (nlay,pncol) 
-      integer, intent(in) :: jt  (nlay,pncol) 
-      integer, intent(in) :: jt1 (nlay,pncol) 
+      real, intent(in) :: play   (nlay,pncol)  ! layer pressures (hPa)
+      real, intent(in) :: tlay   (nlay,pncol)  ! layer temperatures (K)
+      real, intent(in) :: coldry (nlay,pncol)  ! dry air column density (mol/cm2)
 
-      real, intent(in) :: adjflux(jpband)             ! Earth/Sun distance adjustment
+      real, intent(in) :: adjflux(jpband)      ! Earth/Sun distance adjustment
 
       ! Solar variability
-      integer, intent(in) :: isolvar                  ! Flag for solar variability method
-      real, intent(in) :: svar_f                      ! Solar variability facular multiplier
-      real, intent(in) :: svar_s                      ! Solar variability sunspot multiplier
-      real, intent(in) :: svar_i                      ! Solar variability baseline irradiance multiplier
-      real, intent(in) :: svar_f_bnd (jpband)         ! Solar variability facular multiplier (by band)
-      real, intent(in) :: svar_s_bnd (jpband)         ! Solar variability sunspot multiplier (by band)
-      real, intent(in) :: svar_i_bnd (jpband)         ! Solar variability baseline irradiance multiplier (by band)
+      integer, intent(in) :: isolvar           ! Flag for solar variability method
+      real, intent(in) :: svar_f               ! Solar variability facular multiplier
+      real, intent(in) :: svar_s               ! Solar variability sunspot multiplier
+      real, intent(in) :: svar_i               ! Solar variability baseline irradiance multiplier
+      real, intent(in) :: svar_f_bnd (jpband)  ! Solar variability facular multiplier (by band)
+      real, intent(in) :: svar_s_bnd (jpband)  ! Solar variability sunspot multiplier (by band)
+      real, intent(in) :: svar_i_bnd (jpband)  ! Solar variability baseline irradiance multiplier (by band)
 
-      real, intent(in) :: palbd (nbndsw,pncol)        ! surface albedo (diffuse)
-      real, intent(in) :: palbp (nbndsw,pncol)        ! surface albedo (direct)
-      real, intent(in) :: prmu0        (pncol)        ! cosine of solar zenith angle
+      ! albedos and solar zenith angle
+      real, intent(in) :: palbd (nbndsw,pncol)  ! surface albedo (diffuse)
+      real, intent(in) :: palbp (nbndsw,pncol)  ! surface albedo (direct)
+      real, intent(in) :: prmu0        (pncol)  ! cosine of solar zenith angle
 
       ! McICA cloud presence and optical properties:
       ! These are only used, and therefore only need to be defined, for cloudy gridcolumns
@@ -123,24 +121,12 @@ contains
       real, intent(in) :: pasya (nlay,nbndsw,pncol)  ! aerosol asymmetry parameter
       real, intent(in) :: pomga (nlay,nbndsw,pncol)  ! aerosol single scattering albedo
                                                                
+      ! gaseous absorbers
       real, intent(in) :: colh2o (nlay,pncol) 
       real, intent(in) :: colco2 (nlay,pncol) 
       real, intent(in) :: colch4 (nlay,pncol) 
       real, intent(in) :: colo3  (nlay,pncol) 
       real, intent(in) :: colo2  (nlay,pncol) 
-      real, intent(in) :: colmol (nlay,pncol) 
-
-      ! continuum interpolation coefficients
-      integer, intent(in) :: indself  (nlay,pncol)
-      integer, intent(in) :: indfor   (nlay,pncol)
-      real,    intent(in) :: selffac  (nlay,pncol)
-      real,    intent(in) :: selffrac (nlay,pncol)
-      real,    intent(in) :: forfac   (nlay,pncol)
-      real,    intent(in) :: forfrac  (nlay,pncol)
-
-      ! pressure and temperature interpolation coefficients
-      real, intent(in), dimension (nlay,pncol) &
-         :: fac00, fac01, fac10, fac11
 
       ! pressure super-layer interface levels for optical thicknesses
       integer, intent(in) :: cloudLM  ! Low-mid
@@ -177,9 +163,31 @@ contains
 
       ! ------- Local -------
 
-      integer :: icol
+      integer :: icol, n
       integer :: jk, ikl
       integer :: iw, jb, ibm
+
+      ! setcoef variables, used to drive taumol ...
+      
+      ! tropopause and table interpolation indicies
+      integer :: laytrop  (pncol)
+      integer :: jp  (nlay,pncol) 
+      integer :: jt  (nlay,pncol) 
+      integer :: jt1 (nlay,pncol) 
+
+      ! continuum interpolation coefficients
+      integer :: indself  (nlay,pncol)
+      integer :: indfor   (nlay,pncol)
+      real    :: selffac  (nlay,pncol)
+      real    :: selffrac (nlay,pncol)
+      real    :: forfac   (nlay,pncol)
+      real    :: forfrac  (nlay,pncol)
+
+      ! pressure and temperature interpolation coefficients
+      real, dimension (nlay,pncol) :: fac00, fac01, fac10, fac11
+
+      ! molecular amounts for Rayleigh
+      real :: colmol (nlay,pncol)
 
       real :: zf, zwf, zincflx, wgt
       real :: stautp, stauhp, staump, staulp
@@ -200,11 +208,14 @@ contains
       real :: ztra   (nlay+1,ngptsw,pncol)  ! direct beam transmissivity
       real :: ztrad  (nlay+1,ngptsw,pncol)  ! diffuse     transmissivity
 
-      logical :: recalc (ncol) 
-      integer, allocatable :: irc(:)
-      real, dimension(:,:  ), allocatable :: ssi_rc, zsflxzen_rc
-      real, dimension(:,:,:), allocatable :: ztaug_rc, ztaur_rc
+      ! FAR locals
       integer :: nrc
+      integer :: irc (pncol)
+      real, dimension(nlay,pncol) :: &
+         play_rc, tlay_rc, coldry_rc, &
+         colch4_rc, colco2_rc, colh2o_rc, colo2_rc, colo3_rc
+      real, dimension(ngptsw,pncol) :: ssi_rc, zsflxzen_rc
+      real, dimension(nlay,ngptsw,pncol) :: ztaug_rc, ztaur_rc
 
       integer :: STATUS  ! for MAPL error reporting
 
@@ -224,51 +235,72 @@ contains
       zuvrr    = 0.
       zuvrf    = 0.
 
-      ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
-      call MAPL_TimerOn (MAPL,"---RRTMG_TAUMOL",__RC__)
+      ! Calculate the optical depths for gaseous absorption and Rayleigh scattering ...
+
+      ! which columns to recalculate?
       if (.not.do_FAR) then
-         ! legacy non-FAR calculation every REFRESH
+
+         ! all of them
+         nrc = ncol
+         irc(1:ncol) = [1:ncol]
+
+      else  ! FAR: asynchronous recalculation of uninitialized or old values ...
+
+         ! Get number of recalculated columns and their indicies irc.
+         ! Set soon-to-be recalculated values to brand new.
+         nrc = 0
+         do icol = 1,ncol
+            if (taumol_age(icol) < 0. .or. taumol_age(icol) > taumol_age_limit) then
+               nrc = nrc + 1
+               irc(nrc) = icol
+               taumol_age(icol) = 0.
+            end if
+         end do
+
+      endif
+
+      ! recalculate as needed
+      if (nrc > 0) then
+
+         call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
+         ! copy-in inputs for recalculated columns
+         do n = 1,nrc
+            icol = irc(n)
+              play_rc(:,n) =   play(:,icol)
+              tlay_rc(:,n) =   tlay(:,icol)
+            coldry_rc(:,n) = coldry(:,icol)
+            colch4_rc(:,n) = colch4(:,icol)
+            colco2_rc(:,n) = colco2(:,icol)
+            colh2o_rc(:,n) = colh2o(:,icol)
+             colo2_rc(:,n) =  colo2(:,icol)
+             colo3_rc(:,n) =  colo3(:,icol)
+         end do
+         call setcoef_sw( &
+            pncol, nrc, nlay, play_rc, tlay_rc, coldry_rc, &
+            colch4_rc, colco2_rc, colh2o_rc, colmol, colo2_rc, colo3_rc, &
+            laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
+            selffac, selffrac, indself, forfac, forfrac, indfor)
+         call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+
+         call MAPL_TimerOn (MAPL,"---RRTMG_TAUMOL",__RC__)
          call taumol_sw( &
-            pncol, ncol, nlay, &
-            colh2o, colco2, colch4, colo2, colo3, colmol, &
+            pncol, nrc, nlay, &
+            colh2o_rc, colco2_rc, colch4_rc, colo2_rc, colo3_rc, colmol, &
             laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
             selffac, selffrac, indself, forfac, forfrac, indfor, &
             isolvar, svar_f, svar_s, svar_i, svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-            ssi, zsflxzen, ztaug, ztaur)
-      else
-         ! FAR asynchronous recalculation of uninitialized or old values
-         recalc = (taumol_age(1:ncol) < 0.) .or. (taumol_age(1:ncol) > taumol_age_limit)
-         if (any(recalc)) then
-            ! get number of recalculated columns and their indicies irc
-            nrc = count(recalc)
-            allocate(irc(nrc))
-            irc = pack([1:ncol],mask=recalc)
-            ! working space (is there a faster way? pmn)
-            allocate(ssi_rc(ngptsw,nrc),zsflxzen_rc(ngptsw,nrc))
-            allocate(ztaug_rc(nlay,ngptsw,nrc),ztaur_rc(nlay,ngptsw,nrc))
-            ! recalculate columns needed
-            call taumol_sw( &
-               nrc, nrc, nlay, &
-               colh2o(:,irc), colco2(:,irc), colch4(:,irc), &
-               colo2(:,irc), colo3(:,irc), colmol(:,irc), &
-               laytrop(irc), jp(:,irc), jt(:,irc), jt1(:,irc), &
-               fac00(:,irc), fac01(:,irc), fac10(:,irc), fac11(:,irc), &
-               selffac(:,irc), selffrac(:,irc), indself(:,irc), &
-               forfac(:,irc), forfrac(:,irc), indfor(:,irc), &
-               isolvar, svar_f, svar_s, svar_i, svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-               ssi_rc, zsflxzen_rc, ztaug_rc, ztaur_rc)
-            ! unpack outputs
-            ssi     (:,irc) =      ssi_rc
-            zsflxzen(:,irc) = zsflxzen_rc
-            ztaug (:,:,irc) =    ztaug_rc
-            ztaur (:,:,irc) =    ztaur_rc
-            ! recalculated values are now brand new
-            taumol_age(irc) = 0.
-            ! clean up
-            deallocate (irc, ssi_rc, zsflxzen_rc, ztaug_rc, ztaur_rc)
-         end if
-      endif
-      call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
+            ssi_rc, zsflxzen_rc, ztaug_rc, ztaur_rc)
+         ! copy-out recalculated values
+         do n = 1,nrc
+            icol = irc(n)
+            ssi     (:,icol) =      ssi_rc(  :,n)
+            zsflxzen(:,icol) = zsflxzen_rc(  :,n)
+            ztaug (:,:,icol) =    ztaug_rc(:,:,n)
+            ztaur (:,:,icol) =    ztaur_rc(:,:,n)
+         end do
+         call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
+
+      end if
 
       ! Set fixed boundary values.
       ! The sfc (jk=nlay+1) zref[d] & ztra[d] never change from these.

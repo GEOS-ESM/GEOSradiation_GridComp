@@ -55,7 +55,6 @@ module rrtmg_sw_rad
    use cloud_subcol_gen, only: &
       generate_stochastic_clouds, clearCounts_threeBand
    use rrtmg_sw_cldprmc, only: cldprmc_sw
-   use rrtmg_sw_setcoef, only: setcoef_sw
    use rrtmg_sw_spcvmc, only: spcvmc_sw
    use iso_fortran_env, only: error_unit
 
@@ -493,11 +492,13 @@ contains
       real :: albdir (nbndsw,pncol)      ! surface albedo, direct
       real :: albdif (nbndsw,pncol)      ! surface albedo, diffuse
       
-      ! Atmosphere - setcoef
-      ! --------------------
+      ! Atmosphere/gases    
+      ! ----------------
 
-      ! tropopause layer index
-      integer :: laytrop   (pncol) 
+      ! general
+      real :: play (nlay,  pncol)           ! Layer pressures (hPa)
+      real :: plev (nlay+1,pncol)           ! Interface pressures (hPa)
+      real :: tlay (nlay,  pncol)           ! Layer temperatures (K)
 
       ! gasesous absorbers
       real :: colh2o  (nlay,pncol)         ! column amount (h2o)
@@ -505,24 +506,6 @@ contains
       real :: colo3   (nlay,pncol)         ! column amount (o3)
       real :: colch4  (nlay,pncol)         ! column amount (ch4)
       real :: colo2   (nlay,pncol)         ! column amount (o2)
-      real :: colmol  (nlay,pncol)         ! column amount (Rayleigh)
-
-      ! continuum interpolation coefficients
-      integer :: indself (nlay,pncol) 
-      integer :: indfor  (nlay,pncol) 
-      real :: selffac    (nlay,pncol) 
-      real :: selffrac   (nlay,pncol) 
-      real :: forfac     (nlay,pncol) 
-      real :: forfrac    (nlay,pncol) 
-
-      ! pressure and temperature interpolation coefficients
-      integer, dimension (nlay,pncol) :: jp, jt, jt1
-      real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11  
-      
-      ! general
-      real :: play (nlay,  pncol)           ! Layer pressures (hPa)
-      real :: plev (nlay+1,pncol)           ! Interface pressures (hPa)
-      real :: tlay (nlay,  pncol)           ! Layer temperatures (K)
 
       ! Atmosphere/clouds - cldprop
       ! ---------------------------
@@ -1146,32 +1129,17 @@ contains
 
             end if
 
-            ! Calculate information needed by the radiative transfer routine
-            ! that is specific to this atmosphere, especially some of the
-            ! coefficients and indices needed to compute the optical depths
-            ! by interpolating data from stored reference atmospheres.
-
-            call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
-            call setcoef_sw( &
-               pncol, ncol, nlay, play, tlay, coldry, &
-               colch4, colco2, colh2o, colmol, colo2, colo3, &
-               laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
-               selffac, selffrac, indself, forfac, forfrac, indfor)
-            call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
-
             ! compute sw radiative fluxes
             call spcvmc_sw (MAPL, &
                cc, pncol, ncol, nlay, &
+               play, tlay, coldry, &
                albdif, albdir, &
                cldymcl, taucmc, asmcmc, ssacmc, taormc, &
                taua, asya, omga, cossza, adjflux, &
                isolvar, svar_f, svar_s, svar_i, &
                svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-               laytrop, jp, jt, jt1, &
-               colch4, colco2, colh2o, colmol, colo2, colo3, &
-               fac00, fac01, fac10, fac11, &
+               colch4, colco2, colh2o, colo2, colo3, &
                cloudLM, cloudMH, & 
-               selffac, selffrac, indself, forfac, forfrac, indfor, &
                zbbfd, zbbfu, zbbcd, zbbcu, zbbfddir, zbbcddir, &
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
                ztautp, ztauhp, ztaump, ztaulp, &

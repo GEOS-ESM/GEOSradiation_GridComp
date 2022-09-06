@@ -48,13 +48,14 @@ contains
       real, intent(in) :: coldry    (nlay,pncol)  ! dry air column density (mol/cm2)
 
       ! ----- Input and Output -----
-      ! (molecular amounts, in [mol/cm-2], scaled on output)
+      ! (molecular amounts, in [mol/cm-2])
+      ! (only inout because scaled on output for use by taumol)
       real, intent(inout) :: colh2o (nlay,pncol)  ! column amount (h2o)
       real, intent(inout) :: colco2 (nlay,pncol)  ! column amount (co2)
       real, intent(inout) :: colo3  (nlay,pncol)  ! column amount (o3)
       real, intent(inout) :: colch4 (nlay,pncol)  ! column amount (ch4)
       real, intent(inout) :: colo2  (nlay,pncol)  ! column amount (o2)
-      real, intent(inout) :: colmol (nlay,pncol)  ! for Rayleight scatt
+      real, intent(  out) :: colmol (nlay,pncol)  ! for Rayleight scatt
 
       ! ----- Output -----
 
