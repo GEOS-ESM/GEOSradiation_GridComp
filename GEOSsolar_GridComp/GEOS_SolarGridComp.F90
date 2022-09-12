@@ -298,7 +298,7 @@ contains
 
 ! Local derived type aliases
 
-    type (MAPL_MetaComp), pointer :: MAPL=>null()
+    type (MAPL_MetaComp), pointer :: MAPL
 
 ! Locals
 
@@ -1465,6 +1465,22 @@ contains
     call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET1"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET2"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET3"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET4"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET5"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET6"         , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7a"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7b"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7c"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7d"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7e"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7f"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7g"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7h"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET7i"        , __RC__)
+    call MAPL_TimerAdd(GC, name="----RRTMG_SET8"        , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
@@ -1523,7 +1539,7 @@ contains
 
 ! Local derived type aliases
 
-   type (MAPL_MetaComp), pointer :: MAPL => null()
+   type (MAPL_MetaComp), pointer :: MAPL
 
 ! Locals
 
@@ -1643,7 +1659,7 @@ contains
 
 ! Local derived type aliases
 
-   type (MAPL_MetaComp), pointer :: MAPL => null()
+   type (MAPL_MetaComp), pointer :: MAPL
 
 ! Locals
 
@@ -5978,7 +5994,7 @@ contains
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
 
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    type (MAPL_MetaComp), intent(inout) :: MAPL
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
@@ -6003,11 +6019,10 @@ contains
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
 
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    type (MAPL_MetaComp), intent(inout) :: MAPL
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
-    character(len=ESMF_MAXSTR) :: IAm
     real :: RFLAG
     integer :: STATUS
 

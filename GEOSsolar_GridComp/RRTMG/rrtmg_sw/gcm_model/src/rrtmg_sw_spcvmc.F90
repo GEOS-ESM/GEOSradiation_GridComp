@@ -84,7 +84,7 @@ contains
 
       ! ------- Input -------
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(MAPL_MetaComp), intent(inout) :: MAPL
 
       integer, intent(in) :: cc, pncol, ncol, nlay
 
@@ -262,7 +262,7 @@ contains
       ! recalculate as needed
       if (nrc > 0) then
 
-         call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
+!!       call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
          ! copy-in inputs for recalculated columns
          do n = 1,nrc
             icol = irc(n)
@@ -275,12 +275,12 @@ contains
              colo2_rc(:,n) =  colo2(:,icol)
              colo3_rc(:,n) =  colo3(:,icol)
          end do
-         call setcoef_sw( &
+         call setcoef_sw (MAPL, &
             pncol, nrc, nlay, play_rc, tlay_rc, coldry_rc, &
             colch4_rc, colco2_rc, colh2o_rc, colmol, colo2_rc, colo3_rc, &
             laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
-            selffac, selffrac, indself, forfac, forfrac, indfor)
-         call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+            selffac, selffrac, indself, forfac, forfrac, indfor, __RC__)
+ !!      call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
 
          call MAPL_TimerOn (MAPL,"---RRTMG_TAUMOL",__RC__)
          call taumol_sw( &

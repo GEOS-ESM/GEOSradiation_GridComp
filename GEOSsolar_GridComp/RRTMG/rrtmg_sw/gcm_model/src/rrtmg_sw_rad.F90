@@ -87,7 +87,7 @@ contains
 
       ! ----- Inputs -----
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(MAPL_MetaComp), intent(inout) :: MAPL
 
       ! dimensions
       ! ----------
@@ -375,7 +375,7 @@ contains
       ! ----- Inputs -----
       ! (see rrtmg_sw() for more detailed comments)
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(MAPL_MetaComp), intent(inout) :: MAPL
 
       ! dimensions
       integer, intent(in) :: pncol                     ! Nominal horiz cols in a partition
