@@ -80,6 +80,8 @@ contains
       tautp, tauhp, taump, taulp, &
       do_FAR, taumol_age, taumol_age_limit, &
       taur, taug, sflxzen, ssi, &
+      taucld_age, taucld_age_limit, &
+      cldycol, cldymc, taucmc, ssacmc, asmcmc, taormc, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -237,6 +239,7 @@ contains
       ! FAR controls
       logical, intent(in) :: do_FAR
       real, intent(in) :: taumol_age_limit
+      real, intent(in) :: taucld_age_limit
 
       ! ----- Outputs -----
 
@@ -264,9 +267,14 @@ contains
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
 
-      real, intent(inout), dimension(:),     pointer :: taumol_age    !             (ncol) if (do_FAR)
-      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (nlay,ngptsw,ncol) if (do_FAR)
-      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (     ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taumol_age      !             (ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taur, taug      ! (nlay,ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi    ! (     ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taucld_age      !             (ncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: cldycol         !             (ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: cldymc          ! (nlay,ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taucmc, ssacmc  ! (nlay,ngptsw,ncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: asmcmc, taormc  ! (nlay,ngptsw,ncol) if (do_FAR)
 
       ! ----- Locals -----
 
@@ -306,6 +314,20 @@ contains
          _ASSERT(all(shape(sflxzen) == [ngptsw,ncol]),'mal-dimensioned: sflxzen')
          _ASSERT(associated(ssi),'not associated when do_FAR: ssi')
          _ASSERT(all(shape(ssi) == [ngptsw,ncol]),'mal-dimensioned: ssi')
+         _ASSERT(associated(taucld_age),'not associated when do_FAR: taucld_age')
+         _ASSERT(all(shape(taucld_age) == [ncol]),'mal-dimensioned: taucld_age')
+         _ASSERT(associated(cldycol),'not associated when do_FAR: cldycol')
+         _ASSERT(all(shape(cldycol) == [ncol]),'mal-dimensioned: cldycol')
+         _ASSERT(associated(cldymc),'not associated when do_FAR: cldymc')
+         _ASSERT(all(shape(cldymc) == [nlay,ngptsw,ncol]),'mal-dimensioned: cldymc')
+         _ASSERT(associated(taucmc),'not associated when do_FAR: taucmc')
+         _ASSERT(all(shape(taucmc) == [nlay,ngptsw,ncol]),'mal-dimensioned: taucmc')
+         _ASSERT(associated(ssacmc),'not associated when do_FAR: ssacmc')
+         _ASSERT(all(shape(ssacmc) == [nlay,ngptsw,ncol]),'mal-dimensioned: ssacmc')
+         _ASSERT(associated(asmcmc),'not associated when do_FAR: asmcmc')
+         _ASSERT(all(shape(asmcmc) == [nlay,ngptsw,ncol]),'mal-dimensioned: asmcmc')
+         _ASSERT(associated(taormc),'not associated when do_FAR: taormc')
+         _ASSERT(all(shape(taormc) == [nlay,ngptsw,ncol]),'mal-dimensioned: taormc')
       end if
 
       ! set column partition size pncol
@@ -332,6 +354,8 @@ contains
          tautp, tauhp, taump, taulp, &
          do_FAR, taumol_age, taumol_age_limit, &
          taur, taug, sflxzen, ssi, &
+         taucld_age, taucld_age_limit, &
+         cldycol, cldymc, taucmc, ssacmc, asmcmc, taormc, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
                                                       
@@ -355,6 +379,8 @@ contains
       tautp, tauhp, taump, taulp, &
       do_FAR, taumol_age, taumol_age_limit, &
       taur, taug, sflxzen, ssi, &
+      taucld_age, taucld_age_limit, &
+      cldycol, cldymc, taucmc, ssacmc, asmcmc, taormc, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -442,6 +468,7 @@ contains
       ! FAR controls
       logical, intent(in) :: do_FAR
       real, intent(in) :: taumol_age_limit
+      real, intent(in) :: taucld_age_limit
 
       ! ----- Outputs -----
 
@@ -469,9 +496,14 @@ contains
       ! ------- FAR InOuts -------
       ! if (.not.do_FAR) these can be unassociated pointers since not used
 
-      real, intent(inout), dimension(:),     pointer :: taumol_age    !             (gncol) if (do_FAR)
-      real, intent(inout), dimension(:,:,:), pointer :: taur, taug    ! (nlay,ngptsw,gncol) if (do_FAR)
-      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi  ! (     ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taumol_age      !             (gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taur, taug      ! (nlay,ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:),   pointer :: sflxzen, ssi    ! (     ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: taucld_age      !             (gncol) if (do_FAR)
+      real, intent(inout), dimension(:),     pointer :: cldycol         !             (gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: cldymc          ! (nlay,ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: taucmc, ssacmc  ! (nlay,ngptsw,gncol) if (do_FAR)
+      real, intent(inout), dimension(:,:,:), pointer :: asmcmc, taormc  ! (nlay,ngptsw,gncol) if (do_FAR)
 
       ! ----- Locals -----
 
@@ -521,15 +553,15 @@ contains
       real :: alat      (pncol)             ! latitude for cloud overlap
       real :: zm   (nlay,pncol)		    ! mid-layer hgt for cld overlap [m]
                                                       
-      logical :: cldymcl (nlay,ngptsw,pncol)   ! cloud or not? [mcica]
-      real    :: ciwpmcl (nlay,ngptsw,pncol)   ! in-cloud ice water path [mcica] [g/m2]
-      real    :: clwpmcl (nlay,ngptsw,pncol)   ! in-cloud liq water path [mcica] [g/m2]
+      logical :: zcldymc (nlay,ngptsw,pncol)   ! cloud or not? [mcica]
+      real    :: ciwpmc  (nlay,ngptsw,pncol)   ! in-cloud ice water path [mcica] [g/m2]
+      real    :: clwpmc  (nlay,ngptsw,pncol)   ! in-cloud liq water path [mcica] [g/m2]
       integer :: p_clearCounts (4,pncol)       ! for super-layer cld fractions
 
-      real :: taucmc  (nlay,ngptsw,pncol)   ! in-cloud optical depth [mcica]
-      real :: taormc  (nlay,ngptsw,pncol)   ! unscaled in-cloud optl depth [mcica]
-      real :: ssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
-      real :: asmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
+      real :: ztaucmc  (nlay,ngptsw,pncol)   ! in-cloud optical depth [mcica]
+      real :: ztaormc  (nlay,ngptsw,pncol)   ! unscaled in-cloud optl depth [mcica]
+      real :: zssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
+      real :: zasmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
       
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
@@ -553,13 +585,15 @@ contains
       real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
       
       ! FAR taumol partitioned fields
-      real, dimension(pncol) :: ztage
+      real, dimension(pncol) :: zmage
       real, dimension(nlay,ngptsw,pncol) :: ztaur, ztaug
       real, dimension(ngptsw,pncol) :: zsflxzen, zssi
 
+      ! FAR taucld partitioned fields
+      logical, dimension(pncol) :: zcrecalc
+
       ! Solar variability multipliers
       ! -----------------------------
-
       real :: svar_f               ! facular multiplier
       real :: svar_s               ! sunspot multiplier
       real :: svar_i               ! baseline irradiance multiplier
@@ -603,7 +637,23 @@ contains
       real :: solcycfr, Mg_now, SB_now
       real :: scon_int, svar_r
  
+      ! FAR locals
+      logical :: taucld_recalc (gncol)
+      integer :: nrc
+      integer :: irc (pncol)
+      real :: alat_rc (pncol)
+      integer :: p_clearCounts_rc(4,pncol)
+      logical :: cldymc_rc (nlay,ngptsw,pncol)
+      real, dimension(nlay,pncol) :: &
+         zm_rc, play_rc, cld_rc, ciwp_rc, clwp_rc, rei_rc, rel_rc
+      real, dimension(nlay,ngptsw,pncol) :: &
+         taucmc_rc, ssacmc_rc, asmcmc_rc, taormc_rc
+
       integer :: STATUS  ! for MAPL error reporting
+
+      ! Having no work to do at all would mess up timings
+      ! This passes because load balancer is multi-pass.
+      _ASSERT(gncol > 0, 'no columns on processor!')
 
       ! Initializations
       ! ---------------
@@ -844,7 +894,19 @@ contains
       if (isolvar < 0) then
          adjflux(jpb1:jpb2) = adjflux(jpb1:jpb2) * solvar(jpb1:jpb2)
       endif
-      
+
+      ! Which columns to recalculate cloud optical properties?
+      ! Needed, if FAR, before clear/cloudy separation below.
+      if (.not.do_FAR) then
+         ! all of them
+         taucld_recalc = .true.
+      else
+         ! FAR: asynchronous recalculation of uninitialized or old values ...
+         taucld_recalc = (taucld_age < 0. .or. taucld_age > taucld_age_limit)
+         ! Set soon-to-be recalculated values to brand new.
+         where (taucld_recalc) taucld_age = 0.
+      endif
+
       ! Build profile separation based on cloudiness, i.e., count and index
       ! clear/cloudy gridcolumns. The separation is based on whether the grid-
       ! column has cloud fraction in any layer (or not). This is based on the
@@ -854,17 +916,31 @@ contains
       ! cloudy gridcolumn. So, the gicol_clr can be assumed to yield all clear
       ! subcolumns, while the gicol_cld will yield both clear and cloudy sub-
       ! columns. 
+      ! Also, if FAR, recalculate column cloudiness as necessary.
       ncol_clr = 0
       ncol_cld = 0
-      do gicol = 1,gncol
-         if (any(gcld(gicol,:) > 0)) then
-            ncol_cld = ncol_cld + 1
-            gicol_cld(ncol_cld) = gicol
-         else
-            ncol_clr = ncol_clr + 1
-            gicol_clr(ncol_clr) = gicol
-         end if
-      end do
+      if (.not.do_FAR) then
+         do gicol = 1,gncol
+            if (any(gcld(gicol,:) > 0)) then
+               ncol_cld = ncol_cld + 1
+               gicol_cld(ncol_cld) = gicol
+            else
+               ncol_clr = ncol_clr + 1
+               gicol_clr(ncol_clr) = gicol
+            end if
+         end do
+      else  ! FAR
+         do gicol = 1,gncol
+            if (taucld_recalc(gicol)) cldycol(gicol) = merge(1.,0.,any(gcld(gicol,:) > 0))
+            if (cldycol(gicol).ne.0.) then
+               ncol_cld = ncol_cld + 1
+               gicol_cld(ncol_cld) = gicol
+            else
+               ncol_clr = ncol_clr + 1
+               gicol_clr(ncol_clr) = gicol
+            end if
+         end do
+      end if
 
       ! num of length pncol partitions needed for clear/cloudy profiles
       npart_clr = ceiling( real(ncol_clr) / real(pncol) )
@@ -895,7 +971,7 @@ contains
          ! loop over partitions
          do ipart = 0,npart-1
 
-            call MAPL_TimerOn (MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_TimerOn (MAPL,"RRTMG_PART",__RC__)
 
             ! partition dimensions
             cols = ipart * pncol + 1
@@ -980,11 +1056,17 @@ contains
                ! copy in FAR taumol InOuts:
                if (do_FAR) then
                   idx = gicol_clr(cols:cole)
-                  ztage     (1:ncol) = taumol_age(idx)
-                  zsflxzen(:,1:ncol) = sflxzen (:,idx)
-                  zssi    (:,1:ncol) = ssi     (:,idx)
-                  ztaur (:,:,1:ncol) = taur  (:,:,idx)
-                  ztaug (:,:,1:ncol) = taug  (:,:,idx)
+                  zmage      (1:ncol) = taumol_age(idx)
+                  zsflxzen (:,1:ncol) = sflxzen (:,idx)
+                  zssi     (:,1:ncol) = ssi     (:,idx)
+                  ztaur  (:,:,1:ncol) = taur  (:,:,idx)
+                  ztaug  (:,:,1:ncol) = taug  (:,:,idx)
+                  zcrecalc   (1:ncol) = taucld_recalc(idx)
+                  zcldymc(:,:,1:ncol) =(cldymc(:,:,idx).ne.0.)
+                  ztaucmc(:,:,1:ncol) = taucmc(:,:,idx)
+                  zssacmc(:,:,1:ncol) = ssacmc(:,:,idx)
+                  zasmcmc(:,:,1:ncol) = asmcmc(:,:,idx)
+                  ztaormc(:,:,1:ncol) = taormc(:,:,idx)
                end if
 
             else
@@ -1064,16 +1146,22 @@ contains
                ! copy in FAR taumol InOuts
                if (do_FAR) then
                   idx = gicol_cld(cols:cole)
-                  ztage     (1:ncol) = taumol_age(idx)
-                  zsflxzen(:,1:ncol) = sflxzen (:,idx)
-                  zssi    (:,1:ncol) = ssi     (:,idx)
-                  ztaur (:,:,1:ncol) = taur  (:,:,idx)
-                  ztaug (:,:,1:ncol) = taug  (:,:,idx)
+                  zmage      (1:ncol) = taumol_age(idx)
+                  zsflxzen (:,1:ncol) = sflxzen (:,idx)
+                  zssi     (:,1:ncol) = ssi     (:,idx)
+                  ztaur  (:,:,1:ncol) = taur  (:,:,idx)
+                  ztaug  (:,:,1:ncol) = taug  (:,:,idx)
+                  zcrecalc   (1:ncol) = taucld_recalc(idx)
+                  zcldymc(:,:,1:ncol) =(cldymc(:,:,idx).ne.0.)
+                  ztaucmc(:,:,1:ncol) = taucmc(:,:,idx)
+                  zssacmc(:,:,1:ncol) = ssacmc(:,:,idx)
+                  zasmcmc(:,:,1:ncol) = asmcmc(:,:,idx)
+                  ztaormc(:,:,1:ncol) = taormc(:,:,idx)
                end if
 
             end if  ! clear or cloudy gridcolumns
 
-            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_TimerOff(MAPL,"RRTMG_PART",__RC__)
 
             ! limit tiny cosine zenith angles
             do icol = 1,ncol
@@ -1104,29 +1192,107 @@ contains
             ! cloudy gridcolumns
             if (cc == 2) then
 
-               ! McICA subcolumn generation
-               call MAPL_TimerOn (MAPL,"---RRTMG_CLDSGEN",__RC__)
-               call generate_stochastic_clouds( &
-                  pncol, ncol, ngptsw, nlay, &
-                  zm, alat, dyofyr, &
-                  play, cld, ciwp, clwp, 1.e-20, &
-                  cldymcl, ciwpmcl, clwpmcl, &
-                  seed_order=[4,3,2,1]) 
+               ! which columns to recalculate?
+               if (.not.do_FAR) then
 
-               ! for super-layer cloud fractions
-               call clearCounts_threeBand( &
-                  pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
-                  p_clearCounts)
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
+                  ! all of them
+                  nrc = ncol
+                  irc(1:ncol) = [1:ncol]
 
-               ! cloud optical property generation
-               call MAPL_TimerOn (MAPL,"---RRTMG_CLDPRMC",__RC__)
-               call cldprmc_sw( &
-                  pncol, ncol, nlay, iceflgsw, liqflgsw,  &
-                  cldymcl, ciwpmcl, clwpmcl, rei, rel, &
-                  taormc, taucmc, ssacmc, asmcmc)
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
+               else  ! FAR: asynchronous recalculation of uninitialized or old values ...
 
+                  ! Get number of recalculated columns and their indicies irc.
+                  nrc = 0
+                  do icol = 1,ncol
+                     if (zcrecalc(icol)) then
+                        nrc = nrc + 1
+                        irc(nrc) = icol
+                     end if
+                  end do
+
+               endif
+
+               ! recalculate as needed
+               if (nrc > 0) then
+
+                  ! McICA subcolumn generation
+                  call MAPL_TimerOn (MAPL,"RRTMG_CLDSGEN",__RC__)
+                  ! copy-in inputs for recalculated columns
+                  do n = 1,nrc
+                     icol = irc(n)
+                     alat_rc(  n) =   alat(  icol)
+                       zm_rc(:,n) =     zm(:,icol)
+                     play_rc(:,n) =   play(:,icol)
+                      cld_rc(:,n) =    cld(:,icol)
+                     ciwp_rc(:,n) =   ciwp(:,icol)
+                     clwp_rc(:,n) =   clwp(:,icol)
+                  end do
+                  call generate_stochastic_clouds( &
+                     pncol, nrc, ngptsw, nlay, &
+                     zm_rc, alat_rc, dyofyr, &
+                     play_rc, cld_rc, ciwp_rc, clwp_rc, 1.e-20, &
+                     cldymc_rc, ciwpmc, clwpmc, &
+                     seed_order=[4,3,2,1]) 
+
+! pmn: idea ... save space later by cldymc = ciwp > 0. .or. clwp > 0
+! and then transfer to taucmc > 0.
+
+                  ! for super-layer cloud fractions
+                  call clearCounts_threeBand( &
+                     pncol, nrc, ngptsw, nlay, cloudLM, cloudMH, cldymc_rc, &
+                     p_clearCounts_rc)
+                  ! copy-out recalculated values
+                  do n = 1,nrc
+                     icol = irc(n)
+                     zcldymc    (:,:,icol) =        cldymc_rc(:,:,n)
+                     p_clearCounts(:,icol) = p_clearCounts_rc(  :,n)
+                  end do
+                  call MAPL_TimerOff(MAPL,"RRTMG_CLDSGEN",__RC__)
+
+                  ! cloud optical property generation
+                  call MAPL_TimerOn (MAPL,"RRTMG_CLDPRMC",__RC__)
+                  ! copy-in inputs for recalculated columns
+                  do n = 1,nrc
+                     icol = irc(n)
+                     rei_rc(:,n) = rei(:,icol)
+                     rel_rc(:,n) = rel(:,icol)
+                  end do
+                  call cldprmc_sw( &
+                     pncol, nrc, nlay, iceflgsw, liqflgsw,  &
+                     cldymc_rc, ciwpmc, clwpmc, rei_rc, rel_rc, &
+                     taormc_rc, taucmc_rc, ssacmc_rc, asmcmc_rc)
+                  ! copy-out recalculated values
+                  do n = 1,nrc
+                     icol = irc(n)
+                     ztaucmc(:,:,icol) = taucmc_rc(:,:,n)
+                     zssacmc(:,:,icol) = ssacmc_rc(:,:,n)
+                     zasmcmc(:,:,icol) = asmcmc_rc(:,:,n)
+                     ztaormc(:,:,icol) = taormc_rc(:,:,n)
+                  end do
+                  call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC",__RC__)
+
+               else  ! nrc == 0
+                  call MAPL_TimerOn (MAPL,"RRTMG_CLDSGEN",__RC__)
+                  call MAPL_TimerOff(MAPL,"RRTMG_CLDSGEN",__RC__)
+                  call MAPL_TimerOn (MAPL,"RRTMG_CLDPRMC",__RC__)
+                  call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC",__RC__)
+               endif
+
+            else  ! cc == 1 (clear gridcolumns)
+
+               call MAPL_TimerOn (MAPL,"RRTMG_CLDSGEN",__RC__)
+               do icol = 1,ncol
+                  zcldymc(:,:,icol) = .false.
+               end do
+               call MAPL_TimerOff(MAPL,"RRTMG_CLDSGEN",__RC__)
+               call MAPL_TimerOn (MAPL,"RRTMG_CLDPRMC",__RC__)
+               do icol = 1,ncol
+                  ztaucmc(:,:,icol) = 0.
+                  zssacmc(:,:,icol) = 1. 
+                  zasmcmc(:,:,icol) = 0.
+                  ztaormc(:,:,icol) = 0.
+               end do
+               call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC",__RC__)
             end if
 
             ! compute sw radiative fluxes
@@ -1134,7 +1300,7 @@ contains
                cc, pncol, ncol, nlay, &
                play, tlay, coldry, &
                albdif, albdir, &
-               cldymcl, taucmc, asmcmc, ssacmc, taormc, &
+               zcldymc, ztaucmc, zasmcmc, zssacmc, ztaormc, &
                taua, asya, omga, cossza, adjflux, &
                isolvar, svar_f, svar_s, svar_i, &
                svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -1143,14 +1309,14 @@ contains
                zbbfd, zbbfu, zbbcd, zbbcu, zbbfddir, zbbcddir, &
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
                ztautp, ztauhp, ztaump, ztaulp, &
-               do_FAR, ztage, taumol_age_limit, &
+               do_FAR, zmage, taumol_age_limit, &
                ztaur, ztaug, zsflxzen, zssi, &
                __RC__)
 
             ! Copy out up and down, clear- and all-sky fluxes to output arrays.
             ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
 
-            call MAPL_TimerOn (MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_TimerOn (MAPL,"RRTMG_PART",__RC__)
 
             if (cc == 1) then  ! clear gridcolumns
 
@@ -1192,11 +1358,16 @@ contains
                ! copy out FAR taumol InOuts
                if (do_FAR) then
                   idx = gicol_clr(cols:cole)
-                  taumol_age(idx) = ztage     (1:ncol)
+                  taumol_age(idx) = zmage     (1:ncol)
                   sflxzen (:,idx) = zsflxzen(:,1:ncol)
                   ssi     (:,idx) = zssi    (:,1:ncol)
                   taur  (:,:,idx) = ztaur (:,:,1:ncol)
                   taug  (:,:,idx) = ztaug (:,:,1:ncol)
+                  cldymc(:,:,idx) = merge(1.,0.,zcldymc(:,:,1:ncol))
+                  taucmc(:,:,idx) = ztaucmc(:,:,1:ncol)
+                  ssacmc(:,:,idx) = zssacmc(:,:,1:ncol)
+                  asmcmc(:,:,idx) = zasmcmc(:,:,1:ncol)
+                  taormc(:,:,idx) = ztaormc(:,:,1:ncol)
                end if
 
             else ! cloudy columns
@@ -1231,17 +1402,23 @@ contains
                ! copy out FAR taumol InOuts
                if (do_FAR) then
                   idx = gicol_cld(cols:cole)
-                  taumol_age(idx) = ztage     (1:ncol)
-                  sflxzen (:,idx) = zsflxzen(:,1:ncol)
-                  ssi     (:,idx) = zssi    (:,1:ncol)
-                  taur  (:,:,idx) = ztaur (:,:,1:ncol)
-                  taug  (:,:,idx) = ztaug (:,:,1:ncol)
+                  taumol_age(idx) = zmage      (1:ncol)
+                  sflxzen (:,idx) = zsflxzen (:,1:ncol)
+                  ssi     (:,idx) = zssi     (:,1:ncol)
+                  taur  (:,:,idx) = ztaur  (:,:,1:ncol)
+                  taug  (:,:,idx) = ztaug  (:,:,1:ncol)
+                  cldymc(:,:,idx) = merge(1.,0.,zcldymc(:,:,1:ncol))
+                  taucmc(:,:,idx) = ztaucmc(:,:,1:ncol)
+                  ssacmc(:,:,idx) = zssacmc(:,:,1:ncol)
+                  asmcmc(:,:,idx) = zasmcmc(:,:,1:ncol)
+                  taormc(:,:,idx) = ztaormc(:,:,1:ncol)
                end if
 
             endif  ! clear/cloudy
+! pmn: use g rather than z ?
 
             deallocate(idx,__STAT__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_TimerOff(MAPL,"RRTMG_PART",__RC__)
 
          enddo  ! over partitions
 

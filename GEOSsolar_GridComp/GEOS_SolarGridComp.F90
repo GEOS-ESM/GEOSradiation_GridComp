@@ -257,6 +257,10 @@ module GEOS_SolarGridCompMod
     ! taumol variables
     real, allocatable, dimension(:,:,:,:) :: taur, taug    ! (lay,gpt,icol,jcol)
     real, allocatable, dimension(:,:,:)   :: sflxzen, ssi  ! (    gpt,icol,jcol)
+    ! taucld variables
+    real, allocatable, dimension(:,:,:,:) :: cldymc        ! (lay,gpt,icol,jcol)
+    real, allocatable, dimension(:,:,:,:) :: &
+       taucmc, ssacmc, asmcmc, taormc                      ! (lay,gpt,icol,jcol)
   end type ty_FAR_RRTMG_state
 
   ! Wrapper to access FAR RRTMG internal state
@@ -744,6 +748,67 @@ contains
           call MAPL_AddInternalSpec(GC,                                         &
              SHORT_NAME = 'FAR_TAUG',                                           &
              LONG_NAME  = 'RRTMG_gaseous_absorption_optical_thickness_for_FAR', &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzVert,                                    &
+             UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
+             VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+          ! FAR taucld internal state
+
+          ! FAR_TAUCLD_AGE must have an explicit negative DEFAULT. This triggers
+          ! asynchronous initialization after a boostrapped restart. When the age
+          ! is non-negative, it keeps track of how old each gridcolumn's internal
+          ! taucld calculation is (so it can be recalculated when too old).
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_TAUCLD_AGE',                                     &
+             LONG_NAME  = 'age_of_stored_taucld_internals_for_FAR',             &
+             UNITS      = 's',                                                  &
+             DEFAULT    = -1.,                                                  &
+             DIMS       = MAPL_DimsHorzOnly,                                    &
+             VLOCATION  = MAPL_VLocationNone,                             __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_CLDYCOL',                                        &
+             LONG_NAME  = 'RRTMG_column_cloud_presence_ne_0_for_FAR',           &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzOnly,                                    &
+             VLOCATION  = MAPL_VLocationNone,                             __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_CLDYMC',                                         &
+             LONG_NAME  = 'RRTMG_McICA_cloud_presence_ne_0_for_FAR',            &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzVert,                                    &
+             UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
+             VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_TAUCMC',                                         &
+             LONG_NAME  = 'RRTMG_McICA_cloud_optical_thickness_for_FAR',        &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzVert,                                    &
+             UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
+             VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_SSACMC',                                         &
+             LONG_NAME  = 'RRTMG_McICA_cloud_single_scattering_albedo_for_FAR', &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzVert,                                    &
+             UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
+             VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_ASMCMC',                                         &
+             LONG_NAME  = 'RRTMG_McICA_cloud_asymmetry_parameter_for_FAR',      &
+             UNITS      = '1',                                                  &
+             DIMS       = MAPL_DimsHorzVert,                                    &
+             UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
+             VLOCATION  = MAPL_VLocationCenter,                           __RC__)
+
+          call MAPL_AddInternalSpec(GC,                                         &
+             SHORT_NAME = 'FAR_TAORMC',                                         &
+             LONG_NAME  = 'RRTMG_McICA_unscaled_cloud_opt_thickness_for_FAR',   &
              UNITS      = '1',                                                  &
              DIMS       = MAPL_DimsHorzVert,                                    &
              UNGRIDDED_DIMS = (/ NGPTSW /),                                     &
@@ -1451,55 +1516,39 @@ contains
     call MAPL_TimerAdd(GC, name="INITIALIZE"              , __RC__)
     call MAPL_TimerAdd(GC, name="PRELIMS"                 , __RC__)
     call MAPL_TimerAdd(GC, name="REFRESH"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="-AEROSOLS"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-SORAD"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_DATA"            , __RC__)
-    call MAPL_TimerAdd(GC, name="---SORAD_DATA_DEVICE"    , __RC__)
-    call MAPL_TimerAdd(GC, name="---SORAD_DATA_CONST"     , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_ALLOC"           , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_DEALLOC"         , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_PART"           , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET1"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET2"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET3"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET4"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET5"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET6"         , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7a"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7b"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7c"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7d"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7e"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7f"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7g"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7h"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET7i"        , __RC__)
-    call MAPL_TimerAdd(GC, name="----RRTMG_SET8"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_FLIP"            , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMGP"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_GAS"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_POST"           , __RC__)
-    call MAPL_TimerAdd(GC, name="-BALANCE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--CREATE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--DISTRIBUTE"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RETRIEVE"              , __RC__)
-    call MAPL_TimerAdd(GC, name="--DESTROY"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
+    call MAPL_TimerAdd(GC, name= "AEROSOLS"               , __RC__)
+    call MAPL_TimerAdd(GC, name= "SORAD"                  , __RC__)
+    call MAPL_TimerAdd(GC, name=  "SORAD_RUN"             , __RC__)
+    call MAPL_TimerAdd(GC, name=  "SORAD_DATA"            , __RC__)
+    call MAPL_TimerAdd(GC, name=   "SORAD_DATA_DEVICE"    , __RC__)
+    call MAPL_TimerAdd(GC, name=   "SORAD_DATA_CONST"     , __RC__)
+    call MAPL_TimerAdd(GC, name=  "SORAD_ALLOC"           , __RC__)
+    call MAPL_TimerAdd(GC, name=  "SORAD_DEALLOC"         , __RC__)
+    call MAPL_TimerAdd(GC, name= "RRTMG"                  , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMG_RUN"             , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_PART"           , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_CLDSGEN"        , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_CLDPRMC"        , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_SETCOEF"        , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_TAUMOL"         , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_REFTRA"         , __RC__)
+    call MAPL_TimerAdd(GC, name=   "RRTMG_VRTQDR"         , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMG_INIT"            , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMG_FLIP"            , __RC__)
+    call MAPL_TimerAdd(GC, name= "RRTMGP"                 , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_IO_GAS"         , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_IO_CLOUDS"      , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_CLOUD_OPTICS"   , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_MCICA"          , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_GAS_OPTICS"     , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_RT"             , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RRTMGP_POST"           , __RC__)
+    call MAPL_TimerAdd(GC, name= "BALANCE"                , __RC__)
+    call MAPL_TimerAdd(GC, name=  "CREATE"                , __RC__)
+    call MAPL_TimerAdd(GC, name=  "DISTRIBUTE"            , __RC__)
+    call MAPL_TimerAdd(GC, name=  "RETRIEVE"              , __RC__)
+    call MAPL_TimerAdd(GC, name=  "DESTROY"               , __RC__)
+    call MAPL_TimerAdd(GC, name= "MISC"                   , __RC__)
     call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
     call MAPL_TimerAdd(GC, name="FINALIZE"                , __RC__)
     
@@ -1552,6 +1601,9 @@ contains
 
     real, pointer, dimension(:,:,:)   :: FAR_SFLXZEN, FAR_SSI
     real, pointer, dimension(:,:,:,:) :: FAR_TAUR, FAR_TAUG
+    real, pointer, dimension(:,:,:,:) :: FAR_CLDYMC
+    real, pointer, dimension(:,:,:,:) :: FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC
+    real, pointer, dimension(:,:,:,:) :: FAR_TAORMC
 
 !=============================================================================
 
@@ -1591,16 +1643,26 @@ contains
           ! Allocate contents of FAR RRTMG's private state.
           call MAPL_Get(MAPL, IM=IM, JM=JM, LM=LM, &
              INTERNAL_ESMF_STATE=INTERNAL, __RC__)
-          allocate(far_rrtmg_state % taur (LM,ngptsw,IM,JM), __STAT__)
-          allocate(far_rrtmg_state % taug (LM,ngptsw,IM,JM), __STAT__)
-          allocate(far_rrtmg_state % sflxzen (ngptsw,IM,JM), __STAT__)
-          allocate(far_rrtmg_state % ssi     (ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % taur   (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % taug   (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % sflxzen   (ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % ssi       (ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % cldymc (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % taucmc (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % ssacmc (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % asmcmc (LM,ngptsw,IM,JM), __STAT__)
+          allocate(far_rrtmg_state % taormc (LM,ngptsw,IM,JM), __STAT__)
 
           ! Get the (X,Y,Z,U) ordered ESMF internal state.
           call MAPL_GetPointer(INTERNAL, FAR_TAUR,    'FAR_TAUR',    __RC__)
           call MAPL_GetPointer(INTERNAL, FAR_TAUG,    'FAR_TAUG',    __RC__)
           call MAPL_GetPointer(INTERNAL, FAR_SFLXZEN, 'FAR_SFLXZEN', __RC__)
           call MAPL_GetPointer(INTERNAL, FAR_SSI,     'FAR_SSI',     __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_CLDYMC,  'FAR_CLDYMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAUCMC,  'FAR_TAUCMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SSACMC,  'FAR_SSACMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_ASMCMC,  'FAR_ASMCMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAORMC,  'FAR_TAORMC',  __RC__)
 
           ! Transpose from ESMF's (X,Y,Z,U) state to FAR RRTMG's (fZ,U,X,Y) private state,
           ! where X,Y=horizontal, Z=vertical, fZ=flipped vertical, U=ungridded (gpoints).
@@ -1613,10 +1675,15 @@ contains
           ! in between restarts and checkpoints.
           ! PMN: if memory is STILL constrained after that change, we may need some
           ! inplace reorder/transpose routine such as in Intel MKL / BLAS.
-          far_rrtmg_state % sflxzen = reshape(FAR_SFLXZEN,               [ngptsw,IM,JM],order=[2,3,1])
-          far_rrtmg_state % ssi     = reshape(FAR_SSI,                   [ngptsw,IM,JM],order=[2,3,1])
-          far_rrtmg_state % taur    = reshape(FAR_TAUR(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
-          far_rrtmg_state % taug    = reshape(FAR_TAUG(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % sflxzen = reshape(FAR_SFLXZEN,                 [ngptsw,IM,JM],order=[2,3,1])
+          far_rrtmg_state % ssi     = reshape(FAR_SSI,                     [ngptsw,IM,JM],order=[2,3,1])
+          far_rrtmg_state % taur    = reshape(FAR_TAUR  (:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % taug    = reshape(FAR_TAUG  (:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % cldymc  = reshape(FAR_CLDYMC(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % taucmc  = reshape(FAR_TAUCMC(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % ssacmc  = reshape(FAR_SSACMC(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % asmcmc  = reshape(FAR_ASMCMC(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
+          far_rrtmg_state % taormc  = reshape(FAR_TAORMC(:,:,LM:1:-1,:),[LM,ngptsw,IM,JM],order=[3,4,1,2])
           far_rrtmg_state % initialized = .true.
 
 ! PMN: what happens in SS vs initialize
@@ -1672,6 +1739,9 @@ contains
 
     real, pointer, dimension(:,:,:)   :: FAR_SFLXZEN, FAR_SSI
     real, pointer, dimension(:,:,:,:) :: FAR_TAUR, FAR_TAUG
+    real, pointer, dimension(:,:,:,:) :: FAR_CLDYMC
+    real, pointer, dimension(:,:,:,:) :: FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC
+    real, pointer, dimension(:,:,:,:) :: FAR_TAORMC
 
 !=============================================================================
 
@@ -1709,19 +1779,34 @@ contains
           call MAPL_GetPointer(INTERNAL, FAR_TAUG,    'FAR_TAUG',    __RC__)
           call MAPL_GetPointer(INTERNAL, FAR_SFLXZEN, 'FAR_SFLXZEN', __RC__)
           call MAPL_GetPointer(INTERNAL, FAR_SSI,     'FAR_SSI',     __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_CLDYMC,  'FAR_CLDYMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAUCMC,  'FAR_TAUCMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_SSACMC,  'FAR_SSACMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_ASMCMC,  'FAR_ASMCMC',  __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_TAORMC,  'FAR_TAORMC',  __RC__)
 
           ! Transpose from FAR RRTMG's (fZ,U,X,Y) state back to ESMF's (X,Y,Z,U) state,
           ! where X,Y=horizontal, Z=vertical, fZ=flipped vertical, U=ungridded (gpoints).
-          FAR_SFLXZEN = reshape(far_rrtmg_state % sflxzen,             [IM,JM,   ngptsw], order=[3,1,2])
-          FAR_SSI     = reshape(far_rrtmg_state % ssi,                 [IM,JM,   ngptsw], order=[3,1,2])
-          FAR_TAUR    = reshape(far_rrtmg_state % taur(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
-          FAR_TAUG    = reshape(far_rrtmg_state % taug(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_SFLXZEN = reshape(far_rrtmg_state % sflxzen,               [IM,JM,   ngptsw], order=[3,1,2])
+          FAR_SSI     = reshape(far_rrtmg_state % ssi,                   [IM,JM,   ngptsw], order=[3,1,2])
+          FAR_TAUR    = reshape(far_rrtmg_state % taur  (LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_TAUG    = reshape(far_rrtmg_state % taug  (LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_CLDYMC  = reshape(far_rrtmg_state % cldymc(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_TAUCMC  = reshape(far_rrtmg_state % taucmc(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_SSACMC  = reshape(far_rrtmg_state % ssacmc(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_ASMCMC  = reshape(far_rrtmg_state % asmcmc(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
+          FAR_TAORMC  = reshape(far_rrtmg_state % taormc(LM:1:-1,:,:,:), [IM,JM,LM,ngptsw], order=[3,4,1,2])
 
           ! Deallocate contents of FAR RRTMG private internal state.
           deallocate(far_rrtmg_state % taur,    __STAT__)
           deallocate(far_rrtmg_state % taug,    __STAT__)
           deallocate(far_rrtmg_state % sflxzen, __STAT__)
           deallocate(far_rrtmg_state % ssi,     __STAT__)
+          deallocate(far_rrtmg_state % cldymc,  __STAT__)
+          deallocate(far_rrtmg_state % taucmc,  __STAT__)
+          deallocate(far_rrtmg_state % ssacmc,  __STAT__)
+          deallocate(far_rrtmg_state % asmcmc,  __STAT__)
+          deallocate(far_rrtmg_state % taormc,  __STAT__)
           far_rrtmg_state % initialized = .false.
 
           ! nullify private state and wrapper pointers
@@ -1831,7 +1916,8 @@ contains
     real, pointer, dimension(:,:,:) :: ptr3d
     real, pointer, dimension(:,:  ) :: ptr2d
 
-    real, pointer, dimension(:,:) :: FAR_taumol_age, FAR_aerosol_age
+    real, pointer, dimension(:,:) :: &
+       FAR_taumol_age, FAR_taucld_age, FAR_aerosol_age
 
     type (ESMF_State)                     :: AERO
     character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME   
@@ -1899,7 +1985,8 @@ contains
     logical                        :: PersistSolar
 
     logical :: do_no_aero_calc, do_FAR
-    real :: FAR_dt, FAR_taumol_age_limit, FAR_aerosol_age_limit
+    real :: FAR_dt, FAR_aerosol_age_limit
+    real :: FAR_taumol_age_limit, FAR_taucld_age_limit
 
     ! list of strings facility
     integer :: i
@@ -1908,16 +1995,22 @@ contains
     end type S_
     type(S_), allocatable :: list(:)
 
+    type (ESMF_VM) :: VM  ! PMN: temp for timing
+
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
     call ESMF_GridCompGet (GC, name=COMP_NAME, GRID=ESMFGRID, __RC__ )
     Iam = trim(COMP_NAME) // "Run"
 
+    ! PMN: temp for timing
+    call ESMF_VMGetCurrent(VM, __RC__)
+    call ESMF_VMBarrier(VM, __RC__)
+
     ! Get my internal MAPL_Generic state
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
-    call MAPL_TimerOn (MAPL,"TOTAL"  ,__RC__)
+    call MAPL_TimerOn (MAPL,"TOTAL",__RC__)
     call MAPL_TimerOn (MAPL,"PRELIMS",__RC__)
 
     ! Get parameters from generic state.
@@ -2136,6 +2229,9 @@ contains
           call MAPL_GetPointer(INTERNAL, FAR_taumol_age, "FAR_TAUMOL_AGE", __RC__)
           call MAPL_GetResource(MAPL, FAR_taumol_age_limit, &
              "FAR_TAUMOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
+          call MAPL_GetPointer(INTERNAL, FAR_taucld_age, "FAR_TAUCLD_AGE", __RC__)
+          call MAPL_GetResource(MAPL, FAR_taucld_age_limit, &
+             "FAR_TAUCLD_AGE_LIMIT:", DEFAULT=3600., __RC__)
        end if
        call MAPL_GetPointer(INTERNAL, FAR_aerosol_age, "FAR_AEROSOL_AGE", __RC__)
        call MAPL_GetResource(MAPL, FAR_aerosol_age_limit, &
@@ -2157,9 +2253,9 @@ contains
     ! Update the Sun position and weight the export variables
     ! -------------------------------------------------------
     if (UPDATE_FIRST) then
-       call MAPL_TimerOn  (MAPL,"UPDATE",__RC__) 
-       call UPDATE_EXPORT (IM,JM,LM,__RC__) 
-       call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
+       call MAPL_TimerOn (MAPL,"UPDATE",__RC__) 
+       call UPDATE_EXPORT(IM,JM,LM,__RC__) 
+       call MAPL_TimerOff(MAPL,"UPDATE",__RC__)
     end if
 
     ! Periodically, refresh the internal state with a full solar calc
@@ -2214,7 +2310,7 @@ contains
 
        ! Get optical properties of radiatively active aerosols
        ! -----------------------------------------------------
-       call MAPL_TimerOn (MAPL,"-AEROSOLS",__RC__)
+       call MAPL_TimerOn (MAPL,"AEROSOLS",__RC__)
        call ESMF_StateGet(IMPORT,'AERO',AERO,__RC__)
        call ESMF_AttributeGet(AERO, &
           name='implements_aerosol_optics_method', &
@@ -2326,7 +2422,7 @@ contains
           end if  ! update aerosols?
        end if  ! aerosol optics implemented?
 
-       call MAPL_TimerOff(MAPL,"-AEROSOLS",__RC__)
+       call MAPL_TimerOff(MAPL,"AEROSOLS",__RC__)
 
        ! Optional without-aerosol diagnostics
        ! ------------------------------------
@@ -2400,9 +2496,9 @@ contains
     ! Update the Sun position and weight the export variables
     ! -------------------------------------------------------
     if (.not.UPDATE_FIRST) then
-       call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)
-       call UPDATE_EXPORT (IM,JM,LM,     __RC__)
-       call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
+       call MAPL_TimerOn (MAPL,"UPDATE",__RC__)
+       call UPDATE_EXPORT(IM,JM,LM,     __RC__)
+       call MAPL_TimerOff(MAPL,"UPDATE",__RC__)
     end if
 
     ! update FAR ages
@@ -2411,12 +2507,18 @@ contains
        if (USE_RRTMG) then
           where (FAR_taumol_age >= 0.) &
              FAR_taumol_age = FAR_taumol_age + FAR_dt
+          where (FAR_taucld_age >= 0.) &
+             FAR_taucld_age = FAR_taucld_age + FAR_dt
        end if
        where (FAR_aerosol_age >= 0.) &
           FAR_aerosol_age = FAR_aerosol_age + FAR_dt
     end if
 
-    call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
+    call MAPL_TimerOff(MAPL,"TOTAL",__RC__)
+
+    ! PMN: temp for timing
+    call ESMF_VMBarrier(VM, __RC__)
+
     RETURN_(ESMF_SUCCESS)
 
   contains
@@ -2501,9 +2603,14 @@ contains
       real, pointer, dimension(:)     :: UVRR, UVRF, PARR, PARF, NIRR, NIRF
 
       ! InOuts
-      real, pointer, dimension(:)     :: FAR_TAUMOL_AGE, FAR_AEROSOL_AGE
+      real, pointer, dimension(:)     :: FAR_TAUMOL_AGE
       real, pointer, dimension(:,:,:) :: FAR_TAUR, FAR_TAUG
       real, pointer, dimension(:,:)   :: FAR_SFLXZEN, FAR_SSI
+      real, pointer, dimension(:)     :: FAR_TAUCLD_AGE
+      real, pointer, dimension(:)     :: FAR_CLDYCOL
+      real, pointer, dimension(:,:,:) :: FAR_CLDYMC
+      real, pointer, dimension(:,:,:) :: FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC
+      real, pointer, dimension(:)     :: FAR_AEROSOL_AGE
 
       ! REFRESH exports
       real, pointer, dimension(:)     :: COSZSW
@@ -2662,6 +2769,7 @@ contains
       integer, allocatable :: SlicesInp(:),SlicesInt(:)
       real, target, allocatable, dimension(:) :: BufInp, BufInOut, BufOut
       real, target, allocatable, dimension(:) :: SFLXZEN_, SSI_, TAUR_, TAUG_
+      real, target, allocatable, dimension(:) :: CLDYMC_, TAUCMC_, SSACMC_, ASMCMC_, TAORMC_
       integer, allocatable :: rgDim(:),ugDim(:)
       real, pointer :: buf(:)
       integer :: NumImp, NumInt, NumInp
@@ -2674,7 +2782,7 @@ contains
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
       IAm = trim(COMP_NAME)//"Soradcore"
-      call MAPL_TimerOn(MAPL,"-MISC")
+      call MAPL_TimerOn (MAPL,"MISC",__RC__)
 
       ! Make sure FAR_ are null pointers by default
       FAR_TAUMOL_AGE => null()
@@ -2682,6 +2790,13 @@ contains
       FAR_TAUG       => null()
       FAR_SFLXZEN    => null()
       FAR_SSI        => null()
+      FAR_TAUCLD_AGE => null()
+      FAR_CLDYCOL    => null()
+      FAR_CLDYMC     => null()
+      FAR_TAUCMC     => null()
+      FAR_SSACMC     => null()
+      FAR_ASMCMC     => null()
+      FAR_TAORMC     => null()
 
       ! PMN: This line is only needed because MAPL_SunGetInsolation()
       ! declares INTV as InOut. Doesn't appear this needs to be the case.
@@ -2724,12 +2839,12 @@ contains
          end if
       end if
 
-      call MAPL_TimerOff(MAPL,"-MISC")
+      call MAPL_TimerOff(MAPL,"MISC",__RC__)
 
 !  Load balancing by packing the lit points and sharing work with night regions
 !------------------------------------------------------------------------------
 
-      call MAPL_TimerOn(MAPL,"-BALANCE")
+      call MAPL_TimerOn (MAPL,"BALANCE",__RC__)
 
 !  Identify lit soundings with the daytime mask
 !----------------------------------------------
@@ -2765,13 +2880,13 @@ contains
       call ESMF_VMGetCurrent(VM, __RC__)
       call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
 
-      call MAPL_TimerOn(MAPL,"--CREATE")
+      call MAPL_TimerOn (MAPL,"CREATE",__RC__)
 
       call MAPL_BalanceCreate( &
          OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
          BalLen=Num2do, BufLen=NumMax, __RC__)
 
-      call MAPL_TimerOff(MAPL,"--CREATE")
+      call MAPL_TimerOff(MAPL,"CREATE",__RC__)
 
 !  The number of Input and Output/InOut variables to the load balancing.
 !    The Input number is five more than the number of IMPORTS because the
@@ -3027,9 +3142,9 @@ contains
       ! Load balance the Inputs
       ! -----------------------
 
-      call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
+      call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
       call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-      call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+      call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
 
 
 ! @@@@@@@@@@@@@@@@@@@@@@
@@ -3086,7 +3201,12 @@ contains
          if ('FAR_SFLXZEN' == short_name .or. &
              'FAR_SSI'     == short_name .or. &
              'FAR_TAUR'    == short_name .or. &
-             'FAR_TAUG'    == short_name)     &  
+             'FAR_TAUG'    == short_name .or. &  
+             'FAR_CLDYMC'  == short_name .or. &  
+             'FAR_TAUCMC'  == short_name .or. &  
+             'FAR_SSACMC'  == short_name .or. &  
+             'FAR_ASMCMC'  == short_name .or. &  
+             'FAR_TAORMC'  == short_name)     &  
          then
             SlicesInt(k) = 0
             cycle
@@ -3192,6 +3312,71 @@ contains
                enddo
             enddo
 
+         elseif (NamesInt(k) == 'FAR_CLDYMC') then
+            allocate(CLDYMC_(LM * ngptsw * NumMax),__STAT__)
+            FAR_CLDYMC(1:LM,1:ngptsw,1:NumMax) => CLDYMC_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_CLDYMC(:,:,M) = far_rrtmg_state % cldymc(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_TAUCMC') then
+            allocate(TAUCMC_(LM * ngptsw * NumMax),__STAT__)
+            FAR_TAUCMC(1:LM,1:ngptsw,1:NumMax) => TAUCMC_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_TAUCMC(:,:,M) = far_rrtmg_state % taucmc(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_SSACMC') then
+            allocate(SSACMC_(LM * ngptsw * NumMax),__STAT__)
+            FAR_SSACMC(1:LM,1:ngptsw,1:NumMax) => SSACMC_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_SSACMC(:,:,M) = far_rrtmg_state % ssacmc(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_ASMCMC') then
+            allocate(ASMCMC_(LM * ngptsw * NumMax),__STAT__)
+            FAR_ASMCMC(1:LM,1:ngptsw,1:NumMax) => ASMCMC_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_ASMCMC(:,:,M) = far_rrtmg_state % asmcmc(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
+         elseif (NamesInt(k) == 'FAR_TAORMC') then
+            allocate(TAORMC_(LM * ngptsw * NumMax),__STAT__)
+            FAR_TAORMC(1:LM,1:ngptsw,1:NumMax) => TAORMC_
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     FAR_TAORMC(:,:,M) = far_rrtmg_state % taormc(:,:,I,J)
+                  endif
+               enddo
+            enddo
+
          end if
 
          if (SlicesInt(k) == 0) cycle
@@ -3262,6 +3447,10 @@ contains
          select case(NamesInt(k))
             case('FAR_TAUMOL_AGE')
                FAR_TAUMOL_AGE => ptr2(1:Num2do,1)
+            case('FAR_TAUCLD_AGE')
+               FAR_TAUCLD_AGE => ptr2(1:Num2do,1)
+            case('FAR_CLDYCOL')
+               FAR_CLDYCOL => ptr2(1:Num2do,1)
             case('FAR_AEROSOL_AGE')
                FAR_AEROSOL_AGE => ptr2(1:Num2do,1)
             case('FAR_TAUA')
@@ -3328,9 +3517,9 @@ contains
       ! Load balance the InOuts for Input
       !----------------------------------
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
+         call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
          call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+         call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
       end if
 
       ! Explicit inSize LoadBalancing for far_rrtmg_state variables,
@@ -3339,7 +3528,7 @@ contains
       !-------------------------------------------------------------
       if (do_FAR) then
          if (use_RRTMG) then
-            call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
+            call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
 
             call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
                Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
@@ -3357,16 +3546,36 @@ contains
                Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUG(1:LM,1:ngptsw,1:Num2do) => TAUG_(1:Num2do*ngptsw*LM)
 
-            call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+            call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_CLDYMC(1:LM,1:ngptsw,1:Num2do) => CLDYMC_(1:Num2do*ngptsw*LM)
+
+            call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUCMC(1:LM,1:ngptsw,1:Num2do) => TAUCMC_(1:Num2do*ngptsw*LM)
+
+            call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_SSACMC(1:LM,1:ngptsw,1:Num2do) => SSACMC_(1:Num2do*ngptsw*LM)
+
+            call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_ASMCMC(1:LM,1:ngptsw,1:Num2do) => ASMCMC_(1:Num2do*ngptsw*LM)
+
+            call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAORMC(1:LM,1:ngptsw,1:Num2do) => TAORMC_(1:Num2do*ngptsw*LM)
+
+            call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
          end if
       end if
 
-      call MAPL_TimerOff(MAPL,"-BALANCE")
+      call MAPL_TimerOff(MAPL,"BALANCE",__RC__)
 
 ! Do shortwave calculations on a list of soundings
 !-------------------------------------------------
 
-      call MAPL_TimerOn(MAPL,"-MISC")
+      call MAPL_TimerOn (MAPL,"MISC",__RC__)
 
       ! report cosine solar zenith angle actually used by REFRESH
       COSZSW = ZT
@@ -3447,7 +3656,7 @@ contains
          ASYA = BUFIMP_AEROSOL_ASY
       end if
 
-      call MAPL_TimerOff(MAPL,"-MISC")
+      call MAPL_TimerOff(MAPL,"MISC",__RC__)
 
       ! Call the requested Shortwave scheme
       ! -----------------------------------
@@ -3468,7 +3677,7 @@ contains
 
    else if (USE_RRTMGP) then
 
-      call MAPL_TimerOn(MAPL,"-RRTMGP",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMGP",__RC__)
 
       ! number of columns after load balancing
       ncol = size(Q,1)
@@ -3502,9 +3711,9 @@ contains
         DEFAULT='rrtmgp-data-sw.nc',__RC__)
       if (.not. rrtmgp_state%initialized) then
         ! gas_concs needed only to access required gas names
-        call MAPL_TimerOn(MAPL,"--RRTMGP_IO_GAS", __RC__)
+        call MAPL_TimerOn (MAPL,"RRTMGP_IO_GAS",__RC__)
         call load_and_init(rrtmgp_state%k_dist,trim(k_dist_file),gas_concs)
-        call MAPL_TimerOff(MAPL,"--RRTMGP_IO_GAS", __RC__)
+        call MAPL_TimerOff(MAPL,"RRTMGP_IO_GAS",__RC__)
         if (.not. rrtmgp_state%k_dist%source_is_external()) then
           TEST_('RRTMGP-SW: does not seem to be SW')
         endif
@@ -3687,7 +3896,7 @@ contains
       call MAPL_GetResource( &
         MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
         DEFAULT='LUT', __RC__)
-      call MAPL_TimerOn(MAPL, name="--RRTMGP_IO_CLOUDS", __RC__)
+      call MAPL_TimerOn (MAPL, name="RRTMGP_IO_CLOUDS",__RC__)
       if (trim(cloud_optics_type)=='LUT') then
         call load_cld_lutcoeff (cloud_optics, cloud_optics_file)
       elseif (trim(cloud_optics_type)=='PADE') then
@@ -3695,7 +3904,7 @@ contains
       else
         TEST_('unknown cloud_optics_type: '//trim(cloud_optics_file))
       end if
-      call MAPL_TimerOff(MAPL, name="--RRTMGP_IO_CLOUDS", __RC__)
+      call MAPL_TimerOff(MAPL, name="RRTMGP_IO_CLOUDS",__RC__)
 
       ! ice surface roughness category for Yang (2013) ice optics
       ! icergh: 1 = none, 2 = medium, 3 = high
@@ -3976,7 +4185,7 @@ contains
           end select
         end if
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+        call MAPL_TimerOn (MAPL,"RRTMGP_CLOUD_OPTICS",__RC__)
 
         ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
         ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
@@ -3987,9 +4196,9 @@ contains
           cloud_props_bnd)
         TEST_(error_msg)
 
-        call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+        call MAPL_TimerOff(MAPL,"RRTMGP_CLOUD_OPTICS",__RC__)
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+        call MAPL_TimerOn (MAPL,"RRTMGP_MCICA",__RC__)
 
 !!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
 
@@ -4107,9 +4316,9 @@ contains
             where (cld_mask) cloud_props_gpt%tau = cloud_props_gpt%tau * zcw
         end if
 
-        call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+        call MAPL_TimerOff(MAPL,"RRTMGP_MCICA",__RC__)
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+        call MAPL_TimerOn (MAPL,"RRTMGP_GAS_OPTICS",__RC__)
 
         ! gas optics, including source functions
         error_msg = k_dist%gas_optics( &
@@ -4117,9 +4326,9 @@ contains
           gas_concs_block, optical_props, toa_flux)
         TEST_(error_msg)
 
-        call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+        call MAPL_TimerOff(MAPL,"RRTMGP_GAS_OPTICS",__RC__)
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
+        call MAPL_TimerOn (MAPL,"RRTMGP_RT",__RC__)
 
         ! scale to our tsi
         ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
@@ -4154,11 +4363,11 @@ contains
           fluxes_allsky)
         TEST_(error_msg)
 
-        call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+        call MAPL_TimerOff(MAPL,"RRTMGP_RT",__RC__)
 
       end do ! loop over blocks
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_POST",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMGP_POST",__RC__)
 
       ! normalize by incoming solar radiation
       allocate(flux_dn_top(ncol), __STAT__)
@@ -4244,14 +4453,14 @@ contains
       if (need_aer_optical_props) call aer_props%finalize()
       call optical_props%finalize()
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_POST",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMGP_POST",__RC__)
 
-      call MAPL_TimerOff(MAPL,"-RRTMGP",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMGP",__RC__)
 
    else if (USE_RRTMG) then
 
       ! regular RRTMG
-      call MAPL_TimerOn(MAPL,"-RRTMG")
+      call MAPL_TimerOn (MAPL,"RRTMG",__RC__)
 
       NCOL = size(Q,1)
 
@@ -4320,7 +4529,7 @@ contains
       ! RRTMG convention is that vertical indices increase from bot->top
       ! Note: FAR_TAU[RG] are already flipped
 
-      call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
+      call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
 
       DPR(:,1:LM) = (PLE(:,2:LM+1)-PLE(:,1:LM))
 
@@ -4402,14 +4611,14 @@ contains
       SSAAER(:,1:LM,:) = SSAA(:,LM:1:-1,:)
       ASMAER(:,1:LM,:) = ASYA(:,LM:1:-1,:)
 
-      call MAPL_TimerOff(MAPL,"--RRTMG_FLIP")
-      call MAPL_TimerOn (MAPL,"--RRTMG_INIT")
+      call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_INIT",__RC__)
 
       ! initialize RRTMG SW
       call RRTMG_SW_INI
 
-      call MAPL_TimerOff(MAPL,"--RRTMG_INIT")
-      call MAPL_TimerOn (MAPL,"--RRTMG_RUN")
+      call MAPL_TimerOff(MAPL,"RRTMG_INIT",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_RUN",__RC__)
 
       ! partition size for columns (profiles) used to improve efficiency
       call MAPL_GetResource( MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:',  DEFAULT=0, __RC__)
@@ -4528,11 +4737,13 @@ contains
          TAUTP, TAUHP, TAUMP, TAULP, &
          do_FAR, FAR_TAUMOL_AGE, FAR_taumol_age_limit, &
          FAR_TAUR, FAR_TAUG, FAR_SFLXZEN, FAR_SSI, &
+         FAR_TAUCLD_AGE, FAR_taucld_age_limit, &
+         FAR_CLDYCOL, FAR_CLDYMC, FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
 
-      call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
-      call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
+      call MAPL_TimerOff(MAPL,"RRTMG_RUN",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
 
       ! unflip the outputs in the vertical
       ! ----------------------------------
@@ -4542,7 +4753,7 @@ contains
       SWUFLXCR(:,1:LM+1) = SWUFLXC(:,LM+1:1:-1)
       SWDFLXCR(:,1:LM+1) = SWDFLXC(:,LM+1:1:-1)
 
-      call MAPL_TimerOff(MAPL,"--RRTMG_FLIP")
+      call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
 
       ! required outputs
       ! ----------------
@@ -4602,7 +4813,7 @@ contains
       deallocate(SWUFLXCR,__STAT__)
       deallocate(SWDFLXCR,__STAT__)
 
-      call MAPL_TimerOff(MAPL,"-RRTMG")
+      call MAPL_TimerOff(MAPL,"RRTMG",__RC__)
 
    else
 
@@ -4621,23 +4832,23 @@ contains
       ! Complete load balancing by retrieving work done remotely
       !---------------------------------------------------------
 
-      call MAPL_TimerOn(MAPL,"-BALANCE")
+      call MAPL_TimerOn (MAPL,"BALANCE",__RC__)
 
       if (size(BufOut) > 0) then
-         call MAPL_TimerOn (MAPL,"--RETRIEVE")
+         call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
          call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+         call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
 
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn (MAPL,"--RETRIEVE")
+         call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
          call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+         call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
 
       if (do_FAR) then
          if (use_RRTMG) then
-            call MAPL_TimerOn (MAPL,"--RETRIEVE")
+            call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
 
             call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
                Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
@@ -4655,7 +4866,27 @@ contains
                Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUG(1:LM,1:ngptsw,1:NumMax) => TAUG_
 
-            call MAPL_TimerOff(MAPL,"--RETRIEVE")
+            call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_CLDYMC(1:LM,1:ngptsw,1:NumMax) => CLDYMC_
+
+            call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAUCMC(1:LM,1:ngptsw,1:NumMax) => TAUCMC_
+
+            call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_SSACMC(1:LM,1:ngptsw,1:NumMax) => SSACMC_
+
+            call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_ASMCMC(1:LM,1:ngptsw,1:NumMax) => ASMCMC_
+
+            call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
+               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+            FAR_TAORMC(1:LM,1:ngptsw,1:NumMax) => TAORMC_
+
+            call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
          end if
       end if
 
@@ -4715,6 +4946,66 @@ contains
                enddo
             enddo
             deallocate(TAUG_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_CLDYMC') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % cldymc(:,:,I,J) = FAR_CLDYMC(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(CLDYMC_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_TAUCMC') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % taucmc(:,:,I,J) = FAR_TAUCMC(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(TAUCMC_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_SSACMC') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % ssacmc(:,:,I,J) = FAR_SSACMC(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(SSACMC_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_ASMCMC') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % asmcmc(:,:,I,J) = FAR_ASMCMC(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(ASMCMC_,__STAT__)
+
+         elseif (NamesInt(k) == 'FAR_TAORMC') then
+            M = 0
+            do J=1,JM
+               do I=1,IM
+                  if (daytime(I,J)) THEN
+                     M=M+1
+                     far_rrtmg_state % taormc(:,:,I,J) = FAR_TAORMC(:,:,M)
+                  endif
+               enddo
+            enddo
+            deallocate(TAORMC_,__STAT__)
 
          end if
 
@@ -4777,11 +5068,11 @@ contains
       deallocate(SlicesInt,NamesInt,__STAT__)
       deallocate(IntInOut,rgDim,ugDim,__STAT__)
       deallocate(BufInp,BufInOut,BufOut,__STAT__)
-      call MAPL_TimerOn (MAPL,"--DESTROY")
+      call MAPL_TimerOn (MAPL,"DESTROY",__RC__)
       call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
-      call MAPL_TimerOff(MAPL,"--DESTROY")
+      call MAPL_TimerOff(MAPL,"DESTROY",__RC__)
 
-      call MAPL_TimerOff(MAPL,"-BALANCE")
+      call MAPL_TimerOff(MAPL,"BALANCE",__RC__)
 
       RETURN_(ESMF_SUCCESS)
     end subroutine SORADCORE
@@ -4839,14 +5130,14 @@ contains
 ! Begin
 !------
       
-      call MAPL_TimerOn(MAPL,"-MISC")
+      call MAPL_TimerOn (MAPL,"MISC",__RC__)
 
       IRUN     = SIZE(TA,1) 
       LN       = SIZE(TA,2)
 
-      call MAPL_TimerOff(MAPL,"-MISC")
+      call MAPL_TimerOff(MAPL,"MISC",__RC__)
 
-      call MAPL_TimerOn(MAPL,"-SORAD")
+      call MAPL_TimerOn (MAPL,"SORAD",__RC__)
 
 #ifdef _CUDA
 
@@ -4860,8 +5151,7 @@ contains
       _ASSERT(LN <= GPU_MAXLEVS,'needs informative message') ! If this is tripped, ESMA_arch.mk must
                                  ! be edited.
 
-      call MAPL_TimerOn(MAPL,"--SORAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOn (MAPL,"SORAD_ALLOC",__RC__)
 
       ! ----------------------
       ! Allocate device arrays
@@ -4947,17 +5237,13 @@ contains
       ALLOCATE(FLX_SFC_BAND_DEV(IRUN,NB_CHOU), STAT = STATUS)
       VERIFY_(STATUS)
 
-      call MAPL_TimerOff(MAPL,"--SORAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_ALLOC",__RC__)
 
       ! Copy host inputs to device
       ! --------------------------
 
-      call MAPL_TimerOn(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOn (MAPL,"SORAD_DATA",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_DATA_DEVICE",__RC__)
 
       ! Inputs
       ! ------
@@ -5005,11 +5291,8 @@ contains
       CAIB = CAIB_CONST
       CAIF = CAIF_CONST
 
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_DATA_DEVICE",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_DATA_CONST",__RC__)
 
       ! Load constants in constant memory
       ! ---------------------------------
@@ -5039,14 +5322,9 @@ contains
       AWG_NIR=AWG_NIR_CONST
       ARG_NIR=ARG_NIR_CONST
 
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_DATA_CONST",__RC__)
+      call MAPL_TimerOff(MAPL,"SORAD_DATA",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_RUN",__RC__)
 
       call sorad<<<Grid, Block>>>(IRUN,LN,NB_CHOU,CO2,ICT,ICB)
       STATUS = cudaGetLastError()
@@ -5056,14 +5334,9 @@ contains
          _FAIL('SORAD kernel fail')
       end if
 
-      call MAPL_TimerOff(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_RUN",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_DATA",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_DATA_DEVICE",__RC__)
 
       STATUS = cudaMemcpy(FLX,FLX_DEV,IRUN*(LN+1))
       VERIFY_(STATUS)
@@ -5088,14 +5361,9 @@ contains
       STATUS = cudaMemcpy(FLXBAND,FLX_SFC_BAND_DEV,IRUN*NB_CHOU)
       VERIFY_(STATUS)
 
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_DATA_DEVICE",__RC__)
+      call MAPL_TimerOff(MAPL,"SORAD_DATA",__RC__)
+      call MAPL_TimerOn (MAPL,"SORAD_DEALLOC",__RC__)
 
       ! ------------------------
       ! Deallocate device arrays
@@ -5147,13 +5415,11 @@ contains
       DEALLOCATE(FDIFIR_DEV)
       DEALLOCATE(FLX_SFC_BAND_DEV)
 
-      call MAPL_TimerOff(MAPL,"--SORAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_DEALLOC",__RC__)
 
 #else
 
-      call MAPL_TimerOn(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOn (MAPL,"SORAD_RUN",__RC__)
       call SORAD (IRUN,LN,NB_CHOU,COSZ,PLhPa,TA,WA,OA,CO2,      &
            CWC,FCLD,ICT,ICB,REFF,HK_UV_TEMP,  HK_IR_TEMP,       &
            TAUA,SSAA,ASYA,                                      &
@@ -5161,12 +5427,11 @@ contains
            FLX,FLC,FDIRUV,FDIFUV,FDIRPAR,FDIFPAR,FDIRIR,FDIFIR, &
            FLXU,FLCU,                                           &
            FLXBAND  )
-      call MAPL_TimerOff(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOff(MAPL,"SORAD_RUN",__RC__)
 
 #endif
 
-      call MAPL_TimerOff(MAPL,"-SORAD")
+      call MAPL_TimerOff(MAPL,"SORAD",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
