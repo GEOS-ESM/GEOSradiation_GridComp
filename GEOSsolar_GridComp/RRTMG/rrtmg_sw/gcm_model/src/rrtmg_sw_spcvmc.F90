@@ -262,7 +262,7 @@ contains
       ! recalculate as needed
       if (nrc > 0) then
 
-!!       call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_SETCOEF",__RC__)
          ! copy-in inputs for recalculated columns
          do n = 1,nrc
             icol = irc(n)
@@ -280,9 +280,9 @@ contains
             colch4_rc, colco2_rc, colh2o_rc, colmol, colo2_rc, colo3_rc, &
             laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
             selffac, selffrac, indself, forfac, forfrac, indfor, __RC__)
- !!      call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_SETCOEF",__RC__)
 
-         call MAPL_TimerOn (MAPL,"---RRTMG_TAUMOL",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_TAUMOL",__RC__)
          call taumol_sw( &
             pncol, nrc, nlay, &
             colh2o_rc, colco2_rc, colch4_rc, colo2_rc, colo3_rc, colmol, &
@@ -298,8 +298,14 @@ contains
             ztaug (:,:,icol) =    ztaug_rc(:,:,n)
             ztaur (:,:,icol) =    ztaur_rc(:,:,n)
          end do
-         call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
 
+      else
+         ! no calculations, but exact timer tree must be mirrored for correct timing
+         call MAPL_TimerOn (MAPL,"RRTMG_SETCOEF",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_SETCOEF",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_TAUMOL",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
       end if
 
       ! Set fixed boundary values.
@@ -352,11 +358,11 @@ contains
       ! Clear-sky reflectivities / transmissivities
       ! note: pcldymc may not be defined here but the
       !       last arg .false. means it is not used anyway.
-      call MAPL_TimerOn (MAPL,"---RRTMG_REFTRA",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_REFTRA",__RC__)
       call reftra_sw (pncol, ncol, nlay, &
                       pcldymc, zgco, prmu0, ztauo, zomco, &
                       zref, zrefd, ztra, ztrad, .false.)
-      call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
 
       ! Clear-sky direct beam transmittance        
       do icol = 1,ncol
@@ -369,12 +375,12 @@ contains
       end do
 
       ! Vertical quadrature for clear-sky fluxes
-      call MAPL_TimerOn (MAPL,"---RRTMG_VRTQDR",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
       call vrtqdr_sw(pncol, ncol, nlay, &
                      zref, zrefd, ztra, ztrad, &
                      zdbt, ztdbt, &
                      zfd, zfu)
-      call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMG_VRTQDR",__RC__)
 
       ! Band integration for clear cases      
       do icol = 1,ncol
@@ -439,11 +445,11 @@ contains
 
          ! Update reflectivities / transmissivities for cloudy cells only
          ! note: since cc==2 here pcldymc is defined
-         call MAPL_TimerOn (MAPL,"---RRTMG_REFTRA",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_REFTRA",__RC__)
          call reftra_sw (pncol, ncol, nlay, &
                          pcldymc, zgco, prmu0, ztauo, zomco, &
                          zref, zrefd, ztra, ztrad, .true.)
-         call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
 
          ! Recalculate direct transmission
          do icol = 1,ncol
@@ -461,12 +467,12 @@ contains
          end do
 
          ! Vertical quadrature for total-sky fluxes
-         call MAPL_TimerOn (MAPL,"---RRTMG_VRTQDR",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
          call vrtqdr_sw(pncol, ncol, nlay, &
                         zref, zrefd, ztra, ztrad, &
                         zdbt, ztdbt, &
                         zfd, zfu)
-         call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_VRTQDR",__RC__)
 
          ! Upwelling and downwelling fluxes at levels
          !   Two-stream calculations go from top to bottom; 
