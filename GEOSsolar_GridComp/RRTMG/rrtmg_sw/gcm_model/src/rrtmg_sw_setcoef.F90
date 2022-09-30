@@ -97,17 +97,14 @@ contains
       ! Initializations
       real, parameter :: stpfac = 296. / 1013. 
 
-call MAPL_TimerOn (MAPL,"---RRTMG_SETCOEF",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET1",__RC__)
       ! Precalculate only once.
       plog(:,1:ncol) = log(pavel(:,1:ncol))
-call MAPL_TimerOff(MAPL,"----RRTMG_SET1",__RC__)
 
-call MAPL_TimerOn (MAPL,"----RRTMG_SET2",__RC__)
-      ! Enforce strictly decreasing pressure for simplicity of coding. 
-      ! In non-hydrostatic simulations with very high resolution this might
+      ! Enforce strictly decreasing pressure for simplicity of coding. In
+      ! non-hydrostatic simulations with very high resolution this might
       ! be violated in dynamic regions of strong downwards acceleration,
-      ! but we will cross that bridge if we come to it.
+      ! but we will cross that bridge if we come to it. Bill approved
+      ! this assert.
       do icol = 1,ncol
          do lay = 1,nlay-1
             _ASSERT(plog(lay,icol) > plog(lay+1,icol), 'pressure non-decreasing with height!')
@@ -118,13 +115,6 @@ call MAPL_TimerOn (MAPL,"----RRTMG_SET2",__RC__)
       ! Layer 1 is lowest, layer nlay is at top of model atmos.
       ! Note: plog(laytrop) >= 4.56, but plog(laytrop+1) < 4.56.
       do icol = 1,ncol
-!!       laytrop(icol) = 0.
-!!       do lay = 1,nlay
-!!          if (plog(lay,icol) < 4.56) exit
-!!          laytrop(icol) = laytrop(icol) + 1
-!!       end do
-!!       _ASSERT(laytrop(icol) > 0 .and. laytrop(icol) < nlay, 'tropopause not found')
-         
          lay = 1
          do while (plog(lay,icol) >= 4.56)
             lay = lay + 1
@@ -133,7 +123,6 @@ call MAPL_TimerOn (MAPL,"----RRTMG_SET2",__RC__)
          _ASSERT(lay > 1 .and. lay <= nlay, 'tropopause not found')
          laytrop(icol) = lay-1
       end do
-call MAPL_TimerOff(MAPL,"----RRTMG_SET2",__RC__)
 
       do icol = 1, ncol
          do lay = 1, nlay
@@ -157,7 +146,6 @@ call MAPL_TimerOff(MAPL,"----RRTMG_SET2",__RC__)
             ! :: preflog(jp) >= plog > preflog(jp+1)
             ! :: fp in [0,1) for this range (0 at plog=preflog(jp)).
 
-call MAPL_TimerOn (MAPL,"----RRTMG_SET3",__RC__)
             jp(lay,icol) = int(36. - 5*(plog(lay,icol)+0.04))
             if (jp(lay,icol) < 1) then
                jp(lay,icol) = 1
@@ -166,7 +154,6 @@ call MAPL_TimerOn (MAPL,"----RRTMG_SET3",__RC__)
             endif
             jp1 = jp(lay,icol) + 1
             fp = 5. * (preflog(jp(lay,icol)) - plog(lay,icol))
-call MAPL_TimerOff(MAPL,"----RRTMG_SET3",__RC__)
 
             ! Determine, for each reference pressure (JP and JP1), which
             ! reference temperature (these are different for each  
@@ -184,7 +171,6 @@ call MAPL_TimerOff(MAPL,"----RRTMG_SET3",__RC__)
             !    These are the reference temperatures (diff for each jp)
             !    discussed in the paragraph above.
 
-call MAPL_TimerOn (MAPL,"----RRTMG_SET4",__RC__)
             jt(lay,icol) = int(3. + (tavel(lay,icol)-tref(jp(lay,icol)))/15.)
             if (jt(lay,icol) < 1) then
                jt(lay,icol) = 1
@@ -200,14 +186,15 @@ call MAPL_TimerOn (MAPL,"----RRTMG_SET4",__RC__)
             endif
             ft1 = ((tavel(lay,icol)-tref(jp1))/15.) - float(jt1(lay,icol)-3)
 
+            ! Set up factors needed to separately include the water vapor self-
+            ! & foreign-continuum in the calculation of absorption coefficient.
+
             water = colh2o(lay,icol) / coldry(lay,icol) 
             scalefac = pavel(lay,icol) * stpfac / tavel(lay,icol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET4",__RC__)
 
             ! If the pressure is less than ~100mb, perform a different
             ! set of species interpolations.
 
-call MAPL_TimerOn (MAPL,"----RRTMG_SET5",__RC__)
             if (plog(lay,icol) <= 4.56 ) then
 
                forfac(lay,icol) = scalefac / (1.+water)
@@ -215,52 +202,23 @@ call MAPL_TimerOn (MAPL,"----RRTMG_SET5",__RC__)
                indfor(lay,icol) = 3
                forfrac(lay,icol) = factor - 1. 
 
-!!             ! Calculate needed column amounts.
-!!             colh2o(lay,icol) = 1.e-20 * colh2o(lay,icol) 
-!!             colco2(lay,icol) = 1.e-20 * colco2(lay,icol) 
-!!             colo3 (lay,icol) = 1.e-20 * colo3 (lay,icol) 
-!!             colch4(lay,icol) = 1.e-20 * colch4(lay,icol) 
-!!             colo2 (lay,icol) = 1.e-20 * colo2 (lay,icol) 
-!!             colmol(lay,icol) = 1.e-20 * coldry(lay,icol) + colh2o(lay,icol) 
-!!             if (colco2(lay,icol) == 0.) colco2(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!             if (colch4(lay,icol) == 0.) colch4(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!             if (colo2 (lay,icol) == 0.) colo2 (lay,icol) = 1.e-32 * coldry(lay,icol) 
-
                selffac(lay,icol)  = 0. 
                selffrac(lay,icol) = 0. 
                indself(lay,icol)  = 0
 
             else
 
-               ! Set up factors needed to separately include the water vapor
-               ! foreign-continuum in the calculation of absorption coefficient.
-
                forfac(lay,icol) = scalefac / (1.+water)
                factor = (332.-tavel(lay,icol))/36. 
                indfor(lay,icol) = min(2,max(1,int(factor)))
                forfrac(lay,icol) = factor - float(indfor(lay,icol))
-
-               ! Set up factors needed to separately include the water vapor
-               ! self-continuum in the calculation of absorption coefficient.
 
                selffac(lay,icol) = water * forfac(lay,icol) 
                factor = (tavel(lay,icol)-188.)/7.2 
                indself(lay,icol) = min(9,max(1,int(factor)-7))
                selffrac(lay,icol) = factor - float(indself(lay,icol) + 7)
 
-!!             ! Calculate needed column amounts.
-!!             colh2o(lay,icol) = 1.e-20 * colh2o(lay,icol) 
-!!             colco2(lay,icol) = 1.e-20 * colco2(lay,icol) 
-!!             colo3 (lay,icol) = 1.e-20 * colo3 (lay,icol) 
-!!             colch4(lay,icol) = 1.e-20 * colch4(lay,icol) 
-!!             colo2 (lay,icol) = 1.e-20 * colo2 (lay,icol) 
-!!             colmol(lay,icol) = 1.e-20 * coldry(lay,icol) + colh2o(lay,icol) 
-!!             if (colco2(lay,icol) == 0.) colco2(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!             if (colch4(lay,icol) == 0.) colch4(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!             if (colo2 (lay,icol) == 0.) colo2 (lay,icol) = 1.e-32 * coldry(lay,icol) 
-      
             end if
-call MAPL_TimerOff(MAPL,"----RRTMG_SET5",__RC__)
 
             ! We have now isolated the layer ln pressure and temperature,
             ! between two reference pressures and two reference temperatures 
@@ -269,69 +227,25 @@ call MAPL_TimerOff(MAPL,"----RRTMG_SET5",__RC__)
             ! the factors that will be needed for the interpolation that yields
             ! the optical depths (performed in routines TAUGBn for band n).
 
-call MAPL_TimerOn (MAPL,"----RRTMG_SET6",__RC__)
             compfp = 1. - fp
             fac10(lay,icol) = compfp * ft
             fac00(lay,icol) = compfp * (1.-ft)
             fac11(lay,icol) = fp * ft1
             fac01(lay,icol) = fp * (1.-ft1)
-call MAPL_TimerOff(MAPL,"----RRTMG_SET6",__RC__)
 
          end do  ! layer loop
       end do  ! column loop
 
-      ! Separate this independent loop out to avoid overloading cache lines in previous loop
-!!call MAPL_TimerOn (MAPL,"----RRTMG_SET7",__RC__)
-!!      do icol = 1, ncol
-!!         do lay = 1, nlay
-!!
-!!            ! Calculate needed column amounts.
-!!            colh2o(lay,icol) = 1.e-20 * colh2o(lay,icol) 
-!!            colco2(lay,icol) = 1.e-20 * colco2(lay,icol) 
-!!            colo3 (lay,icol) = 1.e-20 * colo3 (lay,icol) 
-!!            colch4(lay,icol) = 1.e-20 * colch4(lay,icol) 
-!!            colo2 (lay,icol) = 1.e-20 * colo2 (lay,icol) 
-!!            colmol(lay,icol) = 1.e-20 * coldry(lay,icol) + colh2o(lay,icol) 
-!!            if (colco2(lay,icol) == 0.) colco2(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!            if (colch4(lay,icol) == 0.) colch4(lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!            if (colo2 (lay,icol) == 0.) colo2 (lay,icol) = 1.e-32 * coldry(lay,icol) 
-!!
-!!         end do  ! layer loop
-!!      end do  ! column loop
-!!call MAPL_TimerOff(MAPL,"----RRTMG_SET7",__RC__)
-      ! Calculate needed column amounts.
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7a",__RC__)
+      ! Scale needed column amounts.
       colh2o(:,1:ncol) = 1.e-20 * colh2o(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7a",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7b",__RC__)
       colco2(:,1:ncol) = 1.e-20 * colco2(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7b",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7c",__RC__)
       colo3 (:,1:ncol) = 1.e-20 * colo3 (:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7c",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7d",__RC__)
       colch4(:,1:ncol) = 1.e-20 * colch4(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7d",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7e",__RC__)
       colo2 (:,1:ncol) = 1.e-20 * colo2 (:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7e",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7f",__RC__)
       colmol(:,1:ncol) = 1.e-20 * coldry(:,1:ncol) + colh2o(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7f",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7g",__RC__)
       where (colco2(:,1:ncol) == 0.) colco2(:,1:ncol) = 1.e-32 * coldry(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7g",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7h",__RC__)
       where (colch4(:,1:ncol) == 0.) colch4(:,1:ncol) = 1.e-32 * coldry(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7h",__RC__)
-call MAPL_TimerOn (MAPL,"----RRTMG_SET7i",__RC__)
       where (colo2 (:,1:ncol) == 0.) colo2 (:,1:ncol) = 1.e-32 * coldry(:,1:ncol) 
-call MAPL_TimerOff(MAPL,"----RRTMG_SET7i",__RC__)
-
-call MAPL_TimerOn (MAPL,"----RRTMG_SET8",__RC__)
-      lay = lay + 1
-call MAPL_TimerOff(MAPL,"----RRTMG_SET8",__RC__)
-call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
 
       _RETURN(_SUCCESS)
    end subroutine setcoef_sw
