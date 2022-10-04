@@ -655,6 +655,8 @@ contains
       ! This passes because load balancer is multi-pass.
       _ASSERT(gncol > 0, 'no columns on processor!')
 
+      call MAPL_TimerOn (MAPL,"RRTMG_PREPART",__RC__)
+
       ! Initializations
       ! ---------------
 
@@ -952,6 +954,8 @@ contains
          asya = 0.
          omga = 1.
       end if
+  
+      call MAPL_TimerOff(MAPL,"RRTMG_PREPART",__RC__)
 
       ! partitioning over clear (cc=1) and cloudy (cc=2) gridcolumns
       ! ------------------------------------------------------------
@@ -978,190 +982,113 @@ contains
             cole = (ipart + 1) * pncol
             if (cole > col_last) cole = col_last
             ncol = cole - cols + 1
+
+            ! index into partitioned global gridcolummns
             allocate(idx(ncol),__STAT__)
+            if (cc == 1) then
+               idx = gicol_clr(cols:cole)
+            else
+               idx = gicol_cld(cols:cole)
+            end if
 
             ! copy inputs into partition
             ! --------------------------
 
-            if (cc == 1) then    
-
-               ! -----------------
-               ! Clear gridcolumns
-               ! -----------------
-
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-
-                  ! assign surface albedos to bands
-
-                  ! near IR bands 14=nbndsw and 1-8
-                  ! 820-12850 cm-1, 0.778-12.2 um
-                  do ibnd=1,8
-                     albdir(ibnd,icol) = galdir(gicol)
-                     albdif(ibnd,icol) = galdif(gicol)
-                  enddo
-                  albdir(nbndsw,icol) = galdir(gicol)
-                  albdif(nbndsw,icol) = galdif(gicol)
-
-                  ! UV/Vis bands 10-13
-                  ! 16000-50000 cm-1, 0.200-0.625 um
-                  do ibnd=10,13
-                     albdir(ibnd,icol) = gasdir(gicol)
-                     albdif(ibnd,icol) = gasdif(gicol)
-                  enddo
-
-                  ! Transition band 9
-                  ! 12850-16000 cm-1, 0.625-0.778 um
-                  ! Take average, dmlee
-                  albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
-                  albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
-
-               enddo
-
-               ! copy in partition (general)
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-    
-                  play(:,icol) = gplay(gicol,1:nlay)
-                  plev(:,icol) = gplev(gicol,1:nlay+1)
-                  tlay(:,icol) = gtlay(gicol,1:nlay)
-                  coszen(icol) = gcoszen(gicol)
-
-               enddo
-
-               ! copy in partition (aerosols)
-               if (iaer == 10) then
-                  do icol = 1,ncol
-                     gicol = gicol_clr(icol + cols - 1)
-                     do ibnd = 1,nbndsw
-                        taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
-                        asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
-                        omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
-                     enddo
-                  enddo
-               endif   
-
-               ! copy in partition (gases)
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-                  colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
-                  colco2(:,icol) = gco2vmr(gicol,1:nlay)
-                  colo3 (:,icol) = go3vmr (gicol,1:nlay)
-                  colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                  colo2 (:,icol) = go2vmr (gicol,1:nlay)   
-                end do
-
-!pmn:??speed investigate efficiency in other copy-in/out sections
-
-               ! copy in FAR taumol InOuts:
-               if (do_FAR) then
-                  idx = gicol_clr(cols:cole)
-                  tmage     (1:ncol) =  gtaumol_age(idx)
-                  sflxzen (:,1:ncol) =  gsflxzen (:,idx)
-                  ssi     (:,1:ncol) =  gssi     (:,idx)
-                  taur  (:,:,1:ncol) =  gtaur  (:,:,idx)
-                  taug  (:,:,1:ncol) =  gtaug  (:,:,idx)
-                  tcrecalc  (1:ncol) =  gtaucld_recalc(idx)
-                  cldymc(:,:,1:ncol) =(Rgcldymc(:,:,idx).ne.0.)
-                  taucmc(:,:,1:ncol) =  gtaucmc(:,:,idx)
-                  ssacmc(:,:,1:ncol) =  gssacmc(:,:,idx)
-                  asmcmc(:,:,1:ncol) =  gasmcmc(:,:,idx)
-                  taormc(:,:,1:ncol) =  gtaormc(:,:,idx)
-               end if
-
-            else
-
-               ! ------------------
-               ! Cloudy gridcolumns
-               ! ------------------
-          
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
+            ! assign surface albedos to bands
+            do icol = 1,ncol
+               gicol = idx(icol)
      
-                  ! assign surface albedos to bands
-
-                  ! near IR bands 14=nbndsw and 1-8
-                  ! 820-12850 cm-1, 0.778-12.2 um
-                  do ibnd=1,8
-                     albdir(ibnd,icol) = galdir(gicol)
-                     albdif(ibnd,icol) = galdif(gicol)
-                  enddo
-                  albdir(nbndsw,icol) = galdir(gicol)
-                  albdif(nbndsw,icol) = galdif(gicol)
-
-                  ! UV/Vis bands 10-13
-                  ! 16000-50000 cm-1, 0.200-0.625 um
-                  do ibnd=10,13
-                     albdir(ibnd,icol) = gasdir(gicol)
-                     albdif(ibnd,icol) = gasdif(gicol)
-                  enddo
-
-                  ! Transition band 9
-                  ! 12850-16000 cm-1, 0.625-0.778 um
-                  ! Take average, dmlee
-                  albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
-                  albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
-
+               ! near IR bands 14=nbndsw and 1-8
+               ! 820-12850 cm-1, 0.778-12.2 um
+               do ibnd=1,8
+                  albdir(ibnd,icol) = galdir(gicol)
+                  albdif(ibnd,icol) = galdif(gicol)
                enddo
+               albdir(nbndsw,icol) = galdir(gicol)
+               albdif(nbndsw,icol) = galdif(gicol)
+
+               ! UV/Vis bands 10-13
+               ! 16000-50000 cm-1, 0.200-0.625 um
+               do ibnd=10,13
+                  albdir(ibnd,icol) = gasdir(gicol)
+                  albdif(ibnd,icol) = gasdif(gicol)
+               enddo
+
+               ! Transition band 9
+               ! 12850-16000 cm-1, 0.625-0.778 um
+               ! Take average, dmlee
+               albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
+               albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
+
+            enddo
           
-               ! copy in partition (general and cloud physical props)
+            ! copy in partition (general)
+            ! note the implicit transpose!
+            do icol = 1,ncol
+               gicol = idx(icol)
+               play(:,icol) = gplay(gicol,:)
+               plev(:,icol) = gplev(gicol,:)
+               tlay(:,icol) = gtlay(gicol,:)
+               coszen(icol) = gcoszen(gicol)
+            enddo
+
+            ! copy in partition (cloud physical props)
+            if (cc == 2) then    
                do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-     
-                  play(:,icol) = gplay(gicol,1:nlay)
-                  plev(:,icol) = gplev(gicol,1:nlay+1)
-                  tlay(:,icol) = gtlay(gicol,1:nlay)
-                  cld (:,icol) = gcld (gicol,1:nlay)
-                  ciwp(:,icol) = gciwp(gicol,1:nlay)
-                  clwp(:,icol) = gclwp(gicol,1:nlay)
-                  rei (:,icol) = grei (gicol,1:nlay) 
-                  rel (:,icol) = grel (gicol,1:nlay)
-                  zm  (:,icol) = gzm  (gicol,1:nlay)
-                  alat  (icol) = galat  (gicol)
-                  coszen(icol) = gcoszen(gicol)
+                  gicol = idx(icol)
+                  cld (:,icol) = gcld (gicol,:)
+                  ciwp(:,icol) = gciwp(gicol,:)
+                  clwp(:,icol) = gclwp(gicol,:)
+                  rei (:,icol) = grei (gicol,:) 
+                  rel (:,icol) = grel (gicol,:)
+                  zm  (:,icol) = gzm  (gicol,:)
+                  alat  (icol) = galat(gicol)
                enddo
+            end if
 
-               ! copy in partition (aerosols)
-               if (iaer == 10) then
-                  do icol = 1,ncol
-                     gicol = gicol_cld(icol + cols - 1)
-                     do ibnd = 1,nbndsw
-                        taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
-                        asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
-                        omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
-                     end do
-                  end do
-               endif
-
-               ! copy in partition (gases)
+            ! copy in partition (aerosols)
+            if (iaer == 10) then
                do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
-                  colco2(:,icol) = gco2vmr(gicol,1:nlay)
-                  colo3 (:,icol) = go3vmr (gicol,1:nlay)
-                  colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                  colo2 (:,icol) = go2vmr (gicol,1:nlay)  
+                  gicol = idx(icol)
+                  do ibnd = 1,nbndsw
+                     taua(:,ibnd,icol) = gtauaer(gicol,:,ibnd)
+                     asya(:,ibnd,icol) = gasmaer(gicol,:,ibnd)
+                     omga(:,ibnd,icol) = gssaaer(gicol,:,ibnd)
+                  enddo
                enddo
+            endif   
 
-               ! copy in FAR taumol InOuts
-               if (do_FAR) then
-                  idx = gicol_cld(cols:cole)
-                  tmage     (1:ncol) =  gtaumol_age(idx)
-                  sflxzen (:,1:ncol) =  gsflxzen (:,idx)
-                  ssi     (:,1:ncol) =  gssi     (:,idx)
-                  taur  (:,:,1:ncol) =  gtaur  (:,:,idx)
-                  taug  (:,:,1:ncol) =  gtaug  (:,:,idx)
-                  tcrecalc  (1:ncol) =  gtaucld_recalc(idx)
-                  cldymc(:,:,1:ncol) =(Rgcldymc(:,:,idx).ne.0.)
-                  taucmc(:,:,1:ncol) =  gtaucmc(:,:,idx)
-                  ssacmc(:,:,1:ncol) =  gssacmc(:,:,idx)
-                  asmcmc(:,:,1:ncol) =  gasmcmc(:,:,idx)
-                  taormc(:,:,1:ncol) =  gtaormc(:,:,idx)
-               end if
+            ! copy in partition (gases)
+            do icol = 1,ncol
+               gicol = idx(icol)
+               colh2o(:,icol) = gh2ovmr(gicol,:)
+               colco2(:,icol) = gco2vmr(gicol,:)
+               colo3 (:,icol) = go3vmr (gicol,:)
+               colch4(:,icol) = gch4vmr(gicol,:)
+               colo2 (:,icol) = go2vmr (gicol,:)   
+            end do
 
-            end if  ! clear or cloudy gridcolumns
+            ! copy in FAR taumol InOuts:
+            if (do_FAR) then
+               do icol = 1,ncol
+                  gicol = idx(icol)
+                  tmage     (icol) =  gtaumol_age(gicol)
+                  sflxzen (:,icol) =  gsflxzen (:,gicol)
+                  ssi     (:,icol) =  gssi     (:,gicol)
+                  taur  (:,:,icol) =  gtaur  (:,:,gicol)
+                  taug  (:,:,icol) =  gtaug  (:,:,gicol)
+                  tcrecalc  (icol) =  gtaucld_recalc(gicol)
+                  cldymc(:,:,icol) =(Rgcldymc(:,:,gicol).ne.0.)
+                  taucmc(:,:,icol) =  gtaucmc(:,:,gicol)
+                  ssacmc(:,:,icol) =  gssacmc(:,:,gicol)
+                  asmcmc(:,:,icol) =  gasmcmc(:,:,gicol)
+                  taormc(:,:,icol) =  gtaormc(:,:,gicol)
+               end do
+            end if
 
             call MAPL_TimerOff(MAPL,"RRTMG_PART",__RC__)
+
+            call MAPL_TimerOn (MAPL,"RRTMG_MIDPART",__RC__)
 
             ! limit tiny cosine zenith angles
             do icol = 1,ncol
@@ -1180,14 +1107,14 @@ contains
 
             ! gases also to molecules/cm^2
             do icol = 1,ncol
-               do ilay = 1,nlay
-                  colh2o(ilay,icol) = coldry(ilay,icol) * colh2o(ilay,icol)
-                  colco2(ilay,icol) = coldry(ilay,icol) * colco2(ilay,icol)
-                  colo3 (ilay,icol) = coldry(ilay,icol) * colo3 (ilay,icol)
-                  colch4(ilay,icol) = coldry(ilay,icol) * colch4(ilay,icol)
-                  colo2 (ilay,icol) = coldry(ilay,icol) * colo2 (ilay,icol)
-               end do
+               colh2o(:,icol) = coldry(:,icol) * colh2o(:,icol)
+               colco2(:,icol) = coldry(:,icol) * colco2(:,icol)
+               colo3 (:,icol) = coldry(:,icol) * colo3 (:,icol)
+               colch4(:,icol) = coldry(:,icol) * colch4(:,icol)
+               colo2 (:,icol) = coldry(:,icol) * colo2 (:,icol)
             end do
+
+            call MAPL_TimerOff(MAPL,"RRTMG_MIDPART",__RC__)
 
             ! cloudy gridcolumns
             if (cc == 2) then
@@ -1318,103 +1245,66 @@ contains
 
             call MAPL_TimerOn (MAPL,"RRTMG_PART",__RC__)
 
+            ! assign super-layer quantities
             if (cc == 1) then  ! clear gridcolumns
-
                do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-        
-                  ! super-layer clear counts
-                  do n = 1,4
-                     gclearCounts(gicol,n) = ngptsw
-                  end do
-
-                  ! up and down fluxes
-                  do ilev = 1,nlay+1
-                     gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-                     gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-                     gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
-                     gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
-                  enddo
-
-                  ! super-layer optical thicknesses
+                  gicol = idx(icol)
+                  gclearCounts(gicol,:) = ngptsw
                   gtautp(gicol) = 0.
                   gtauhp(gicol) = 0.
                   gtaump(gicol) = 0.
                   gtaulp(gicol) = 0.
-
                enddo
-
-               ! surface broadband fluxes
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-                  gnirr(gicol) = nirr(icol)
-                  gnirf(gicol) = nirf(icol) - nirr(icol)
-                  gparr(gicol) = parr(icol)
-                  gparf(gicol) = parf(icol) - parr(icol)
-                  guvrr(gicol) = uvrr(icol)
-                  guvrf(gicol) = uvrf(icol) - uvrr(icol)
-               end do
-
-               ! copy out FAR taumol InOuts
-               if (do_FAR) then
-                  idx = gicol_clr(cols:cole)
-                  gtaumol_age(idx) = tmage     (1:ncol)
-                  gsflxzen (:,idx) = sflxzen (:,1:ncol)
-                  gssi     (:,idx) = ssi     (:,1:ncol)
-                  gtaur  (:,:,idx) = taur  (:,:,1:ncol)
-                  gtaug  (:,:,idx) = taug  (:,:,1:ncol)
-                 Rgcldymc(:,:,idx) = merge(1.,0.,cldymc(:,:,1:ncol))
-                  gtaucmc(:,:,idx) = taucmc(:,:,1:ncol)
-                  gssacmc(:,:,idx) = ssacmc(:,:,1:ncol)
-                  gasmcmc(:,:,idx) = asmcmc(:,:,1:ncol)
-                  gtaormc(:,:,idx) = taormc(:,:,1:ncol)
-               end if
-
             else ! cloudy columns
-
                do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  do n = 1,4
-                     gclearCounts(gicol,n) = clearCounts(n,icol)
-                  end do
-                  do ilev = 1,nlay+1
-                     gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-                     gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-                     gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
-                     gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
-                  enddo
+                  gicol = idx(icol)
+                  gclearCounts(gicol,:) = clearCounts(:,icol)
                   gtautp(gicol) = tautp(icol)
                   gtauhp(gicol) = tauhp(icol)
                   gtaump(gicol) = taump(icol)
                   gtaulp(gicol) = taulp(icol)
                enddo
+            endif
 
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  gnirr(gicol) = nirr(icol)
-                  gnirf(gicol) = nirf(icol) - nirr(icol)
-                  gparr(gicol) = parr(icol)
-                  gparf(gicol) = parf(icol) - parr(icol)
-                  guvrr(gicol) = uvrr(icol)
-                  guvrf(gicol) = uvrf(icol) - uvrr(icol)
+            ! up and down fluxes
+            ! note the implicit transpose!
+            do icol = 1,ncol
+               gicol = idx(icol)
+               do ilev = 1,nlay+1
+                  gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
+                  gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
+                  gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
+                  gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
                enddo
+            enddo
 
-               ! copy out FAR taumol InOuts
-               if (do_FAR) then
-                  idx = gicol_cld(cols:cole)
-                  gtaumol_age(idx) = tmage     (1:ncol)
-                  gsflxzen (:,idx) = sflxzen (:,1:ncol)
-                  gssi     (:,idx) = ssi     (:,1:ncol)
-                  gtaur  (:,:,idx) = taur  (:,:,1:ncol)
-                  gtaug  (:,:,idx) = taug  (:,:,1:ncol)
-                 Rgcldymc(:,:,idx) = merge(1.,0.,cldymc(:,:,1:ncol))
-                  gtaucmc(:,:,idx) = taucmc(:,:,1:ncol)
-                  gssacmc(:,:,idx) = ssacmc(:,:,1:ncol)
-                  gasmcmc(:,:,idx) = asmcmc(:,:,1:ncol)
-                  gtaormc(:,:,idx) = taormc(:,:,1:ncol)
-               end if
+            ! surface broadband fluxes
+            do icol = 1,ncol
+               gicol = idx(icol)
+               gnirr(gicol) = nirr(icol)
+               gnirf(gicol) = nirf(icol) - nirr(icol)
+               gparr(gicol) = parr(icol)
+               gparf(gicol) = parf(icol) - parr(icol)
+               guvrr(gicol) = uvrr(icol)
+               guvrf(gicol) = uvrf(icol) - uvrr(icol)
+            end do
 
-            endif  ! clear/cloudy
+            ! copy out FAR taumol InOuts
+            if (do_FAR) then
+               do icol = 1,ncol
+                  gicol = idx(icol)
+                  gtaumol_age(gicol) = tmage     (icol)
+                  gsflxzen (:,gicol) = sflxzen (:,icol)
+                  gssi     (:,gicol) = ssi     (:,icol)
+                  gtaur  (:,:,gicol) = taur  (:,:,icol)
+                  gtaug  (:,:,gicol) = taug  (:,:,icol)
+                 Rgcldymc(:,:,gicol) = merge(1.,0.,cldymc(:,:,icol))
+                  gtaucmc(:,:,gicol) = taucmc(:,:,icol)
+                  gssacmc(:,:,gicol) = ssacmc(:,:,icol)
+                  gasmcmc(:,:,gicol) = asmcmc(:,:,icol)
+                  gtaormc(:,:,gicol) = taormc(:,:,icol)
+                  end do
+            end if
 
             deallocate(idx,__STAT__)
             call MAPL_TimerOff(MAPL,"RRTMG_PART",__RC__)
@@ -1426,6 +1316,8 @@ contains
       ! If the user requests 'normalized' fluxes, divide
       ! the fluxes by the solar constant times coszen
       ! MAT This requires only lit points passed in
+
+      call MAPL_TimerOn (MAPL,"RRTMG_POSTPART",__RC__)
 
       if (normFlx == 1) then
 
@@ -1446,6 +1338,8 @@ contains
          guvrf(:) = guvrf(:) / gswdflx_at_top(:)
 
       endif
+
+      call MAPL_TimerOff(MAPL,"RRTMG_POSTPART",__RC__)
 
       _RETURN(_SUCCESS)
    end subroutine rrtmg_sw_sub

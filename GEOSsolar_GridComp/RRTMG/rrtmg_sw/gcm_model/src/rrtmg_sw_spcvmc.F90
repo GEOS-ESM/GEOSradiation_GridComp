@@ -221,6 +221,8 @@ contains
 
       ! ------------------------------------------------------------------
 
+      call MAPL_TimerOn (MAPL,"RRTMG_SPPRE",__RC__)
+
       ! zero output accumulators
       pbbcd    = 0. 
       pbbcu    = 0. 
@@ -258,6 +260,8 @@ contains
          end do
 
       endif
+
+      call MAPL_TimerOff(MAPL,"RRTMG_SPPRE",__RC__)
 
       ! recalculate as needed
       if (nrc > 0) then
@@ -308,6 +312,8 @@ contains
          call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
       end if
 
+      call MAPL_TimerOn (MAPL,"RRTMG_SPMD1",__RC__)
+
       ! Set fixed boundary values.
       ! The sfc (jk=nlay+1) zref[d] & ztra[d] never change from these.
       ! The TOA (jk=1) ztdbt likewise never change.
@@ -355,6 +361,8 @@ contains
          end do
       end do
 
+      call MAPL_TimerOff(MAPL,"RRTMG_SPMD1",__RC__)
+
       ! Clear-sky reflectivities / transmissivities
       ! note: pcldymc may not be defined here but the
       !       last arg .false. means it is not used anyway.
@@ -363,6 +371,8 @@ contains
                       pcldymc, zgco, prmu0, ztauo, zomco, &
                       zref, zrefd, ztra, ztrad, .false.)
       call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
+
+      call MAPL_TimerOn (MAPL,"RRTMG_SPMD2",__RC__)
 
       ! Clear-sky direct beam transmittance        
       do icol = 1,ncol
@@ -374,6 +384,8 @@ contains
          end do
       end do
 
+      call MAPL_TimerOff(MAPL,"RRTMG_SPMD2",__RC__)
+
       ! Vertical quadrature for clear-sky fluxes
       call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
       call vrtqdr_sw(pncol, ncol, nlay, &
@@ -381,6 +393,8 @@ contains
                      zdbt, ztdbt, &
                      zfd, zfu)
       call MAPL_TimerOff(MAPL,"RRTMG_VRTQDR",__RC__)
+
+      call MAPL_TimerOn (MAPL,"RRTMG_SPMD3",__RC__)
 
       ! Band integration for clear cases      
       do icol = 1,ncol
@@ -409,11 +423,15 @@ contains
          enddo  ! spectral loop
       enddo  ! column loop
 
+      call MAPL_TimerOff(MAPL,"RRTMG_SPMD3",__RC__)
+
       !!!!!!!!!!!!!!!!
       !! END CLEAR  !!
       !!!!!!!!!!!!!!!!
 
       if (cc == 2) then
+
+         call MAPL_TimerOn (MAPL,"RRTMG_SPMD1",__RC__)
 
          ! Add in cloud optical properties (which are already delta-scaled)
          ! (uses the pre-calculated clear-sky delta-scaled zomco and zgco)
@@ -443,6 +461,8 @@ contains
             end do
          end do
 
+         call MAPL_TimerOff(MAPL,"RRTMG_SPMD1",__RC__)
+
          ! Update reflectivities / transmissivities for cloudy cells only
          ! note: since cc==2 here pcldymc is defined
          call MAPL_TimerOn (MAPL,"RRTMG_REFTRA",__RC__)
@@ -450,6 +470,8 @@ contains
                          pcldymc, zgco, prmu0, ztauo, zomco, &
                          zref, zrefd, ztra, ztrad, .true.)
          call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
+
+         call MAPL_TimerOn (MAPL,"RRTMG_SPMD2",__RC__)
 
          ! Recalculate direct transmission
          do icol = 1,ncol
@@ -466,6 +488,8 @@ contains
             end do
          end do
 
+         call MAPL_TimerOff(MAPL,"RRTMG_SPMD2",__RC__)
+
          ! Vertical quadrature for total-sky fluxes
          call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
          call vrtqdr_sw(pncol, ncol, nlay, &
@@ -477,6 +501,8 @@ contains
          ! Upwelling and downwelling fluxes at levels
          !   Two-stream calculations go from top to bottom; 
          !   layer indexing is reversed to go bottom to top for output arrays
+
+         call MAPL_TimerOn (MAPL,"RRTMG_SPMD3",__RC__)
 
          do icol = 1,ncol
             do iw = 1,ngptsw
@@ -504,6 +530,8 @@ contains
             enddo  ! spectral loop
          enddo  ! column loop
 
+         call MAPL_TimerOff(MAPL,"RRTMG_SPMD3",__RC__)
+
       else
 
          ! cc == 1 so clear so total-sky == clear-sky
@@ -512,6 +540,8 @@ contains
          pbbfddir = pbbcddir
 
       end if
+
+      call MAPL_TimerOn (MAPL,"RRTMG_SPPOST",__RC__)
 
       ! surface band fluxes
       do icol = 1,ncol
@@ -551,6 +581,10 @@ contains
 
          end do
       enddo                    
+
+      call MAPL_TimerOff(MAPL,"RRTMG_SPPOST",__RC__)
+
+      call MAPL_TimerOn (MAPL,"RRTMG_SPDIAG",__RC__)
 
       ! diagnostic in-cloud optical thicknesses in PAR super-band
       ! (weighted across and within bands by TOA incident flux)
@@ -653,6 +687,8 @@ contains
          end do  ! icol
 
       end if  ! cc==2
+
+      call MAPL_TimerOff(MAPL,"RRTMG_SPDIAG",__RC__)
 
       _RETURN(_SUCCESS)
    end subroutine spcvmc_sw
