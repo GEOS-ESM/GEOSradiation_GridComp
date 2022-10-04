@@ -163,7 +163,7 @@ contains
 
       ! ------- Local -------
 
-      integer :: icol, n
+      integer :: icol, n, nsfc
       integer :: jk, ikl
       integer :: iw, jb, ibm
 
@@ -221,7 +221,8 @@ contains
 
       ! ------------------------------------------------------------------
 
-      call MAPL_TimerOn (MAPL,"RRTMG_SPPRE",__RC__)
+      ! precalcs
+      nsfc = nlay + 1
 
       ! zero output accumulators
       pbbcd    = 0. 
@@ -260,8 +261,6 @@ contains
          end do
 
       endif
-
-      call MAPL_TimerOff(MAPL,"RRTMG_SPPRE",__RC__)
 
       ! recalculate as needed
       if (nrc > 0) then
@@ -312,10 +311,10 @@ contains
          call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
       end if
 
-      call MAPL_TimerOn (MAPL,"RRTMG_SPMD1",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_SPSCALE",__RC__)
 
       ! Set fixed boundary values.
-      ! The sfc (jk=nlay+1) zref[d] & ztra[d] never change from these.
+      ! The sfc (jk=nsfc) zref[d] & ztra[d] never change from these.
       ! The TOA (jk=1) ztdbt likewise never change.
       do icol = 1,ncol
          do iw = 1,ngptsw
@@ -323,10 +322,10 @@ contains
             ibm = jb-15   !   => ibm = 1:14
 
             ! Surface reflectivities / transmissivities
-            zref  (nlay+1,iw,icol) = palbp(ibm,icol) 
-            zrefd (nlay+1,iw,icol) = palbd(ibm,icol) 
-            ztra  (nlay+1,iw,icol) = 0. 
-            ztrad (nlay+1,iw,icol) = 0. 
+            zref  (nsfc,iw,icol) = palbp(ibm,icol) 
+            zrefd (nsfc,iw,icol) = palbd(ibm,icol) 
+            ztra  (nsfc,iw,icol) = 0. 
+            ztrad (nsfc,iw,icol) = 0. 
            
             ! TOA direct beam    
             ztdbt (1,iw,icol) = 1. 
@@ -340,7 +339,7 @@ contains
             jb = ngb(iw)
             ibm = jb-15
             do jk = 1,nlay
-               ikl = nlay+1-jk
+               ikl = nsfc-jk
 
                ! Clear-sky optical parameters including aerosols
                ! Gas: ssa=0, g=0, Rayleigh: ssa=1, g=0
@@ -361,7 +360,7 @@ contains
          end do
       end do
 
-      call MAPL_TimerOff(MAPL,"RRTMG_SPMD1",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMG_SPSCALE",__RC__)
 
       ! Clear-sky reflectivities / transmissivities
       ! note: pcldymc may not be defined here but the
@@ -372,7 +371,7 @@ contains
                       zref, zrefd, ztra, ztrad, .false.)
       call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
 
-      call MAPL_TimerOn (MAPL,"RRTMG_SPMD2",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_SPBMTRA",__RC__)
 
       ! Clear-sky direct beam transmittance        
       do icol = 1,ncol
@@ -384,7 +383,7 @@ contains
          end do
       end do
 
-      call MAPL_TimerOff(MAPL,"RRTMG_SPMD2",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMG_SPBMTRA",__RC__)
 
       ! Vertical quadrature for clear-sky fluxes
       call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
@@ -394,7 +393,7 @@ contains
                      zfd, zfu)
       call MAPL_TimerOff(MAPL,"RRTMG_VRTQDR",__RC__)
 
-      call MAPL_TimerOn (MAPL,"RRTMG_SPMD3",__RC__)
+      call MAPL_TimerOn (MAPL,"RRTMG_SPINTGN",__RC__)
 
       ! Band integration for clear cases      
       do icol = 1,ncol
@@ -411,8 +410,8 @@ contains
                zincflx = adjflux(jb) * ssi     (iw,icol) * prmu0(icol)           
             endif
 
-            do ikl = 1,nlay+1
-               jk = nlay+2-ikl
+            do ikl = 1,nsfc
+               jk = nsfc+1-ikl
 
                ! Accumulate spectral fluxes over whole spectrum  
                pbbcu   (ikl,icol) = pbbcu   (ikl,icol) + zincflx * zfu  (jk,iw,icol)  
@@ -423,7 +422,7 @@ contains
          enddo  ! spectral loop
       enddo  ! column loop
 
-      call MAPL_TimerOff(MAPL,"RRTMG_SPMD3",__RC__)
+      call MAPL_TimerOff(MAPL,"RRTMG_SPINTGN",__RC__)
 
       !!!!!!!!!!!!!!!!
       !! END CLEAR  !!
@@ -431,7 +430,7 @@ contains
 
       if (cc == 2) then
 
-         call MAPL_TimerOn (MAPL,"RRTMG_SPMD1",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_SPSCALE",__RC__)
 
          ! Add in cloud optical properties (which are already delta-scaled)
          ! (uses the pre-calculated clear-sky delta-scaled zomco and zgco)
@@ -440,7 +439,7 @@ contains
                jb = ngb(iw)
                ibm = jb-15
                do jk = 1,nlay
-                  ikl = nlay+1-jk
+                  ikl = nsfc-jk
 
                   ! only cloudy gridboxes need to add in cloud opt props
                   if (pcldymc(ikl,iw,icol)) then
@@ -461,7 +460,7 @@ contains
             end do
          end do
 
-         call MAPL_TimerOff(MAPL,"RRTMG_SPMD1",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_SPSCALE",__RC__)
 
          ! Update reflectivities / transmissivities for cloudy cells only
          ! note: since cc==2 here pcldymc is defined
@@ -471,13 +470,13 @@ contains
                          zref, zrefd, ztra, ztrad, .true.)
          call MAPL_TimerOff(MAPL,"RRTMG_REFTRA",__RC__)
 
-         call MAPL_TimerOn (MAPL,"RRTMG_SPMD2",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_SPBMTRA",__RC__)
 
          ! Recalculate direct transmission
          do icol = 1,ncol
             do iw = 1,ngptsw
                do jk = 1,nlay
-                  ikl = nlay+1-jk 
+                  ikl = nsfc-jk 
 
                   ! cloudy ztauo has been updated so recalculate
                   if (pcldymc(ikl,iw,icol)) &
@@ -488,7 +487,7 @@ contains
             end do
          end do
 
-         call MAPL_TimerOff(MAPL,"RRTMG_SPMD2",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_SPBMTRA",__RC__)
 
          ! Vertical quadrature for total-sky fluxes
          call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR",__RC__)
@@ -502,7 +501,7 @@ contains
          !   Two-stream calculations go from top to bottom; 
          !   layer indexing is reversed to go bottom to top for output arrays
 
-         call MAPL_TimerOn (MAPL,"RRTMG_SPMD3",__RC__)
+         call MAPL_TimerOn (MAPL,"RRTMG_SPINTGN",__RC__)
 
          do icol = 1,ncol
             do iw = 1,ngptsw
@@ -518,8 +517,8 @@ contains
                   zincflx = adjflux(jb) * ssi     (iw,icol) * prmu0(icol)           
                endif
 
-               do ikl = 1,nlay+1
-                  jk = nlay+2-ikl
+               do ikl = 1,nsfc
+                  jk = nsfc+1-ikl
 
                   ! Accumulate spectral fluxes over whole spectrum  
                   pbbfu   (ikl,icol)  = pbbfu   (ikl,icol) + zincflx * zfu  (jk,iw,icol)  
@@ -530,7 +529,7 @@ contains
             enddo  ! spectral loop
          enddo  ! column loop
 
-         call MAPL_TimerOff(MAPL,"RRTMG_SPMD3",__RC__)
+         call MAPL_TimerOff(MAPL,"RRTMG_SPINTGN",__RC__)
 
       else
 
@@ -540,8 +539,6 @@ contains
          pbbfddir = pbbcddir
 
       end if
-
-      call MAPL_TimerOn (MAPL,"RRTMG_SPPOST",__RC__)
 
       ! surface band fluxes
       do icol = 1,ncol
@@ -561,28 +558,26 @@ contains
             ! Band fluxes
             if (ibm == 14 .or. ibm <= 8) then
                ! near-IR
-               znirr(icol) = znirr(icol) + zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
-               znirf(icol) = znirf(icol) + zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
+               znirr(icol) = znirr(icol) + zincflx * ztdbt(nsfc,iw,icol)  ! Direct flux
+               znirf(icol) = znirf(icol) + zincflx * zfd  (nsfc,iw,icol)  ! Total flux
             else if (ibm >= 10 .and. ibm <= 11) then
                ! Photosynthetically active radiation (PAR)
-               zparr(icol) = zparr(icol) + zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
-               zparf(icol) = zparf(icol) + zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
+               zparr(icol) = zparr(icol) + zincflx * ztdbt(nsfc,iw,icol)  ! Direct flux
+               zparf(icol) = zparf(icol) + zincflx * zfd  (nsfc,iw,icol)  ! Total flux
             else if (ibm >= 12 .and. ibm <= 13) then
                ! UV
-               zuvrr(icol) = zuvrr(icol) + zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
-               zuvrf(icol) = zuvrf(icol) + zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
+               zuvrr(icol) = zuvrr(icol) + zincflx * ztdbt(nsfc,iw,icol)  ! Direct flux
+               zuvrf(icol) = zuvrf(icol) + zincflx * zfd  (nsfc,iw,icol)  ! Total flux
             else if ( ibm==9) then
                ! Band 9: half PAR, half NIR
-               zparr(icol) = zparr(icol) + 0.5 * zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
-               zparf(icol) = zparf(icol) + 0.5 * zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
-               znirr(icol) = znirr(icol) + 0.5 * zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
-               znirf(icol) = znirf(icol) + 0.5 * zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
+               zparr(icol) = zparr(icol) + 0.5 * zincflx * ztdbt(nsfc,iw,icol)  ! Direct flux
+               zparf(icol) = zparf(icol) + 0.5 * zincflx * zfd  (nsfc,iw,icol)  ! Total flux
+               znirr(icol) = znirr(icol) + 0.5 * zincflx * ztdbt(nsfc,iw,icol)  ! Direct flux
+               znirf(icol) = znirf(icol) + 0.5 * zincflx * zfd  (nsfc,iw,icol)  ! Total flux
             endif
 
          end do
       enddo                    
-
-      call MAPL_TimerOff(MAPL,"RRTMG_SPPOST",__RC__)
 
       call MAPL_TimerOn (MAPL,"RRTMG_SPDIAG",__RC__)
 

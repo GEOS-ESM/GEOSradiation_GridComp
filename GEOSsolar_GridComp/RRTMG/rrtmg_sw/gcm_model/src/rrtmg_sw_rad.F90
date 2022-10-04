@@ -655,8 +655,6 @@ contains
       ! This passes because load balancer is multi-pass.
       _ASSERT(gncol > 0, 'no columns on processor!')
 
-      call MAPL_TimerOn (MAPL,"RRTMG_PREPART",__RC__)
-
       ! Initializations
       ! ---------------
 
@@ -955,8 +953,6 @@ contains
          omga = 1.
       end if
   
-      call MAPL_TimerOff(MAPL,"RRTMG_PREPART",__RC__)
-
       ! partitioning over clear (cc=1) and cloudy (cc=2) gridcolumns
       ! ------------------------------------------------------------
 
@@ -1088,8 +1084,6 @@ contains
 
             call MAPL_TimerOff(MAPL,"RRTMG_PART",__RC__)
 
-            call MAPL_TimerOn (MAPL,"RRTMG_MIDPART",__RC__)
-
             ! limit tiny cosine zenith angles
             do icol = 1,ncol
                cossza(icol) = max(zepzen,coszen(icol))
@@ -1113,8 +1107,6 @@ contains
                colch4(:,icol) = coldry(:,icol) * colch4(:,icol)
                colo2 (:,icol) = coldry(:,icol) * colo2 (:,icol)
             end do
-
-            call MAPL_TimerOff(MAPL,"RRTMG_MIDPART",__RC__)
 
             ! cloudy gridcolumns
             if (cc == 2) then
@@ -1317,8 +1309,6 @@ contains
       ! the fluxes by the solar constant times coszen
       ! MAT This requires only lit points passed in
 
-      call MAPL_TimerOn (MAPL,"RRTMG_POSTPART",__RC__)
-
       if (normFlx == 1) then
 
          gswdflx_at_top(:) = max(gswdflx(:,nlay+1),1e-7)
@@ -1338,8 +1328,6 @@ contains
          guvrf(:) = guvrf(:) / gswdflx_at_top(:)
 
       endif
-
-      call MAPL_TimerOff(MAPL,"RRTMG_POSTPART",__RC__)
 
       _RETURN(_SUCCESS)
    end subroutine rrtmg_sw_sub
