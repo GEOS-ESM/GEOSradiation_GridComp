@@ -362,6 +362,10 @@ contains
     ! do Fast Asynchronous Refreshes?
     ! -------------------------------
     call MAPL_GetResource (MAPL, do_FAR, "DO_FAR:", DEFAULT=.FALSE., __RC__)
+    if (do_FAR) then
+       ! do_FAR only coded for RRTMG currently ...
+       _ASSERT(USE_RRTMG, 'only RRTMG can use DO_FAR currently')
+    endif
 
 ! Set the state variable specs.
 ! -----------------------------
@@ -1999,7 +2003,7 @@ contains
     end type S_
     type(S_), allocatable :: list(:)
 
-    type (ESMF_VM) :: VM  ! PMN: temp for timing
+!   type (ESMF_VM) :: VM  ! PMN: temp for timing
 
 !=============================================================================
 
@@ -2007,14 +2011,15 @@ contains
     call ESMF_GridCompGet (GC, name=COMP_NAME, GRID=ESMFGRID, __RC__ )
     Iam = trim(COMP_NAME) // "Run"
 
-    ! PMN: temp for timing
-    call ESMF_VMGetCurrent(VM, __RC__)
-    call ESMF_VMBarrier(VM, __RC__)
+!   ! PMN: temp for timing
+!   call ESMF_VMGetCurrent(VM, __RC__)
+!   call ESMF_VMBarrier(VM, __RC__)
 
     ! Get my internal MAPL_Generic state
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
     call MAPL_TimerOn (MAPL,"TOTAL",__RC__)
+
     call MAPL_TimerOn (MAPL,"PRELIMS",__RC__)
 
     ! Get parameters from generic state.
@@ -2253,6 +2258,92 @@ contains
     UPDATE_FIRST = CalledLast /= 0
 
     call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
+
+    ! Establish a timing hierarchy for potentially optional parts so don't have
+    ! to worry about having else branches with empty timer sections in later code.
+    ! Add TimerOn/Off pairs below in a hierarchy for any code that may not be
+    ! executed on EVERY processor, e.g., because of a daytime mask, a cloud mask,
+    ! or a FAR age mask.
+!TODO: pmn: remove the else branches now
+
+    call MAPL_TimerOn (MAPL,"REFRESH"                        ,__RC__)
+       call MAPL_TimerOn (MAPL,"AEROSOLS"                    ,__RC__)
+       call MAPL_TimerOff(MAPL,"AEROSOLS"                    ,__RC__)
+       if (USE_CHOU) then
+          call MAPL_TimerOn (MAPL,"SORAD"                    ,__RC__)
+             call MAPL_TimerOn (MAPL,"SORAD_RUN"             ,__RC__)
+             call MAPL_TimerOff(MAPL,"SORAD_RUN"             ,__RC__)
+             call MAPL_TimerOn (MAPL,"SORAD_DATA"            ,__RC__)
+                call MAPL_TimerOn (MAPL,"SORAD_DATA_DEVICE"  ,__RC__)
+                call MAPL_TimerOff(MAPL,"SORAD_DATA_DEVICE"  ,__RC__)
+                call MAPL_TimerOn (MAPL,"SORAD_DATA_CONST"   ,__RC__)
+                call MAPL_TimerOff(MAPL,"SORAD_DATA_CONST"   ,__RC__)
+             call MAPL_TimerOff(MAPL,"SORAD_DATA"            ,__RC__)
+             call MAPL_TimerOn (MAPL,"SORAD_ALLOC"           ,__RC__)
+             call MAPL_TimerOff(MAPL,"SORAD_ALLOC"           ,__RC__)
+             call MAPL_TimerOn (MAPL,"SORAD_DEALLOC"         ,__RC__)
+             call MAPL_TimerOff(MAPL,"SORAD_DEALLOC"         ,__RC__)
+          call MAPL_TimerOff(MAPL,"SORAD"                    ,__RC__)
+       elseif (USE_RRTMG) then
+          call MAPL_TimerOn (MAPL,"RRTMG"                    ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMG_RUN"             ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_PART"         ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_PART"         ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_CLDSGEN"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_CLDSGEN"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_CLDPRMC"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_SETCOEF"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_SETCOEF"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_TAUMOL"       ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL"       ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_SPSCALE"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_SPSCALE"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_REFTRA"       ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_REFTRA"       ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_SPBMTRA"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_SPBMTRA"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_VRTQDR"       ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_VRTQDR"       ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_SPINTGN"      ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_SPINTGN"      ,__RC__)
+                call MAPL_TimerOn (MAPL,"RRTMG_SPDIAG"       ,__RC__)
+                call MAPL_TimerOff(MAPL,"RRTMG_SPDIAG"       ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMG_RUN"             ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMG_INIT"            ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMG_INIT"            ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMG_FLIP"            ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMG_FLIP"            ,__RC__)
+          call MAPL_TimerOff(MAPL,"RRTMG"                    ,__RC__)
+       elseif (USE_RRTMGP) then
+          call MAPL_TimerOn (MAPL,"RRTMGP"                   ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_IO_GAS"         ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_IO_GAS"         ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_IO_CLOUDS"      ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_IO_CLOUDS"      ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_CLOUD_OPTICS"   ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_CLOUD_OPTICS"   ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_MCICA"          ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_MCICA"          ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_GAS_OPTICS"     ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_GAS_OPTICS"     ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_RT"             ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_RT"             ,__RC__)
+             call MAPL_TimerOn (MAPL,"RRTMGP_POST"           ,__RC__)
+             call MAPL_TimerOff(MAPL,"RRTMGP_POST"           ,__RC__)
+          call MAPL_TimerOff(MAPL,"RRTMGP"                   ,__RC__)
+       end if
+       call MAPL_TimerOn (MAPL,"BALANCE"                     ,__RC__)
+          call MAPL_TimerOn (MAPL,"CREATE"                   ,__RC__)
+          call MAPL_TimerOff(MAPL,"CREATE"                   ,__RC__)
+          call MAPL_TimerOn (MAPL,"DISTRIBUTE"               ,__RC__)
+          call MAPL_TimerOff(MAPL,"DISTRIBUTE"               ,__RC__)
+          call MAPL_TimerOn (MAPL,"RETRIEVE"                 ,__RC__)
+          call MAPL_TimerOff(MAPL,"RETRIEVE"                 ,__RC__)
+          call MAPL_TimerOn (MAPL,"DESTROY"                  ,__RC__)
+          call MAPL_TimerOff(MAPL,"DESTROY"                  ,__RC__)
+       call MAPL_TimerOff(MAPL,"BALANCE"                     ,__RC__)
+    call MAPL_TimerOff(MAPL,"REFRESH"                        ,__RC__)
 
     ! Update the Sun position and weight the export variables
     ! -------------------------------------------------------
@@ -2520,8 +2611,8 @@ contains
 
     call MAPL_TimerOff(MAPL,"TOTAL",__RC__)
 
-    ! PMN: temp for timing
-    call ESMF_VMBarrier(VM, __RC__)
+!   ! PMN: temp for timing
+!   call ESMF_VMBarrier(VM, __RC__)
 
     RETURN_(ESMF_SUCCESS)
 
@@ -2881,16 +2972,100 @@ contains
 !  the initial and final sizes; so the required size is passed back in BufLen.
 !------------------------------------------------------------------------------------
 
-      call ESMF_VMGetCurrent(VM, __RC__)
-      call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
+      if (.not.do_FAR) then 
 
-      call MAPL_TimerOn (MAPL,"CREATE",__RC__)
+         call MAPL_TimerOn (MAPL,"CREATE",__RC__)
 
-      call MAPL_BalanceCreate( &
-         OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
-         BalLen=Num2do, BufLen=NumMax, __RC__)
+         call ESMF_VMGetCurrent(VM, __RC__)
+         call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
 
-      call MAPL_TimerOff(MAPL,"CREATE",__RC__)
+         call MAPL_BalanceCreate( &
+            OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
+            BalLen=Num2do, BufLen=NumMax, __RC__)
+
+         call MAPL_TimerOff(MAPL,"CREATE",__RC__)
+
+         ! in this case we can assume that load-balancing will give
+         ! each processor some work to do ...
+         _ASSERT(Num2do > 0, 'load balancing is meant to give each processor work!')
+
+      else
+         
+         ! For FAR we skip load balancing, since FAR has a much larger internal
+         ! state to load balance and the cost of transmission to/from processors 
+         ! exceeds the time savings normally associated with it. Our skipping is
+         ! explicit, which we prefer over the minimal ZTH method employed above,
+         ! for LoadBalance .false.
+
+         Num2do = NumLit
+         NumMax = NumLit
+
+         ! If there are no sunlit points we make a fast escape after setting
+         ! all outputs (non-InOut internals) to their default values (see main
+         ! output code below). InOut variables do not do this since nighttime
+         ! locations may contain potentially useful aged data.
+
+         if (NumLit == 0) then
+
+            do k=1,size(InternalSpec)
+
+               call MAPL_VarSpecGet(InternalSpec(k), &
+                  SHORT_NAME=short_name, DIMS=dims, UNGRIDDED_DIMS=ugdims, __RC__)
+
+               ! Skip InOut, keep Out
+               if (short_name(1:4) == 'FAR_') cycle
+
+               ! Skip vertical only variables
+               if (dims == MAPL_DIMSVERTONLY) cycle
+
+               ! Skip unused internals
+               if (.not. include_aerosols .and.                                      &
+                       ('FSWN'       == short_name .or.    'FSCN' == short_name .or. &
+                        'FSWUN'      == short_name .or.   'FSCUN' == short_name .or. &
+                        'FSWBANDN'   == short_name)                                  &
+                   .or.  include_aerosols .and.                                      &
+                       ('FSWNAN'     == short_name .or.  'FSCNAN' == short_name .or. &
+                        'FSWUNAN'    == short_name .or. 'FSCUNAN' == short_name .or. &
+                        'FSWBANDNAN' == short_name)                                  &
+               ) cycle
+
+               ! Write default values to all Output variables
+               call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=def,__RC__)
+               if (associated(ugdims)) then
+                  ! ungridded dims are present, make sure just one
+                  _ASSERT(size(ugdims)==1,'Only one ungridded dimension allowed')
+                  select case(dims)
+                     case(MAPL_DIMSHORZVERT)
+                        call ESMFL_StateGetPointerToData(INTERNAL,ptr4,short_name,__RC__)
+                        ptr4 = def
+                     case(MAPL_DIMSHORZONLY)
+                        call ESMFL_StateGetPointerToData(INTERNAL,ptr3,short_name,__RC__)
+                        ptr3 = def
+                     case default
+                        _FAIL('Invalid dimension for Internal')
+                  end select
+               else
+                  ! no ungridded dimension
+                  select case(dims)
+                     case(MAPL_DIMSHORZVERT)
+                        call ESMFL_StateGetPointerToData(INTERNAL,ptr3,short_name,__RC__)
+                        ptr3 = def
+                     case(MAPL_DIMSHORZONLY)
+                        call ESMFL_StateGetPointerToData(INTERNAL,ptr2,short_name,__RC__)
+                        ptr2 = def
+                     case default
+                        _FAIL('Invalid dimension for Internal')
+                  end select
+               end if
+
+            end do  ! over internal variables
+
+            ! fast escape since all-nighttime processor
+            call MAPL_TimerOff (MAPL,"BALANCE",__RC__)
+            RETURN_(ESMF_SUCCESS)
+         end if
+         
+      end if
 
 !  The number of Input and Output/InOut variables to the load balancing.
 !    The Input number is five more than the number of IMPORTS because the
@@ -2983,7 +3158,7 @@ contains
                SlicesInp(k) = 1
 
             case default
-               _FAIL('invalid dimension for SOLAR import')
+               _FAIL('Invalid dimension for SOLAR import')
             end select
 
          end if
@@ -3018,8 +3193,8 @@ contains
             ! pack extinctions
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
-                BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
-                call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3029,8 +3204,8 @@ contains
             i1 = iN + 1
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
-                BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
-                call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3040,8 +3215,8 @@ contains
             i1 = iN + 1
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
-                BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
-                call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3147,7 +3322,8 @@ contains
       ! -----------------------
 
       call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-      call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
+      if (.not.do_FAR) &
+         call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
       call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
 
 
@@ -3522,7 +3698,8 @@ contains
       !----------------------------------
       if (size(BufInOut) > 0) then
          call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
+         if (.not.do_FAR) &
+            call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
       end if
 
@@ -3532,45 +3709,45 @@ contains
       !-------------------------------------------------------------
       if (do_FAR) then
          if (use_RRTMG) then
-            call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
+!           call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
 
-            call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_SFLXZEN(1:ngptsw,1:Num2do) => SFLXZEN_(1:Num2do*ngptsw)
 
-            call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_SSI(1:ngptsw,1:Num2do) => SSI_(1:Num2do*ngptsw)
 
-            call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUR(1:LM,1:ngptsw,1:Num2do) => TAUR_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUG(1:LM,1:ngptsw,1:Num2do) => TAUG_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_CLDYMC(1:LM,1:ngptsw,1:Num2do) => CLDYMC_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUCMC(1:LM,1:ngptsw,1:Num2do) => TAUCMC_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_SSACMC(1:LM,1:ngptsw,1:Num2do) => SSACMC_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_ASMCMC(1:LM,1:ngptsw,1:Num2do) => ASMCMC_(1:Num2do*ngptsw*LM)
 
-            call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Distribute, Handle = SolarBalanceHandle, __RC__)
             FAR_TAORMC(1:LM,1:ngptsw,1:Num2do) => TAORMC_(1:Num2do*ngptsw*LM)
 
-            call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+!           call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
          end if
       end if
 
@@ -4840,57 +5017,59 @@ contains
 
       if (size(BufOut) > 0) then
          call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         if (.not.do_FAR) &
+            call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
 
       if (size(BufInOut) > 0) then
          call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         if (.not.do_FAR) &
+            call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
 
       if (do_FAR) then
          if (use_RRTMG) then
-            call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
+!           call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
 
-            call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SFLXZEN_, size(SFLXZEN_), inSize = ngptsw, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_SFLXZEN(1:ngptsw,1:NumMax) => SFLXZEN_
 
-            call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SSI_, size(SSI_), inSize = ngptsw, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_SSI(1:ngptsw,1:NumMax) => SSI_
 
-            call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUR_, size(TAUR_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUR(1:LM,1:ngptsw,1:NumMax) => TAUR_
 
-            call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUG_, size(TAUG_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUG(1:LM,1:ngptsw,1:NumMax) => TAUG_
 
-            call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (CLDYMC_, size(CLDYMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_CLDYMC(1:LM,1:ngptsw,1:NumMax) => CLDYMC_
 
-            call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAUCMC_, size(TAUCMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_TAUCMC(1:LM,1:ngptsw,1:NumMax) => TAUCMC_
 
-            call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (SSACMC_, size(SSACMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_SSACMC(1:LM,1:ngptsw,1:NumMax) => SSACMC_
 
-            call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (ASMCMC_, size(ASMCMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_ASMCMC(1:LM,1:ngptsw,1:NumMax) => ASMCMC_
 
-            call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
-               Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
+!           call MAPL_BalanceWork (TAORMC_, size(TAORMC_), inSize = ngptsw * LM, &
+!              Direction = MAPL_Retrieve, Handle = SolarBalanceHandle, __RC__)
             FAR_TAORMC(1:LM,1:ngptsw,1:NumMax) => TAORMC_
 
-            call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+!           call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
          end if
       end if
 
@@ -5073,7 +5252,7 @@ contains
       deallocate(IntInOut,rgDim,ugDim,__STAT__)
       deallocate(BufInp,BufInOut,BufOut,__STAT__)
       call MAPL_TimerOn (MAPL,"DESTROY",__RC__)
-      call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
+      if (.not.do_FAR) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
       call MAPL_TimerOff(MAPL,"DESTROY",__RC__)
 
       call MAPL_TimerOff(MAPL,"BALANCE",__RC__)
