@@ -138,6 +138,8 @@ module GEOS_SolarGridCompMod
 !
 !\end{verbatim}
 !
+! PMN: need comment on SOLAR_COLUMNS_LAST:
+
 ! !BUGS:
 !
 !\end{verbatim} 
@@ -162,6 +164,8 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
+
+  use iso_fortran_env, only : error_unit
 
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -1943,6 +1947,7 @@ contains
 
     real, pointer, dimension(:,:,:,:) :: &
        FAR_TAUA, FAR_SSAA, FAR_ASYA
+!PMN: TODO: cols_last for aerosols to
 
     integer :: band
     logical :: implements_aerosol_optics, update_aerosols
@@ -1992,7 +1997,7 @@ contains
     logical                        :: USE_NRLSSI2
     logical                        :: PersistSolar
 
-    logical :: do_no_aero_calc, do_FAR
+    logical :: do_no_aero_calc, do_FAR, cols_last_def, cols_last
     real :: FAR_dt, FAR_aerosol_age_limit
     real :: FAR_taumol_age_limit, FAR_taucld_age_limit
 
@@ -2008,7 +2013,7 @@ contains
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
-    call ESMF_GridCompGet (GC, name=COMP_NAME, GRID=ESMFGRID, __RC__ )
+    call ESMF_GridCompGet (GC, name=COMP_NAME, GRID=ESMFGRID, __RC__)
     Iam = trim(COMP_NAME) // "Run"
 
 !   ! PMN: temp for timing
@@ -2246,6 +2251,18 @@ contains
        call MAPL_GetResource(MAPL, FAR_aerosol_age_limit, &
           "FAR_AEROSOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
     end if
+
+    ! Change to columns last format (rather than inside RRTMG)?
+    cols_last_def = (do_FAR .and. USE_RRTMG)
+    call MAPL_GetResource (MAPL, cols_last, "SOLAR_COLUMNS_LAST:", &
+       DEFAULT=cols_last_def, __RC__)
+    ! only works with RRTMG for now ...
+    if (cols_last) then
+       _ASSERT(USE_RRTMG,'cols_last only currently works for RRTMG')
+    end if
+    if (MAPL_AM_I_ROOT()) print *, 'cols_last: ', cols_last
+!   write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 1'
+!   call ESMF_VMBarrier(VM, __RC__)
 
     ! Determine calling sequence ...
     ! This getresource is a kludge for now and needs to be fixed in the spec,
@@ -2519,6 +2536,9 @@ contains
 
        call MAPL_TimerOff(MAPL,"AEROSOLS",__RC__)
 
+!      write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 8'
+!      call ESMF_VMBarrier(VM, __RC__)
+
        ! Optional without-aerosol diagnostics
        ! ------------------------------------
 
@@ -2545,6 +2565,9 @@ contains
 
        if (do_no_aero_calc) then
 
+!         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 9'
+!         call ESMF_VMBarrier(VM, __RC__)
+
           ! do a calculation without aerosols:
           !   this just sets the no-aerosol internals ---
           !   the exports are derived from the internals in update_export()
@@ -2554,6 +2577,10 @@ contains
                INTERVAL = TINT,              &
                LoadBalance = LoadBalance,    &
                __RC__)
+
+!         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 0'
+!         call ESMF_VMBarrier(VM, __RC__)
+
        else
 
           ! otherwise, zero the no-aerosol internals
@@ -2566,6 +2593,9 @@ contains
 
        end if
 
+!         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here B'
+!         call ESMF_VMBarrier(VM, __RC__)
+
        ! Regular with-aerosol calculations
        ! ---------------------------------
        call SORADCORE(IM,JM,LM,                     &
@@ -2574,6 +2604,9 @@ contains
                       INTERVAL = TINT,              &
                       LoadBalance = LoadBalance,    &
                       __RC__)
+
+!         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here C'
+!         call ESMF_VMBarrier(VM, __RC__)
 
        ! Clean up aerosol optical properties
        ! -----------------------------------
@@ -2851,11 +2884,12 @@ contains
       real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
-      integer :: I, J, K, L, i1, iN, M
+      integer :: I, J, K, L, i1, iN, M, i1aero
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
-      real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
+!     real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
+      real, pointer :: ptr2(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
       integer :: dims, NumLit, Num2do, num_aero_vars
       character(len=ESMF_MAXSTR) :: short_name
       integer, pointer :: ugdims(:) => null()
@@ -2865,7 +2899,7 @@ contains
       real, target, allocatable, dimension(:) :: BufInp, BufInOut, BufOut
       real, target, allocatable, dimension(:) :: SFLXZEN_, SSI_, TAUR_, TAUG_
       real, target, allocatable, dimension(:) :: CLDYMC_, TAUCMC_, SSACMC_, ASMCMC_, TAORMC_
-      integer, allocatable :: rgDim(:),ugDim(:)
+      integer, allocatable :: rgDim(:), ugDim(:)
       real, pointer :: buf(:)
       integer :: NumImp, NumInt, NumInp
       integer :: NumMax, HorzDims(2)
@@ -2878,6 +2912,12 @@ contains
 
       IAm = trim(COMP_NAME)//"Soradcore"
       call MAPL_TimerOn (MAPL,"MISC",__RC__)
+
+      ! used for several purposes (timing barriers and balancing)
+      call ESMF_VMGetCurrent(VM, __RC__)
+
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 7'
+!     call ESMF_VMBarrier(VM, __RC__)
 
       ! Make sure FAR_ are null pointers by default
       FAR_TAUMOL_AGE => null()
@@ -2976,7 +3016,6 @@ contains
 
          call MAPL_TimerOn (MAPL,"CREATE",__RC__)
 
-         call ESMF_VMGetCurrent(VM, __RC__)
          call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
 
          call MAPL_BalanceCreate( &
@@ -3066,6 +3105,8 @@ contains
          end if
          
       end if
+
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here A'
 
 !  The number of Input and Output/InOut variables to the load balancing.
 !    The Input number is five more than the number of IMPORTS because the
@@ -3171,6 +3212,8 @@ contains
       allocate(BufInp(NumMax*sum(SlicesInp)),__STAT__)
       BufInp = MAPL_UNDEF
 
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 6'
+
       ! Loop over imports, packing into the buffer that will be 
       ! load balanced and used in the solar calculations.
       ! -------------------------------------------------------
@@ -3181,6 +3224,9 @@ contains
          i1 = iN + 1
 
          if (NamesInp(k)=="AERO") then
+            i1aero = i1
+
+!PMN: TODO: do cols_last for aerosols too
 
             _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
             _ASSERT(size(AEROSOL_SSA,3)==LM,'mal-dimensioned AEROSOL_SSA')
@@ -3224,108 +3270,228 @@ contains
 
             deallocate(BUF_AEROSOL, __STAT__)
 
+            ! load balancing is done here for cols_last case
+            if (cols_last .and. .not. do_FAR) then
+
+               ! currently aerosols are NOT reordered column last
+               call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
+               call MAPL_BalanceWork (BufInp(i1aero:iN), NumMax, &
+                  Direction=MAPL_Distribute, Handle=SolarBalanceHandle, __RC__)
+               call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+
+!     when aerosols reordered column last (because insize is constant)
+!     but need mods to above first to do reordering
+!              call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
+!              call MAPL_BalanceWork (BufInp(iaero1:iN), iN-i1+1 &
+!                 Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
+!                 inSize = LM * NUM_BANDS_SOLAR, __RC__)
+!              call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+
+            end if
+
          else  ! Non-aerosol imports
 
             if (SlicesInp(k) /= 1) then
 
                ! pack 3D imports
                call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
-               call PackIt(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+               if (cols_last) then
+                  call PackItT(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+               else
+                  call PackIt (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+               end if
                iN = i1 + NumMax*size(ptr3,3) - 1
 
             else  ! case(MAPL_DIMSHORZONLY)
 
                ! pack auxilliary variables
                if (NamesInp(k) == 'Ig') then
-                  call PackIt(BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+                  end if
                else if (NamesInp(k) == 'Jg') then
-                  call PackIt(BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+                  end if
                else if (NamesInp(k) == 'LATS') then
-                  call PackIt(BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+                  end if
                else if (NamesInp(k) == 'SLR') then
-                  call PackIt(BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+                  end if
                else if (NamesInp(k) == 'ZTH') then
-                  call PackIt(BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+                  end if
                else 
                   ! pack 2D imports
                   call ESMFL_StateGetPointerToData(IMPORT,ptr2,NamesInp(k),__RC__)
-                  call PackIt(BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
+                  if (cols_last) then
+                     call PackItT(BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt (BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
+                  end if
                end if
                iN = i1 + NumMax - 1
 
-            end if
+            end if  ! dimensions for non-AERO
 
             ! Handles for the working input (Import) variables.
             ! These use Fortran 2003 syntax for reshaping a 1D
             ! vector into a higher rank array.
             !--------------------------------------------------
-            ptr2(1:NumMax,1:SlicesInp(k)) => BufInp(i1:iN)
+            if (cols_last) then
+               ptr2(1:SlicesInp(k),1:NumMax) => BufInp(i1:iN)
+            else
+               ptr2(1:NumMax,1:SlicesInp(k)) => BufInp(i1:iN)
+            end if
 
-            select case(NamesInp(k))
-               case('PLE')
-                  PLE   => ptr2(1:Num2do,:)
-               case('TS')
-                  TS    => ptr2(1:Num2do,1)
-               case('CH4')
-                  CH4   => ptr2(1:Num2do,:)
-               case('N2O')
-                  N2O   => ptr2(1:Num2do,:)
-               case('T')     
-                  T     => ptr2(1:Num2do,:)
-               case('QV')    
-                  Q     => ptr2(1:Num2do,:)
-               case('OX')    
-                  OX    => ptr2(1:Num2do,:)
-               case('FCLD')  
-                  CL    => ptr2(1:Num2do,:)
-               case('QL')    
-                  QL    => ptr2(1:Num2do,:)
-               case('QI')    
-                  QI    => ptr2(1:Num2do,:)
-               case('QR')    
-                  QR    => ptr2(1:Num2do,:)
-               case('QS')    
-                  QS    => ptr2(1:Num2do,:)
-               case('RL')    
-                  RL    => ptr2(1:Num2do,:)
-               case('RI')    
-                  RI    => ptr2(1:Num2do,:)
-               case('RR')    
-                  RR    => ptr2(1:Num2do,:)
-               case('RS')    
-                  RS    => ptr2(1:Num2do,:)
-               case('ALBVR') 
-                  ALBVR => ptr2(1:Num2do,1)
-               case('ALBVF') 
-                  ALBVF => ptr2(1:Num2do,1)
-               case('ALBNR') 
-                  ALBNR => ptr2(1:Num2do,1)
-               case('ALBNF')   
-                  ALBNF => ptr2(1:Num2do,1)
-               case('Ig')   
-                  Ig1D  => ptr2(1:Num2do,1)
-               case('Jg')   
-                  Jg1D  => ptr2(1:Num2do,1)
-               case('LATS')   
-                  ALAT  => ptr2(1:Num2do,1)
-               case('SLR')   
-                  SLR1D => ptr2(1:Num2do,1)
-               case('ZTH')   
-                  ZT    => ptr2(1:Num2do,1)
-            end select
+            if (cols_last) then
+               select case(NamesInp(k))
+                  case('PLE')
+                     PLE   => ptr2(:,1:Num2do)
+                  case('TS')
+                     TS    => ptr2(1,1:Num2do)
+                  case('CH4')
+                     CH4   => ptr2(:,1:Num2do)
+                  case('N2O')
+                     N2O   => ptr2(:,1:Num2do)
+                  case('T')     
+                     T     => ptr2(:,1:Num2do)
+                  case('QV')    
+                     Q     => ptr2(:,1:Num2do)
+                  case('OX')    
+                     OX    => ptr2(:,1:Num2do)
+                  case('FCLD')  
+                     CL    => ptr2(:,1:Num2do)
+                  case('QL')    
+                     QL    => ptr2(:,1:Num2do)
+                  case('QI')    
+                     QI    => ptr2(:,1:Num2do)
+                  case('QR')    
+                     QR    => ptr2(:,1:Num2do)
+                  case('QS')    
+                     QS    => ptr2(:,1:Num2do)
+                  case('RL')    
+                     RL    => ptr2(:,1:Num2do)
+                  case('RI')    
+                     RI    => ptr2(:,1:Num2do)
+                  case('RR')    
+                     RR    => ptr2(:,1:Num2do)
+                  case('RS')    
+                     RS    => ptr2(:,1:Num2do)
+                  case('ALBVR') 
+                     ALBVR => ptr2(1,1:Num2do)
+                  case('ALBVF') 
+                     ALBVF => ptr2(1,1:Num2do)
+                  case('ALBNR') 
+                     ALBNR => ptr2(1,1:Num2do)
+                  case('ALBNF')   
+                     ALBNF => ptr2(1,1:Num2do)
+                  case('Ig')   
+                     Ig1D  => ptr2(1,1:Num2do)
+                  case('Jg')   
+                     Jg1D  => ptr2(1,1:Num2do)
+                  case('LATS')   
+                     ALAT  => ptr2(1,1:Num2do)
+                  case('SLR')   
+                     SLR1D => ptr2(1,1:Num2do)
+                  case('ZTH')   
+                     ZT    => ptr2(1,1:Num2do)
+               end select
+            else
+               select case(NamesInp(k))
+                  case('PLE')
+                     PLE   => ptr2(1:Num2do,:)
+                  case('TS')
+                     TS    => ptr2(1:Num2do,1)
+                  case('CH4')
+                     CH4   => ptr2(1:Num2do,:)
+                  case('N2O')
+                     N2O   => ptr2(1:Num2do,:)
+                  case('T')     
+                     T     => ptr2(1:Num2do,:)
+                  case('QV')    
+                     Q     => ptr2(1:Num2do,:)
+                  case('OX')    
+                     OX    => ptr2(1:Num2do,:)
+                  case('FCLD')  
+                     CL    => ptr2(1:Num2do,:)
+                  case('QL')    
+                     QL    => ptr2(1:Num2do,:)
+                  case('QI')    
+                     QI    => ptr2(1:Num2do,:)
+                  case('QR')    
+                     QR    => ptr2(1:Num2do,:)
+                  case('QS')    
+                     QS    => ptr2(1:Num2do,:)
+                  case('RL')    
+                     RL    => ptr2(1:Num2do,:)
+                  case('RI')    
+                     RI    => ptr2(1:Num2do,:)
+                  case('RR')    
+                     RR    => ptr2(1:Num2do,:)
+                  case('RS')    
+                     RS    => ptr2(1:Num2do,:)
+                  case('ALBVR') 
+                     ALBVR => ptr2(1:Num2do,1)
+                  case('ALBVF') 
+                     ALBVF => ptr2(1:Num2do,1)
+                  case('ALBNR') 
+                     ALBNR => ptr2(1:Num2do,1)
+                  case('ALBNF')   
+                     ALBNF => ptr2(1:Num2do,1)
+                  case('Ig')   
+                     Ig1D  => ptr2(1:Num2do,1)
+                  case('Jg')   
+                     Jg1D  => ptr2(1:Num2do,1)
+                  case('LATS')   
+                     ALAT  => ptr2(1:Num2do,1)
+                  case('SLR')   
+                     SLR1D => ptr2(1:Num2do,1)
+                  case('ZTH')   
+                     ZT    => ptr2(1:Num2do,1)
+               end select
+            end if
 
-         end if
+            ! do balancing per variable for cols_last case (because inSize varies)
+            if (cols_last .and. .not. do_FAR) then
+               call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
+               call MAPL_BalanceWork (BufInp(i1:iN), iN-i1+1, &
+                  Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
+                  inSize=SlicesInp(k), __RC__)
+               call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+            end if
+
+         end if  ! non-AERO case
 
       enddo INPUT_VARS_2
 
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 2'
+
       ! Load balance the Inputs
       ! -----------------------
+      ! do_FAR does no load blancing
+      ! cols_last does it in INPUT_VARS_2 loop per variable
 
       call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-      if (.not.do_FAR) &
+      if (.not. do_FAR .and. .not. cols_last) &
          call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
       call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
 
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 3'
 
 ! @@@@@@@@@@@@@@@@@@@@@@
 ! @@@ InOuts/Outputs @@@
@@ -3758,6 +3924,12 @@ contains
 
       call MAPL_TimerOn (MAPL,"MISC",__RC__)
 
+      if (cols_last) then
+         NCOL = size(Q,2)
+      else
+         NCOL = size(Q,1)
+      end if
+
       ! report cosine solar zenith angle actually used by REFRESH
       COSZSW = ZT
 
@@ -3777,12 +3949,16 @@ contains
       ! Prepare auxilliary variables
       ! ----------------------------
 
-      allocate(RH(size(Q,1),size(Q,2)),__STAT__)
+!     allocate(RH(size(Q,1),size(Q,2)),__STAT__)   ! <<< not needed
       allocate(PL(size(Q,1),size(Q,2)),__STAT__)
       allocate(PLhPa(size(PLE,1),size(PLE,2)),__STAT__)
 
-      PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
-      RH = Q/MAPL_EQSAT(T,PL=PL)
+      if (cols_last) then
+         PL = 0.5*(PLE(:UBOUND(PLE,1)-1,:)+PLE(LBOUND(PLE,1)+1:,:))
+      else
+         PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
+      end if
+!     RH = Q/MAPL_EQSAT(T,PL=PL)
       PLhPa = PLE * 0.01  ! hPa version for shrtwave
 
       ! Water amounts and effective radii are in arrays indexed by species
@@ -3820,9 +3996,9 @@ contains
       ! Begin aerosol code
       ! ------------------
 
-      allocate(TAUA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(SSAA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(ASYA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
+      allocate(TAUA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(SSAA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(ASYA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
 
       ! Zero out aerosol arrays.
       ! If num_aero_vars == 0, these zeroes are used inside code.
@@ -4643,15 +4819,19 @@ contains
       ! regular RRTMG
       call MAPL_TimerOn (MAPL,"RRTMG",__RC__)
 
-      NCOL = size(Q,1)
+      if (cols_last) then
+         NCOL = size(Q,2)
+      else
+         NCOL = size(Q,1)
+      end if
 
       ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
       ! -------------------------------------------------------------------
 
       ! interface (between layer) variables
-      allocate(TLEV  (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(TLEV_R(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(PLE_R (size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(TLEV  (size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(TLEV_R(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(PLE_R (size(PLE,1),size(PLE,2)),__STAT__)
       ! cloud physical properties
       allocate(FCLD_R(size(Q,1),size(Q,2)),__STAT__)
       allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
@@ -4659,9 +4839,10 @@ contains
       allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
       allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
       ! aerosol optical properties
-      allocate(TAUAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(SSAAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(ASMAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
+!cols_last needed later ...
+      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
       ! layer variables
       allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
       allocate(PL_R  (size(Q,1),size(Q,2)),__STAT__)
@@ -4673,17 +4854,25 @@ contains
       allocate(CO2_R (size(Q,1),size(Q,2)),__STAT__)
       allocate(CH4_R (size(Q,1),size(Q,2)),__STAT__)
       ! super-layer cloud fractions
-      allocate(CLEARCOUNTS (size(Q,1),4),__STAT__)
+      allocate(CLEARCOUNTS (NCOL,4),__STAT__)
       ! output fluxes
-      allocate(SWUFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXC(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXC(size(Q,1),size(Q,2)+1),__STAT__)
+!     allocate(SWUFLX (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLX (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWUFLXC(size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXC(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWUFLX (NCOL,LM+1),__STAT__)
+      allocate(SWDFLX (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
       ! un-flipped outputs
-      allocate(SWUFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
+!     allocate(SWUFLXR (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXR (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWUFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
 
       ! Set flags related to cloud properties (see RRTMG_SW)
       ! ----------------------------------------------------
@@ -4712,15 +4901,33 @@ contains
 
       call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
 
-      DPR(:,1:LM) = (PLE(:,2:LM+1)-PLE(:,1:LM))
+      if (cols_last) then
 
-      ! cloud water paths converted from g/g to g/m^2
-      CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
-      CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
+         do icol = 1,ncol
+            DPR(1:LM,icol) = PLE(2:LM+1,icol) - PLE(1:LM,icol)
 
-      ! cloud effective radii with limits imposed as assumed by RRTMG
-      REICE (:,1:LM) = RR3(:,LM:1:-1,1)
-      RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
+            ! cloud water paths converted from g/g to g/m^2
+            CICEWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,1)
+            CLIQWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,2)
+
+            ! cloud effective radii with limits imposed as assumed by RRTMG
+            REICE (1:LM,icol) = RR3(LM:1:-1,icol,1)
+            RELIQ (1:LM,icol) = RR3(LM:1:-1,icol,2)
+         enddo
+
+      else
+
+         DPR(:,1:LM) = PLE(:,2:LM+1) - PLE(:,1:LM)
+
+         ! cloud water paths converted from g/g to g/m^2
+         CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
+         CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
+
+         ! cloud effective radii with limits imposed as assumed by RRTMG
+         REICE (:,1:LM) = RR3(:,LM:1:-1,1)
+         RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
+
+      end if
 
       IF      (ICEFLGSW == 0) THEN
          WHERE (REICE < 10.)  REICE = 10.
@@ -4748,44 +4955,91 @@ contains
          WHERE (RELIQ > 60.)  RELIQ = 60.
       END IF
 
-      ! regular (non-flipped) interface temperatures
-      TLEV(:,2:LM)=(T(:,1:LM-1)* DPR(:,2:LM) + T(:,2:LM) * DPR(:,1:LM-1)) &
-            /(DPR(:,1:LM-1) + DPR(:,2:LM))
-      TLEV(:,LM+1) = TS(:)
-      TLEV(:,   1) = TLEV(:,2)
+      if (cols_last) then
 
-      ! flip in vertical ...
+         do icol = 1,ncol
 
-      PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
-      TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
+            ! regular (non-flipped) interface temperatures
+            TLEV(2:LM,icol)=(T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) &
+               / (DPR(1:LM-1,icol) + DPR(2:LM,icol))
+            TLEV(LM+1,icol) = TS(icol)
+            TLEV(   1,icol) = TLEV(2,icol)
 
-      PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
-      T_R   (:,1:LM  ) = T   (:,LM:1:-1)
+            ! flip in vertical ...
 
-      ! Specific humidity is converted to Volume Mixing Ratio
-      Q_R   (:,1:LM  ) = Q  (:,LM:1:-1) / (1.-Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW) 
+            PLE_R (1:LM+1,icol) = PLE (LM+1:1:-1,icol) / 100.  ! hPa
+            TLEV_R(1:LM+1,icol) = TLEV(LM+1:1:-1,icol)
 
-      ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
-      O3_R  (:,1:LM  ) = O3 (:,LM:1:-1) * (MAPL_AIRMW/MAPL_O3MW)
+            PL_R  (1:LM  ,icol) = PL  (LM:1:-1,icol)   / 100.  ! hPa
+            T_R   (1:LM  ,icol) = T   (LM:1:-1,icol)
 
-      ! chemistry and cloud fraction
-      ! (cloud water paths and effective radii flipped already)
-      CH4_R (:,1:LM  ) = CH4(:,LM:1:-1)
-      CO2_R (:,1:LM  ) = CO2
-      O2_R  (:,1:LM  ) = O2
-      FCLD_R(:,1:LM  ) = CL (:,LM:1:-1)
+            ! Specific humidity is converted to Volume Mixing Ratio
+            Q_R   (1:LM  ,icol) = Q  (LM:1:-1,icol) / (1.-Q(LM:1:-1,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+            ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+            O3_R  (1:LM  ,icol) = O3 (LM:1:-1,icol) * (MAPL_AIRMW/MAPL_O3MW)
+
+            ! chemistry and cloud fraction
+            ! (cloud water paths and effective radii flipped already)
+            CH4_R (1:LM  ,icol) = CH4(LM:1:-1,icol)
+            CO2_R (1:LM  ,icol) = CO2
+            O2_R  (1:LM  ,icol) = O2
+            FCLD_R(1:LM  ,icol) = CL (LM:1:-1,icol)
+
+            ! Layer mid-point heights relative to zero at index 1
+            ZL_R(1,icol) = 0.
+            do k=2,LM
+               ! dz = RT/g x dp/p
+               ! Note: This is correct even though its different from LW.
+               ! Its because SW uses LE[V]_R 1:LM+1 while LW uses 0:LM.
+               ZL_R(k,icol) = ZL_R(k-1,icol) + MAPL_RGAS * TLEV_R(k,icol) / MAPL_GRAV * &
+                  (PL_R(k-1,icol) - PL_R(k,icol)) / PLE_R(k,icol)
+            enddo
+
+         enddo
+
+      else
+
+         ! regular (non-flipped) interface temperatures
+         TLEV(:,2:LM)=(T(:,1:LM-1) * DPR(:,2:LM) + T(:,2:LM) * DPR(:,1:LM-1)) &
+               / (DPR(:,1:LM-1) + DPR(:,2:LM))
+         TLEV(:,LM+1) = TS(:)
+         TLEV(:,   1) = TLEV(:,2)
+
+         ! flip in vertical ...
+
+         PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
+         TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
+
+         PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
+         T_R   (:,1:LM  ) = T   (:,LM:1:-1)
+
+         ! Specific humidity is converted to Volume Mixing Ratio
+         Q_R   (:,1:LM  ) = Q  (:,LM:1:-1) / (1.-Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+         ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+         O3_R  (:,1:LM  ) = O3 (:,LM:1:-1) * (MAPL_AIRMW/MAPL_O3MW)
+
+         ! chemistry and cloud fraction
+         ! (cloud water paths and effective radii flipped already)
+         CH4_R (:,1:LM  ) = CH4(:,LM:1:-1)
+         CO2_R (:,1:LM  ) = CO2
+         O2_R  (:,1:LM  ) = O2
+         FCLD_R(:,1:LM  ) = CL (:,LM:1:-1)
+
+         ! Layer mid-point heights relative to zero at index 1
+         ZL_R(:,1) = 0.
+         do k=2,LM
+            ! dz = RT/g x dp/p
+            ! Note: This is correct even though its different from LW.
+            ! Its because SW uses LE[V]_R 1:LM+1 while LW uses 0:LM.
+            ZL_R(:,k) = ZL_R(:,k-1) + MAPL_RGAS*TLEV_R(:,k)/MAPL_GRAV*(PL_R(:,k-1)-PL_R(:,k))/PLE_R(:,k)
+         enddo
+
+      end if
 
       ! Adjustment for Earth/Sun distance, from MAPL_SunGetInsolation
       ADJES = DIST
-
-      ! Layer mid-point heights relative to zero at index 1
-      ZL_R(:,1) = 0.
-      do k=2,LM
-         ! dz = RT/g x dp/p
-         ! Note: This is correct even though its different from LW.
-         ! Its because SW uses LE[V]_R 1:LM+1 while LW uses 0:LM.
-         ZL_R(:,k) = ZL_R(:,k-1) + MAPL_RGAS*TLEV_R(:,k)/MAPL_GRAV*(PL_R(:,k-1)-PL_R(:,k))/PLE_R(:,k)
-      enddo
 
       ! aerosols
       TAUAER(:,1:LM,:) = TAUA(:,LM:1:-1,:)
@@ -4793,12 +5047,12 @@ contains
       ASMAER(:,1:LM,:) = ASYA(:,LM:1:-1,:)
 
       call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
-      call MAPL_TimerOn (MAPL,"RRTMG_INIT",__RC__)
 
       ! initialize RRTMG SW
+      call MAPL_TimerOn (MAPL,"RRTMG_INIT",__RC__)
       call RRTMG_SW_INI
-
       call MAPL_TimerOff(MAPL,"RRTMG_INIT",__RC__)
+
       call MAPL_TimerOn (MAPL,"RRTMG_RUN",__RC__)
 
       ! partition size for columns (profiles) used to improve efficiency
@@ -4902,8 +5156,10 @@ contains
       ! call RRTMG SW
       ! -------------
 
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 4'
+
       call RRTMG_SW ( MAPL, &
-         RPART, NCOL, LM, &
+         RPART, NCOL, LM, cols_last, &
          SC, ADJES, ZT, ISOLVAR, &
          PL_R, PLE_R, T_R, &
          Q_R, O3_R, CO2_R, CH4_R, O2_R, &
@@ -4922,6 +5178,8 @@ contains
          FAR_CLDYCOL, FAR_CLDYMC, FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
+
+!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 5'
 
       call MAPL_TimerOff(MAPL,"RRTMG_RUN",__RC__)
       call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
@@ -5005,7 +5263,8 @@ contains
       ! Deallocate the working inputs
       !------------------------------
 
-      deallocate (PL, RH, PLhPa)
+!     deallocate (PL, RH, PLhPa)
+      deallocate (PL, PLhPa)
       deallocate (QQ3, RR3)
       deallocate (O3)
       deallocate (TAUA, SSAA, ASYA)
@@ -5672,7 +5931,7 @@ contains
       real, pointer, dimension(:,:  ) :: ALBEDO
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
 
-      real, pointer, dimension(:,:,:)   :: FCLD, CLIN, RH
+      real, pointer, dimension(:,:,:)   :: FCLD, CLIN !, RH
       real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
       real, pointer, dimension(:,:,:)   :: RRL, RRI, RRR, RRS
       real, pointer, dimension(:,:,:)   :: RQL, RQI, RQR, RQS
@@ -6380,9 +6639,6 @@ contains
 
   end subroutine RUN
 
-!pmn: consider rewriting interms of FORTRAN intrinsics?
-!pmn: perhaps just replace with a PACK/UNPACK intrinsic
-
   ! Pack masked locations into buffer
   subroutine PackIt (Packed, UnPacked, MSK, Pdim, Udim, LM)
     integer, intent(IN   ) :: Pdim, Udim(2), LM
@@ -6405,6 +6661,29 @@ contains
     end do
 
   end subroutine PackIt
+
+  ! Pack masked locations into buffer with Transpose
+  subroutine PackItT (Packed, UnPacked, MSK, Pdim, Hdim, LM)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM
+    real,    intent(INOUT) :: Packed(LM,Pdim)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+
+    integer :: I, J, L, M
+
+    do L = 1,LM
+      M = 1
+      do J = 1,Hdim(2)
+        do I = 1,Hdim(1)
+          if (MSK(I,J)) then
+            Packed(L,M) = UnPacked(I,J,L)
+            M = M+1
+          end if
+        end do
+      end do
+    end do
+
+  end subroutine PackItT
 
   ! Unpack masked locations from buffer
   subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)

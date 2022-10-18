@@ -65,7 +65,7 @@ module rrtmg_sw_rad
 contains
 
    subroutine rrtmg_sw (MAPL, &
-      rpart, ncol, nlay, &
+      rpart, ncol, nlay, cols_last, &
       scon, adjes, coszen, isolvar, &
       play, plev, tlay, &
       h2ovmr, o3vmr, co2vmr, ch4vmr, o2vmr, &
@@ -96,6 +96,7 @@ contains
       integer, intent(in) :: rpart                   ! Number of columns in a partition
       integer, intent(in) :: ncol                    ! Number of horizontal columns     
       integer, intent(in) :: nlay                    ! Number of model layers
+      logical, intent(in) :: cols_last               ! is column dimension last?
 
       ! orbit
       ! -----
@@ -182,17 +183,25 @@ contains
 
       ! profile
       ! -------
-      real, intent(in) :: play   (ncol,nlay)         ! Layer pressures (hPa)
-      real, intent(in) :: plev   (ncol,nlay+1)       ! Interface pressures (hPa)
-      real, intent(in) :: tlay   (ncol,nlay)         ! Layer temperatures (K)
+!     real, intent(in) :: play   (ncol,nlay)         ! Layer pressures (hPa)
+!     real, intent(in) :: plev   (ncol,nlay+1)       ! Interface pressures (hPa)
+!     real, intent(in) :: tlay   (ncol,nlay)         ! Layer temperatures (K)
+      real, intent(in) :: play   (nlay,ncol)         ! Layer pressures (hPa)
+      real, intent(in) :: plev   (nlay+1,ncol)       ! Interface pressures (hPa)
+      real, intent(in) :: tlay   (nlay,ncol)         ! Layer temperatures (K)
 
       ! gases
       ! -----
-      real, intent(in) :: h2ovmr (ncol,nlay)         ! H2O volume mixing ratio
-      real, intent(in) :: o3vmr  (ncol,nlay)         ! O3 volume mixing ratio
-      real, intent(in) :: co2vmr (ncol,nlay)         ! CO2 volume mixing ratio
-      real, intent(in) :: ch4vmr (ncol,nlay)         ! Methane volume mixing ratio
-      real, intent(in) :: o2vmr  (ncol,nlay)         ! Oxygen volume mixing ratio
+!     real, intent(in) :: h2ovmr (ncol,nlay)         ! H2O volume mixing ratio
+!     real, intent(in) :: o3vmr  (ncol,nlay)         ! O3 volume mixing ratio
+!     real, intent(in) :: co2vmr (ncol,nlay)         ! CO2 volume mixing ratio
+!     real, intent(in) :: ch4vmr (ncol,nlay)         ! Methane volume mixing ratio
+!     real, intent(in) :: o2vmr  (ncol,nlay)         ! Oxygen volume mixing ratio
+      real, intent(in) :: h2ovmr (nlay,ncol)         ! H2O volume mixing ratio
+      real, intent(in) :: o3vmr  (nlay,ncol)         ! O3 volume mixing ratio
+      real, intent(in) :: co2vmr (nlay,ncol)         ! CO2 volume mixing ratio
+      real, intent(in) :: ch4vmr (nlay,ncol)         ! Methane volume mixing ratio
+      real, intent(in) :: o2vmr  (nlay,ncol)         ! Oxygen volume mixing ratio
 
       ! cloud optics flags
       ! ------------------
@@ -201,16 +210,22 @@ contains
 
       ! clouds
       ! ------
-      real, intent(in) :: cld    (ncol,nlay)         ! Cloud fraction
-      real, intent(in) :: ciwp   (ncol,nlay)         ! In-cloud ice water path (g/m2)
-      real, intent(in) :: clwp   (ncol,nlay)         ! In-cloud liquid water path (g/m2)
-      real, intent(in) :: rei    (ncol,nlay)         ! Cloud ice effective radius (microns)
-      real, intent(in) :: rel    (ncol,nlay)         ! Cloud water drop effective radius (microns)
+!     real, intent(in) :: cld    (ncol,nlay)         ! Cloud fraction
+!     real, intent(in) :: ciwp   (ncol,nlay)         ! In-cloud ice water path (g/m2)
+!     real, intent(in) :: clwp   (ncol,nlay)         ! In-cloud liquid water path (g/m2)
+!     real, intent(in) :: rei    (ncol,nlay)         ! Cloud ice effective radius (microns)
+!     real, intent(in) :: rel    (ncol,nlay)         ! Cloud water drop effective radius (microns)
+      real, intent(in) :: cld    (nlay,ncol)         ! Cloud fraction
+      real, intent(in) :: ciwp   (nlay,ncol)         ! In-cloud ice water path (g/m2)
+      real, intent(in) :: clwp   (nlay,ncol)         ! In-cloud liquid water path (g/m2)
+      real, intent(in) :: rei    (nlay,ncol)         ! Cloud ice effective radius (microns)
+      real, intent(in) :: rel    (nlay,ncol)         ! Cloud water drop effective radius (microns)
 
       ! cloud overlap (exponential)
       ! ---------------------------
       integer, intent(in) :: dyofyr                  ! Day of the year
-      real, intent(in) :: zm     (ncol,nlay)         ! Heights of level midpoints
+!     real, intent(in) :: zm     (ncol,nlay)         ! Heights of level midpoints
+      real, intent(in) :: zm     (nlay,ncol)         ! Heights of level midpoints
       real, intent(in) :: alat   (ncol)              ! Latitude of column [radians]
 
       ! aerosols (optical props, non-delta-scaled)
@@ -281,6 +296,9 @@ contains
       integer :: pncol
       integer :: STATUS  ! for MAPL error reporting
       
+      ! temp
+      _ASSERT(cols_last, 'not set up for NOT cols_last currently')
+
       ! ASSERTs to catch unphysical or invalid inputs
       _ASSERT(all(play   >= 0.), 'negative values in input:   play')
       _ASSERT(all(plev   >= 0.), 'negative values in input:   plev')
@@ -339,7 +357,7 @@ contains
       
       ! do partitions
       call rrtmg_sw_sub (MAPL, &
-         pncol, ncol, nlay, &
+         pncol, ncol, nlay, cols_last, &
          scon, adjes, coszen, isolvar, &
          play, plev, tlay, &
          h2ovmr, o3vmr, co2vmr, ch4vmr, o2vmr, &
@@ -364,7 +382,7 @@ contains
 
 
    subroutine rrtmg_sw_sub (MAPL, &
-      pncol, gncol, nlay, &
+      pncol, gncol, nlay, cols_last, &
       scon, adjes, gcoszen, isolvar, &
       gplay, gplev, gtlay, &
       gh2ovmr, go3vmr, gco2vmr, gch4vmr, go2vmr, &
@@ -407,6 +425,7 @@ contains
       integer, intent(in) :: pncol                     ! Nominal horiz cols in a partition
       integer, intent(in) :: gncol                     ! Global number of horizontal columns
       integer, intent(in) :: nlay                      ! Number of model layers
+      logical, intent(in) :: cols_last                 ! is column dimension last?
 
       ! orbit
       real, intent(in) :: scon                         ! Solar constant (W/m2)
@@ -420,31 +439,45 @@ contains
       real, intent(in), optional :: solcycfrac
 
       ! profile
-      real, intent(in) :: gplay   (gncol,nlay)         ! Layer pressures (hPa)
-      real, intent(in) :: gplev   (gncol,nlay+1)       ! Interface pressures (hPa)
-      real, intent(in) :: gtlay   (gncol,nlay)         ! Layer temperatures (K)
+!     real, intent(in) :: gplay   (gncol,nlay)         ! Layer pressures (hPa)
+!     real, intent(in) :: gplev   (gncol,nlay+1)       ! Interface pressures (hPa)
+!     real, intent(in) :: gtlay   (gncol,nlay)         ! Layer temperatures (K)
+      real, intent(in) :: gplay   (nlay,gncol)         ! Layer pressures (hPa)
+      real, intent(in) :: gplev   (nlay+1,gncol)       ! Interface pressures (hPa)
+      real, intent(in) :: gtlay   (nlay,gncol)         ! Layer temperatures (K)
 
       ! gases
-      real, intent(in) :: gh2ovmr (gncol,nlay)         ! H2O volume mixing ratio
-      real, intent(in) :: go3vmr  (gncol,nlay)         ! O3 volume mixing ratio
-      real, intent(in) :: gco2vmr (gncol,nlay)         ! CO2 volume mixing ratio
-      real, intent(in) :: gch4vmr (gncol,nlay)         ! Methane volume mixing ratio
-      real, intent(in) :: go2vmr  (gncol,nlay)         ! Oxygen volume mixing ratio
+!     real, intent(in) :: gh2ovmr (gncol,nlay)         ! H2O volume mixing ratio
+!     real, intent(in) :: go3vmr  (gncol,nlay)         ! O3 volume mixing ratio
+!     real, intent(in) :: gco2vmr (gncol,nlay)         ! CO2 volume mixing ratio
+!     real, intent(in) :: gch4vmr (gncol,nlay)         ! Methane volume mixing ratio
+!     real, intent(in) :: go2vmr  (gncol,nlay)         ! Oxygen volume mixing ratio
+      real, intent(in) :: gh2ovmr (nlay,gncol)         ! H2O volume mixing ratio
+      real, intent(in) :: go3vmr  (nlay,gncol)         ! O3 volume mixing ratio
+      real, intent(in) :: gco2vmr (nlay,gncol)         ! CO2 volume mixing ratio
+      real, intent(in) :: gch4vmr (nlay,gncol)         ! Methane volume mixing ratio
+      real, intent(in) :: go2vmr  (nlay,gncol)         ! Oxygen volume mixing ratio
 
       ! cloud optics flags
       integer, intent(in) :: iceflgsw                  ! Flag for ice particle specifn
       integer, intent(in) :: liqflgsw                  ! Flag for liquid droplet specifn
       
       ! clouds
-      real, intent(in) :: gcld    (gncol,nlay)         ! Cloud fraction
-      real, intent(in) :: gciwp   (gncol,nlay)         ! In-cloud ice water path (g/m2)
-      real, intent(in) :: gclwp   (gncol,nlay)         ! In-cloud liquid water path (g/m2)
-      real, intent(in) :: grei    (gncol,nlay)         ! Cloud ice effective radius (um)
-      real, intent(in) :: grel    (gncol,nlay)         ! Cloud drop effective radius (um)
+!     real, intent(in) :: gcld    (gncol,nlay)         ! Cloud fraction
+!     real, intent(in) :: gciwp   (gncol,nlay)         ! In-cloud ice water path (g/m2)
+!     real, intent(in) :: gclwp   (gncol,nlay)         ! In-cloud liquid water path (g/m2)
+!     real, intent(in) :: grei    (gncol,nlay)         ! Cloud ice effective radius (um)
+!     real, intent(in) :: grel    (gncol,nlay)         ! Cloud drop effective radius (um)
+      real, intent(in) :: gcld    (nlay,gncol)         ! Cloud fraction
+      real, intent(in) :: gciwp   (nlay,gncol)         ! In-cloud ice water path (g/m2)
+      real, intent(in) :: gclwp   (nlay,gncol)         ! In-cloud liquid water path (g/m2)
+      real, intent(in) :: grei    (nlay,gncol)         ! Cloud ice effective radius (um)
+      real, intent(in) :: grel    (nlay,gncol)         ! Cloud drop effective radius (um)
                                                       
       ! cloud overlap
       integer, intent(in) :: dyofyr                    ! Day of the year
-      real, intent(in) :: gzm     (gncol,nlay)         ! Heights of level midpoints
+!     real, intent(in) :: gzm     (gncol,nlay)         ! Heights of level midpoints
+      real, intent(in) :: gzm     (nlay,gncol)         ! Heights of level midpoints
       real, intent(in) :: galat   (gncol)              ! Latitudes of columns [radians]
                                               
       ! aerosols (optical props, non-delta-scaled)
@@ -921,7 +954,8 @@ contains
       ncol_cld = 0
       if (.not.do_FAR) then
          do gicol = 1,gncol
-            if (any(gcld(gicol,:) > 0)) then
+!           if (any(gcld(gicol,:) > 0)) then
+            if (any(gcld(:,gicol) > 0)) then
                ncol_cld = ncol_cld + 1
                gicol_cld(ncol_cld) = gicol
             else
@@ -931,7 +965,8 @@ contains
          end do
       else  ! FAR
          do gicol = 1,gncol
-            if (gtaucld_recalc(gicol)) Rgcldycol(gicol) = merge(1., 0., any(gcld(gicol,:) > 0))
+!           if (gtaucld_recalc(gicol)) Rgcldycol(gicol) = merge(1., 0., any(gcld(gicol,:) > 0))
+            if (gtaucld_recalc(gicol)) Rgcldycol(gicol) = merge(1., 0., any(gcld(:,gicol) > 0))
             if (Rgcldycol(gicol).ne.0.) then
                ncol_cld = ncol_cld + 1
                gicol_cld(ncol_cld) = gicol
@@ -1019,12 +1054,15 @@ contains
             enddo
           
             ! copy in partition (general)
-            ! note the implicit transpose!
+!           ! note the implicit transpose!
             do icol = 1,ncol
                gicol = idx(icol)
-               play(:,icol) = gplay(gicol,:)
-               plev(:,icol) = gplev(gicol,:)
-               tlay(:,icol) = gtlay(gicol,:)
+!              play(:,icol) = gplay(gicol,:)
+!              plev(:,icol) = gplev(gicol,:)
+!              tlay(:,icol) = gtlay(gicol,:)
+               play(:,icol) = gplay(:,gicol)
+               plev(:,icol) = gplev(:,gicol)
+               tlay(:,icol) = gtlay(:,gicol)
                coszen(icol) = gcoszen(gicol)
             enddo
 
@@ -1032,12 +1070,18 @@ contains
             if (cc == 2) then    
                do icol = 1,ncol
                   gicol = idx(icol)
-                  cld (:,icol) = gcld (gicol,:)
-                  ciwp(:,icol) = gciwp(gicol,:)
-                  clwp(:,icol) = gclwp(gicol,:)
-                  rei (:,icol) = grei (gicol,:) 
-                  rel (:,icol) = grel (gicol,:)
-                  zm  (:,icol) = gzm  (gicol,:)
+!                 cld (:,icol) = gcld (gicol,:)
+!                 ciwp(:,icol) = gciwp(gicol,:)
+!                 clwp(:,icol) = gclwp(gicol,:)
+!                 rei (:,icol) = grei (gicol,:) 
+!                 rel (:,icol) = grel (gicol,:)
+!                 zm  (:,icol) = gzm  (gicol,:)
+                  cld (:,icol) = gcld (:,gicol)
+                  ciwp(:,icol) = gciwp(:,gicol)
+                  clwp(:,icol) = gclwp(:,gicol)
+                  rei (:,icol) = grei (:,gicol) 
+                  rel (:,icol) = grel (:,gicol)
+                  zm  (:,icol) = gzm  (:,gicol)
                   alat  (icol) = galat(gicol)
                enddo
             end if
@@ -1057,11 +1101,16 @@ contains
             ! copy in partition (gases)
             do icol = 1,ncol
                gicol = idx(icol)
-               colh2o(:,icol) = gh2ovmr(gicol,:)
-               colco2(:,icol) = gco2vmr(gicol,:)
-               colo3 (:,icol) = go3vmr (gicol,:)
-               colch4(:,icol) = gch4vmr(gicol,:)
-               colo2 (:,icol) = go2vmr (gicol,:)   
+!              colh2o(:,icol) = gh2ovmr(gicol,:)
+!              colco2(:,icol) = gco2vmr(gicol,:)
+!              colo3 (:,icol) = go3vmr (gicol,:)
+!              colch4(:,icol) = gch4vmr(gicol,:)
+!              colo2 (:,icol) = go2vmr (gicol,:)   
+               colh2o(:,icol) = gh2ovmr(:,gicol)
+               colco2(:,icol) = gco2vmr(:,gicol)
+               colo3 (:,icol) = go3vmr (:,gicol)
+               colch4(:,icol) = gch4vmr(:,gicol)
+               colo2 (:,icol) = go2vmr (:,gicol)   
             end do
 
             ! copy in FAR taumol InOuts:
