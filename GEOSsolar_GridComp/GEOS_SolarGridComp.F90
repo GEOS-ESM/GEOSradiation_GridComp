@@ -3296,7 +3296,8 @@ contains
                ! pack 3D imports
                call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
                if (cols_last) then
-                  call PackItT(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  !call PackItT(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  call PackItTF(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                else
                   call PackIt (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                end if
@@ -4904,15 +4905,21 @@ contains
       if (cols_last) then
 
          do icol = 1,ncol
-            DPR(1:LM,icol) = PLE(2:LM+1,icol) - PLE(1:LM,icol)
+!           DPR(1:LM,icol) = PLE(2:LM+1,icol) - PLE(1:LM,icol)
+            DPR(1:LM,icol) = PLE(1:LM,icol) - PLE(2:LM+1,icol)
 
             ! cloud water paths converted from g/g to g/m^2
-            CICEWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,1)
-            CLIQWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,2)
+!           CICEWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,1)
+!           CLIQWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,2)
+            CICEWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,1)
+            CLIQWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,2)
+!pmn: eventually fix above to use MAPL_GRAV etc. when non-zdiff change
 
             ! cloud effective radii with limits imposed as assumed by RRTMG
-            REICE (1:LM,icol) = RR3(LM:1:-1,icol,1)
-            RELIQ (1:LM,icol) = RR3(LM:1:-1,icol,2)
+!           REICE (1:LM,icol) = RR3(LM:1:-1,icol,1)
+!           RELIQ (1:LM,icol) = RR3(LM:1:-1,icol,2)
+            REICE (1:LM,icol) = RR3(1:LM,icol,1)
+            RELIQ (1:LM,icol) = RR3(1:LM,icol,2)
          enddo
 
       else
@@ -4959,32 +4966,46 @@ contains
 
          do icol = 1,ncol
 
-            ! regular (non-flipped) interface temperatures
+!           ! regular (non-flipped) interface temperatures
+!           TLEV(2:LM,icol)=(T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) &
+!              / (DPR(1:LM-1,icol) + DPR(2:LM,icol))
+!           TLEV(LM+1,icol) = TS(icol)
+!           TLEV(   1,icol) = TLEV(2,icol)
+
+            ! flipped interface temperatures
             TLEV(2:LM,icol)=(T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) &
                / (DPR(1:LM-1,icol) + DPR(2:LM,icol))
-            TLEV(LM+1,icol) = TS(icol)
-            TLEV(   1,icol) = TLEV(2,icol)
+            TLEV(   1,icol) = TS(icol)
+            TLEV(LM+1,icol) = TLEV(LM,icol)
 
-            ! flip in vertical ...
+!           ! flip in vertical ...
 
-            PLE_R (1:LM+1,icol) = PLE (LM+1:1:-1,icol) / 100.  ! hPa
-            TLEV_R(1:LM+1,icol) = TLEV(LM+1:1:-1,icol)
+!           PLE_R (1:LM+1,icol) = PLE (LM+1:1:-1,icol) / 100.  ! hPa
+            PLE_R (1:LM+1,icol) = PLE (1:LM+1,icol) / 100.  ! hPa
+!           TLEV_R(1:LM+1,icol) = TLEV(LM+1:1:-1,icol)
+            TLEV_R(1:LM+1,icol) = TLEV(1:LM+1,icol)
 
-            PL_R  (1:LM  ,icol) = PL  (LM:1:-1,icol)   / 100.  ! hPa
-            T_R   (1:LM  ,icol) = T   (LM:1:-1,icol)
+!           PL_R  (1:LM  ,icol) = PL  (LM:1:-1,icol)   / 100.  ! hPa
+!           T_R   (1:LM  ,icol) = T   (LM:1:-1,icol)
+            PL_R  (1:LM  ,icol) = PL  (1:LM,icol)   / 100.  ! hPa
+            T_R   (1:LM  ,icol) = T   (1:LM,icol)
 
             ! Specific humidity is converted to Volume Mixing Ratio
-            Q_R   (1:LM  ,icol) = Q  (LM:1:-1,icol) / (1.-Q(LM:1:-1,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+!           Q_R   (1:LM  ,icol) = Q  (LM:1:-1,icol) / (1.-Q(LM:1:-1,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+            Q_R   (1:LM  ,icol) = Q  (1:LM,icol) / (1.-Q(1:LM,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
 
             ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
-            O3_R  (1:LM  ,icol) = O3 (LM:1:-1,icol) * (MAPL_AIRMW/MAPL_O3MW)
+!           O3_R  (1:LM  ,icol) = O3 (LM:1:-1,icol) * (MAPL_AIRMW/MAPL_O3MW)
+            O3_R  (1:LM  ,icol) = O3 (1:LM,icol) * (MAPL_AIRMW/MAPL_O3MW)
 
             ! chemistry and cloud fraction
             ! (cloud water paths and effective radii flipped already)
-            CH4_R (1:LM  ,icol) = CH4(LM:1:-1,icol)
+!           CH4_R (1:LM  ,icol) = CH4(LM:1:-1,icol)
+            CH4_R (1:LM  ,icol) = CH4(1:LM,icol)
             CO2_R (1:LM  ,icol) = CO2
             O2_R  (1:LM  ,icol) = O2
-            FCLD_R(1:LM  ,icol) = CL (LM:1:-1,icol)
+!           FCLD_R(1:LM  ,icol) = CL (LM:1:-1,icol)
+            FCLD_R(1:LM  ,icol) = CL (1:LM,icol)
 
             ! Layer mid-point heights relative to zero at index 1
             ZL_R(1,icol) = 0.
@@ -6671,6 +6692,7 @@ contains
 
     integer :: I, J, L, M
 
+    !05c2a,(05c2f)
     do L = 1,LM
       M = 1
       do J = 1,Hdim(2)
@@ -6683,7 +6705,68 @@ contains
       end do
     end do
 
+    ! Note: This non-flipping version (cf PackitTF below) is generally
+    ! called for 2D variables (LM=1), so an outer LM loop is prefered.
+    ! See related comment in PackItTF().
+    
+!   !05c3,(05c3f)
+!   M = 1
+!   do J = 1,Hdim(2)
+!     do I = 1,Hdim(1)
+!       if (MSK(I,J)) then
+!         do L = 1,LM
+!           Packed(L,M) = UnPacked(I,J,L)
+!         end do
+!         M = M+1
+!       end if
+!     end do
+!   end do
+
   end subroutine PackItT
+
+  ! Pack masked locations into buffer with Transpose and vertical Flip
+  subroutine PackItTF (Packed, UnPacked, MSK, Pdim, Hdim, LM)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM
+    real,    intent(INOUT) :: Packed(LM,Pdim)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+
+    integer :: I, J, L, M, LF
+
+    !05c2f
+    do L = 1,LM
+      LF = LM-L+1
+      M = 1
+      do J = 1,Hdim(2)
+        do I = 1,Hdim(1)
+          if (MSK(I,J)) then
+            Packed(LF,M) = UnPacked(I,J,L)
+            M = M+1
+          end if
+        end do
+      end do
+    end do
+
+    ! Note: putting the LM loop inside the mask saves redundant mask evaluations
+    ! and M increments, but costs redundant LF evaluations. It also changes the
+    ! non-contiguous access of memory from Packed above (with a stride of LM),
+    ! to Unpacked (which has a generally large stride of IM*JM, so may have
+    ! cache implications). The version above is *slighly* faster.
+    
+!   !05c3f
+!   M = 1
+!   do J = 1,Hdim(2)
+!     do I = 1,Hdim(1)
+!       if (MSK(I,J)) then
+!         do L = 1,LM
+!           Packed(L,M) = UnPacked(I,J,LM-L+1)
+!         end do
+!         M = M+1
+!       end if
+!     end do
+!   end do
+
+  end subroutine PackItTF
 
   ! Unpack masked locations from buffer
   subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)
