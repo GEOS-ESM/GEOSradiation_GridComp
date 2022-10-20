@@ -137,8 +137,6 @@ module GEOS_SolarGridCompMod
 ! CO2:                 CO2 concentration     (ppmv)     none      Use -1 for time-dependent values
 !
 !\end{verbatim}
-!
-! PMN: need comment on SOLAR_COLUMNS_LAST:
 
 ! !BUGS:
 !
@@ -1947,7 +1945,6 @@ contains
 
     real, pointer, dimension(:,:,:,:) :: &
        FAR_TAUA, FAR_SSAA, FAR_ASYA
-!PMN: TODO: cols_last for aerosols to
 
     integer :: band
     logical :: implements_aerosol_optics, update_aerosols
@@ -1997,7 +1994,7 @@ contains
     logical                        :: USE_NRLSSI2
     logical                        :: PersistSolar
 
-    logical :: do_no_aero_calc, do_FAR, cols_last_def, cols_last
+    logical :: do_no_aero_calc, do_FAR, cols_last, pack_flip
     real :: FAR_dt, FAR_aerosol_age_limit
     real :: FAR_taumol_age_limit, FAR_taucld_age_limit
 
@@ -2252,17 +2249,19 @@ contains
           "FAR_AEROSOL_AGE_LIMIT:", DEFAULT=3600., __RC__)
     end if
 
-    ! Change to columns last format (rather than inside RRTMG)?
-    cols_last_def = (do_FAR .and. USE_RRTMG)
-    call MAPL_GetResource (MAPL, cols_last, "SOLAR_COLUMNS_LAST:", &
-       DEFAULT=cols_last_def, __RC__)
-    ! only works with RRTMG for now ...
+!PMN: TODO: why only fopr do_FAR ???
+    ! Change to columns last format in Pack (rather than inside RRTMG)?
+    cols_last = (do_FAR .and. USE_RRTMG)
     if (cols_last) then
        _ASSERT(USE_RRTMG,'cols_last only currently works for RRTMG')
     end if
-    if (MAPL_AM_I_ROOT()) print *, 'cols_last: ', cols_last
-!   write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 1'
-!   call ESMF_VMBarrier(VM, __RC__)
+
+!PMN: TODO: why only fopr do_FAR ???
+    ! Flip vertical coordinate in Pack (rather than in RRTMG section)?
+    pack_flip = (do_FAR .and. USE_RRTMG)
+    if (pack_flip) then
+       _ASSERT(USE_RRTMG,'pack_flip only currently works for RRTMG')
+    end if
 
     ! Determine calling sequence ...
     ! This getresource is a kludge for now and needs to be fixed in the spec,
@@ -2751,6 +2750,7 @@ contains
       integer :: ICEFLGSW  ! Flag for ice particle specification
       integer :: LIQFLGSW  ! Flag for liquid droplet specification
 
+      real,    allocatable, dimension(:)     :: TLEVsk
       real,    allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
       real,    allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
       real,    allocatable, dimension(:,:,:) :: TAUAER, SSAAER, ASMAER
@@ -2769,6 +2769,7 @@ contains
       integer :: DYOFYR
       integer :: NCOL
       integer :: RPART, IAER, NORMFLX
+      real    :: TLEVk
 
       integer                   :: ISOLVAR
       real, dimension(2)        :: INDSOLVAR
@@ -2888,7 +2889,6 @@ contains
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
-!     real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
       real, pointer :: ptr2(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
       integer :: dims, NumLit, Num2do, num_aero_vars
       character(len=ESMF_MAXSTR) :: short_name
@@ -3226,6 +3226,7 @@ contains
          if (NamesInp(k)=="AERO") then
             i1aero = i1
 
+            ! Remember: FAR AERO case is handled instead through InOut Internals.
 !PMN: TODO: do cols_last for aerosols too
 
             _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
@@ -3296,10 +3297,17 @@ contains
                ! pack 3D imports
                call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
                if (cols_last) then
-                  !call PackItT(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  call PackItTF(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  if (pack_flip) then
+                     call PackItTF (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  else
+                     call PackItT  (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  end if
                else
-                  call PackIt (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  if (pack_flip) then
+                     call PackItF  (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  else
+                     call PackIt   (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  end if
                end if
                iN = i1 + NumMax*size(ptr3,3) - 1
 
@@ -3307,43 +3315,19 @@ contains
 
                ! pack auxilliary variables
                if (NamesInp(k) == 'Ig') then
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
                else if (NamesInp(k) == 'Jg') then
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
                else if (NamesInp(k) == 'LATS') then
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
                else if (NamesInp(k) == 'SLR') then
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
                else if (NamesInp(k) == 'ZTH') then
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
                else 
                   ! pack 2D imports
                   call ESMFL_StateGetPointerToData(IMPORT,ptr2,NamesInp(k),__RC__)
-                  if (cols_last) then
-                     call PackItT(BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt (BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
-                  end if
+                  call PackIt (BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
                end if
                iN = i1 + NumMax - 1
 
@@ -3950,7 +3934,6 @@ contains
       ! Prepare auxilliary variables
       ! ----------------------------
 
-!     allocate(RH(size(Q,1),size(Q,2)),__STAT__)   ! <<< not needed
       allocate(PL(size(Q,1),size(Q,2)),__STAT__)
       allocate(PLhPa(size(PLE,1),size(PLE,2)),__STAT__)
 
@@ -3959,7 +3942,6 @@ contains
       else
          PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
       end if
-!     RH = Q/MAPL_EQSAT(T,PL=PL)
       PLhPa = PLE * 0.01  ! hPa version for shrtwave
 
       ! Water amounts and effective radii are in arrays indexed by species
@@ -4826,255 +4808,8 @@ contains
          NCOL = size(Q,1)
       end if
 
-      ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
-      ! -------------------------------------------------------------------
-
-      ! interface (between layer) variables
-      allocate(TLEV  (size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(TLEV_R(size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(PLE_R (size(PLE,1),size(PLE,2)),__STAT__)
-      ! cloud physical properties
-      allocate(FCLD_R(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CICEWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
-      allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
-      ! aerosol optical properties
-!cols_last needed later ...
-      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
-      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
-      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
-      ! layer variables
-      allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(ZL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(T_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(Q_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O2_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O3_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CO2_R (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CH4_R (size(Q,1),size(Q,2)),__STAT__)
-      ! super-layer cloud fractions
-      allocate(CLEARCOUNTS (NCOL,4),__STAT__)
-      ! output fluxes
-!     allocate(SWUFLX (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLX (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWUFLXC(size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXC(size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(SWUFLX (NCOL,LM+1),__STAT__)
-      allocate(SWDFLX (NCOL,LM+1),__STAT__)
-      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
-      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
-      ! un-flipped outputs
-!     allocate(SWUFLXR (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXR (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWUFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
-      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
-      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
-      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
-
-      ! Set flags related to cloud properties (see RRTMG_SW)
-      ! ----------------------------------------------------
-
-      ICEFLGSW = 3
-      LIQFLGSW = 1
-
-      ! Normalize aerosol inputs
-      ! ------------------------
-
-      if (num_aero_vars > 0) then
-         where (TAUA > 0. .and. SSAA > 0. )
-            ASYA = ASYA/SSAA
-            SSAA = SSAA/TAUA
-         elsewhere
-            TAUA = 0.
-            SSAA = 0.
-            ASYA = 0.
-         end where
-      end if
-
-      ! Flip in vertical, Convert units, and interpolate T, etc.
-      ! --------------------------------------------------------
-      ! RRTMG convention is that vertical indices increase from bot->top
-      ! Note: FAR_TAU[RG] are already flipped
-
-      call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
-
-      if (cols_last) then
-
-         do icol = 1,ncol
-!           DPR(1:LM,icol) = PLE(2:LM+1,icol) - PLE(1:LM,icol)
-            DPR(1:LM,icol) = PLE(1:LM,icol) - PLE(2:LM+1,icol)
-
-            ! cloud water paths converted from g/g to g/m^2
-!           CICEWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,1)
-!           CLIQWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,2)
-            CICEWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,1)
-            CLIQWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,2)
-!pmn: eventually fix above to use MAPL_GRAV etc. when non-zdiff change
-
-            ! cloud effective radii with limits imposed as assumed by RRTMG
-!           REICE (1:LM,icol) = RR3(LM:1:-1,icol,1)
-!           RELIQ (1:LM,icol) = RR3(LM:1:-1,icol,2)
-            REICE (1:LM,icol) = RR3(1:LM,icol,1)
-            RELIQ (1:LM,icol) = RR3(1:LM,icol,2)
-         enddo
-
-      else
-
-         DPR(:,1:LM) = PLE(:,2:LM+1) - PLE(:,1:LM)
-
-         ! cloud water paths converted from g/g to g/m^2
-         CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
-         CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
-
-         ! cloud effective radii with limits imposed as assumed by RRTMG
-         REICE (:,1:LM) = RR3(:,LM:1:-1,1)
-         RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
-
-      end if
-
-      IF      (ICEFLGSW == 0) THEN
-         WHERE (REICE < 10.)  REICE = 10.
-         WHERE (REICE > 30.)  REICE = 30.
-      ELSE IF (ICEFLGSW == 1) THEN
-         WHERE (REICE < 13.)  REICE = 13.
-         WHERE (REICE > 130.) REICE = 130.
-      ELSE IF (ICEFLGSW == 2) THEN
-         WHERE (REICE < 5.)   REICE = 5.
-         WHERE (REICE > 131.) REICE = 131.
-      ELSE IF (ICEFLGSW == 3) THEN
-         WHERE (REICE < 5.)   REICE = 5.
-         WHERE (REICE > 140.) REICE = 140.
-      ELSE IF (ICEFLGSW == 4) THEN
-         REICE(:,:) = REICE(:,:)*2.
-         WHERE (REICE < 1.)   REICE = 1.
-         WHERE (REICE > 200.) REICE = 200.
-      END IF
-
-      IF      (LIQFLGSW == 0) THEN
-         WHERE (RELIQ < 10.)  RELIQ = 10.
-         WHERE (RELIQ > 30.)  RELIQ = 30.
-      ELSE IF (LIQFLGSW == 1) THEN
-         WHERE (RELIQ < 2.5)  RELIQ = 2.5
-         WHERE (RELIQ > 60.)  RELIQ = 60.
-      END IF
-
-      if (cols_last) then
-
-         do icol = 1,ncol
-
-!           ! regular (non-flipped) interface temperatures
-!           TLEV(2:LM,icol)=(T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) &
-!              / (DPR(1:LM-1,icol) + DPR(2:LM,icol))
-!           TLEV(LM+1,icol) = TS(icol)
-!           TLEV(   1,icol) = TLEV(2,icol)
-
-            ! flipped interface temperatures
-            TLEV(2:LM,icol)=(T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) &
-               / (DPR(1:LM-1,icol) + DPR(2:LM,icol))
-            TLEV(   1,icol) = TS(icol)
-            TLEV(LM+1,icol) = TLEV(LM,icol)
-
-!           ! flip in vertical ...
-
-!           PLE_R (1:LM+1,icol) = PLE (LM+1:1:-1,icol) / 100.  ! hPa
-            PLE_R (1:LM+1,icol) = PLE (1:LM+1,icol) / 100.  ! hPa
-!           TLEV_R(1:LM+1,icol) = TLEV(LM+1:1:-1,icol)
-            TLEV_R(1:LM+1,icol) = TLEV(1:LM+1,icol)
-
-!           PL_R  (1:LM  ,icol) = PL  (LM:1:-1,icol)   / 100.  ! hPa
-!           T_R   (1:LM  ,icol) = T   (LM:1:-1,icol)
-            PL_R  (1:LM  ,icol) = PL  (1:LM,icol)   / 100.  ! hPa
-            T_R   (1:LM  ,icol) = T   (1:LM,icol)
-
-            ! Specific humidity is converted to Volume Mixing Ratio
-!           Q_R   (1:LM  ,icol) = Q  (LM:1:-1,icol) / (1.-Q(LM:1:-1,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
-            Q_R   (1:LM  ,icol) = Q  (1:LM,icol) / (1.-Q(1:LM,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
-
-            ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
-!           O3_R  (1:LM  ,icol) = O3 (LM:1:-1,icol) * (MAPL_AIRMW/MAPL_O3MW)
-            O3_R  (1:LM  ,icol) = O3 (1:LM,icol) * (MAPL_AIRMW/MAPL_O3MW)
-
-            ! chemistry and cloud fraction
-            ! (cloud water paths and effective radii flipped already)
-!           CH4_R (1:LM  ,icol) = CH4(LM:1:-1,icol)
-            CH4_R (1:LM  ,icol) = CH4(1:LM,icol)
-            CO2_R (1:LM  ,icol) = CO2
-            O2_R  (1:LM  ,icol) = O2
-!           FCLD_R(1:LM  ,icol) = CL (LM:1:-1,icol)
-            FCLD_R(1:LM  ,icol) = CL (1:LM,icol)
-
-            ! Layer mid-point heights relative to zero at index 1
-            ZL_R(1,icol) = 0.
-            do k=2,LM
-               ! dz = RT/g x dp/p
-               ! Note: This is correct even though its different from LW.
-               ! Its because SW uses LE[V]_R 1:LM+1 while LW uses 0:LM.
-               ZL_R(k,icol) = ZL_R(k-1,icol) + MAPL_RGAS * TLEV_R(k,icol) / MAPL_GRAV * &
-                  (PL_R(k-1,icol) - PL_R(k,icol)) / PLE_R(k,icol)
-            enddo
-
-         enddo
-
-      else
-
-         ! regular (non-flipped) interface temperatures
-         TLEV(:,2:LM)=(T(:,1:LM-1) * DPR(:,2:LM) + T(:,2:LM) * DPR(:,1:LM-1)) &
-               / (DPR(:,1:LM-1) + DPR(:,2:LM))
-         TLEV(:,LM+1) = TS(:)
-         TLEV(:,   1) = TLEV(:,2)
-
-         ! flip in vertical ...
-
-         PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
-         TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
-
-         PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
-         T_R   (:,1:LM  ) = T   (:,LM:1:-1)
-
-         ! Specific humidity is converted to Volume Mixing Ratio
-         Q_R   (:,1:LM  ) = Q  (:,LM:1:-1) / (1.-Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW) 
-
-         ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
-         O3_R  (:,1:LM  ) = O3 (:,LM:1:-1) * (MAPL_AIRMW/MAPL_O3MW)
-
-         ! chemistry and cloud fraction
-         ! (cloud water paths and effective radii flipped already)
-         CH4_R (:,1:LM  ) = CH4(:,LM:1:-1)
-         CO2_R (:,1:LM  ) = CO2
-         O2_R  (:,1:LM  ) = O2
-         FCLD_R(:,1:LM  ) = CL (:,LM:1:-1)
-
-         ! Layer mid-point heights relative to zero at index 1
-         ZL_R(:,1) = 0.
-         do k=2,LM
-            ! dz = RT/g x dp/p
-            ! Note: This is correct even though its different from LW.
-            ! Its because SW uses LE[V]_R 1:LM+1 while LW uses 0:LM.
-            ZL_R(:,k) = ZL_R(:,k-1) + MAPL_RGAS*TLEV_R(:,k)/MAPL_GRAV*(PL_R(:,k-1)-PL_R(:,k))/PLE_R(:,k)
-         enddo
-
-      end if
-
       ! Adjustment for Earth/Sun distance, from MAPL_SunGetInsolation
       ADJES = DIST
-
-      ! aerosols
-      TAUAER(:,1:LM,:) = TAUA(:,LM:1:-1,:)
-      SSAAER(:,1:LM,:) = SSAA(:,LM:1:-1,:)
-      ASMAER(:,1:LM,:) = ASYA(:,LM:1:-1,:)
-
-      call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
-
-      ! initialize RRTMG SW
-      call MAPL_TimerOn (MAPL,"RRTMG_INIT",__RC__)
-      call RRTMG_SW_INI
-      call MAPL_TimerOff(MAPL,"RRTMG_INIT",__RC__)
-
-      call MAPL_TimerOn (MAPL,"RRTMG_RUN",__RC__)
 
       ! partition size for columns (profiles) used to improve efficiency
       call MAPL_GetResource( MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:',  DEFAULT=0, __RC__)
@@ -5174,33 +4909,358 @@ contains
 
       call MAPL_GetResource( MAPL, SOLCYCFRAC ,'SOLCYCFRAC:', DEFAULT=1.0, __RC__)
 
+      ! Set flags related to cloud properties (see RRTMG_SW)
+      ! ----------------------------------------------------
+
+      ICEFLGSW = 3
+      LIQFLGSW = 1
+
+      ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
+      ! -------------------------------------------------------------------
+
+      ! interface (between layer) variables
+      allocate(TLEVsk(NCOL),__STAT__)
+      allocate(TLEV  (size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(TLEV_R(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(PLE_R (size(PLE,1),size(PLE,2)),__STAT__)
+      ! cloud physical properties
+      allocate(FCLD_R(size(Q,1),size(Q,2)),__STAT__)
+      allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
+      allocate(CICEWP(size(Q,1),size(Q,2)),__STAT__)
+      allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
+      allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
+      ! aerosol optical properties
+!cols_last needed later ...
+      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
+      ! layer variables
+      allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
+      allocate(PL_R  (size(Q,1),size(Q,2)),__STAT__)
+      allocate(ZL_R  (size(Q,1),size(Q,2)),__STAT__)
+      allocate(T_R   (size(Q,1),size(Q,2)),__STAT__)
+      allocate(Q_R   (size(Q,1),size(Q,2)),__STAT__)
+      allocate(O2_R  (size(Q,1),size(Q,2)),__STAT__)
+      allocate(O3_R  (size(Q,1),size(Q,2)),__STAT__)
+      allocate(CO2_R (size(Q,1),size(Q,2)),__STAT__)
+      allocate(CH4_R (size(Q,1),size(Q,2)),__STAT__)
+      ! super-layer cloud fractions
+      allocate(CLEARCOUNTS (NCOL,4),__STAT__)
+      ! output fluxes
+!     allocate(SWUFLX (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLX (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWUFLXC(size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXC(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWUFLX (NCOL,LM+1),__STAT__)
+      allocate(SWDFLX (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
+      ! un-flipped outputs
+!     allocate(SWUFLXR (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXR (size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWUFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
+!     allocate(SWDFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
+
+      ! Normalize aerosol inputs
+      ! ------------------------
+
+      if (num_aero_vars > 0) then
+         where (TAUA > 0. .and. SSAA > 0. )
+            ASYA = ASYA/SSAA
+            SSAA = SSAA/TAUA
+         elsewhere
+            TAUA = 0.
+            SSAA = 0.
+            ASYA = 0.
+         end where
+      end if
+
+      ! Flip in vertical, Convert units, and interpolate T, etc.
+      ! --------------------------------------------------------
+      ! RRTMG convention is that vertical indices increase from bot->top
+      ! Note: FAR_TAU[RG] are already flipped
+
+      call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
+
+      if (cols_last) then
+
+         if (pack_flip) then
+            ! already flipped in pack so no need to do it here
+
+            do icol = 1,ncol
+               DPR(1:LM,icol) = PLE(1:LM,icol) - PLE(2:LM+1,icol)
+
+               ! cloud water paths converted from g/g to g/m^2
+               CICEWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,1)
+               CLIQWP(1:LM,icol) = (1.02*100*DPR(1:LM,icol))*QQ3(1:LM,icol,2)
+               !pmn: eventually fix above to use MAPL_GRAV etc. when non-zdiff change
+
+               ! cloud effective radii
+               REICE (1:LM,icol) = RR3(1:LM,icol,1)
+               RELIQ (1:LM,icol) = RR3(1:LM,icol,2)
+            enddo
+
+         else  ! need to flip here
+
+            do icol = 1,ncol
+               DPR(1:LM,icol) = PLE(2:LM+1,icol) - PLE(1:LM,icol)
+
+               ! cloud water paths converted from g/g to g/m^2
+               CICEWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,1)
+               CLIQWP(1:LM,icol) = (1.02*100*DPR(LM:1:-1,icol))*QQ3(LM:1:-1,icol,2)
+               !pmn: eventually fix above to use MAPL_GRAV etc. when non-zdiff change
+
+               ! cloud effective radii
+               REICE (1:LM,icol) = RR3(LM:1:-1,icol,1)
+               RELIQ (1:LM,icol) = RR3(LM:1:-1,icol,2)
+            enddo
+
+         end if
+
+      else  ! .not. cols_last
+
+         if (pack_flip) then
+            ! already flipped in pack so no need to do it here
+
+            DPR(:,1:LM) = PLE(:,1:LM) - PLE(:,2:LM+1)
+
+            ! cloud water paths converted from g/g to g/m^2
+            CICEWP(:,1:LM) = (1.02*100*DPR(:,1:LM))*QQ3(:,1:LM,1)
+            CLIQWP(:,1:LM) = (1.02*100*DPR(:,1:LM))*QQ3(:,1:LM,2)
+
+            ! cloud effective radii
+            REICE (:,1:LM) = RR3(:,1:LM,1)
+            RELIQ (:,1:LM) = RR3(:,1:LM,2)
+
+         else  ! need to flip here
+
+            DPR(:,1:LM) = PLE(:,2:LM+1) - PLE(:,1:LM)
+
+            ! cloud water paths converted from g/g to g/m^2
+            CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
+            CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
+
+            ! cloud effective radii
+            REICE (:,1:LM) = RR3(:,LM:1:-1,1)
+            RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
+
+         end if
+
+      end if
+
+      ! limits imposed as assumed by RRTMG
+      IF      (ICEFLGSW == 0) THEN
+         WHERE (REICE < 10.)  REICE = 10.
+         WHERE (REICE > 30.)  REICE = 30.
+      ELSE IF (ICEFLGSW == 1) THEN
+         WHERE (REICE < 13.)  REICE = 13.
+         WHERE (REICE > 130.) REICE = 130.
+      ELSE IF (ICEFLGSW == 2) THEN
+         WHERE (REICE < 5.)   REICE = 5.
+         WHERE (REICE > 131.) REICE = 131.
+      ELSE IF (ICEFLGSW == 3) THEN
+         WHERE (REICE < 5.)   REICE = 5.
+         WHERE (REICE > 140.) REICE = 140.
+      ELSE IF (ICEFLGSW == 4) THEN
+         REICE(:,:) = REICE(:,:)*2.
+         WHERE (REICE < 1.)   REICE = 1.
+         WHERE (REICE > 200.) REICE = 200.
+      END IF
+
+      IF      (LIQFLGSW == 0) THEN
+         WHERE (RELIQ < 10.)  RELIQ = 10.
+         WHERE (RELIQ > 30.)  RELIQ = 30.
+      ELSE IF (LIQFLGSW == 1) THEN
+         WHERE (RELIQ < 2.5)  RELIQ = 2.5
+         WHERE (RELIQ > 60.)  RELIQ = 60.
+      END IF
+
+      if (cols_last) then
+
+         if (pack_flip) then
+            ! already flipped in pack so no need to do it here
+
+            do icol = 1,ncol
+
+               ! Layer mid-point heights relative to zero at index 1
+               ZL_R(1,icol) = 0.
+               do k=2,LM
+                  ! dz = RT/g x dp/p
+                  TLEVk = (T(k-1,icol) * DPR(k,icol) + T(k,icol) * DPR(k-1,icol)) / &
+                          (              DPR(k,icol) +             DPR(k-1,icol))
+                  ZL_R(k,icol) = ZL_R(k-1,icol) + &
+                     MAPL_RGAS * TLEVk / MAPL_GRAV * (PL(k-1,icol) - PL(k,icol)) / PLE(k,icol)
+               enddo
+
+               ! Specific humidity is converted to Volume Mixing Ratio
+               Q_R(1:LM,icol) = Q(1:LM,icol) / (1. - Q(1:LM,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+               ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+               O3_R(1:LM,icol) = O3(1:LM,icol) * (MAPL_AIRMW/MAPL_O3MW)
+
+            enddo
+
+         else  ! need to flip here
+
+            do icol = 1,ncol
+
+               ! interface temperatures (non-flipped)
+               TLEV(2:LM,icol) = (T(1:LM-1,icol) * DPR(2:LM,icol) + T(2:LM,icol) * DPR(1:LM-1,icol)) / &
+                                 (                 DPR(2:LM,icol) +                DPR(1:LM-1,icol))
+
+               PLE_R (1:LM+1,icol) = PLE (LM+1:1:-1,icol) / 100.  ! hPa
+               TLEV_R(1:LM+1,icol) = TLEV(LM+1:1:-1,icol)
+
+               PL_R  (1:LM  ,icol) = PL  (LM:1:-1,icol)   / 100.  ! hPa
+               T_R   (1:LM  ,icol) = T   (LM:1:-1,icol)
+
+               ! Layer mid-point heights relative to zero at index 1
+               ZL_R(1,icol) = 0.
+               do k=2,LM
+                  ! dz = RT/g x dp/p
+                  ZL_R(k,icol) = ZL_R(k-1,icol) + MAPL_RGAS * TLEV_R(k,icol) / MAPL_GRAV * &
+                     (PL_R(k-1,icol) - PL_R(k,icol)) / PLE_R(k,icol)
+               enddo
+
+               ! Specific humidity is converted to Volume Mixing Ratio
+               Q_R   (1:LM  ,icol) = Q  (LM:1:-1,icol) / (1.-Q(LM:1:-1,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+               ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+               O3_R  (1:LM  ,icol) = O3 (LM:1:-1,icol) * (MAPL_AIRMW/MAPL_O3MW)
+
+               ! chemistry and cloud fraction
+               ! (cloud water paths and effective radii flipped already)
+               CH4_R (1:LM  ,icol) = CH4(LM:1:-1,icol)
+               FCLD_R(1:LM  ,icol) = CL (LM:1:-1,icol)
+
+            enddo
+
+         end if
+
+      else ! .not. cols_last
+
+         if (pack_flip) then
+            ! already flipped in pack so no need to do it here
+
+            ! Layer mid-point heights relative to zero at index 1
+            ZL_R(:,1) = 0.
+            do k=2,LM
+               ! dz = RT/g x dp/p
+               TLEVsk = (T(:,k-1) * DPR(:,k) + T(:,k) * DPR(:,k-1)) / &
+                        (           DPR(:,k) +          DPR(:,k-1))
+               ZL_R(:,k) = ZL_R(:,k-1) + &
+                  MAPL_RGAS * TLEVsk / MAPL_GRAV * (PL(:,k-1) - PL(:,k)) / PLE(:,k)
+            enddo
+
+            ! Specific humidity is converted to Volume Mixing Ratio
+            Q_R(:,1:LM) = Q(:,1:LM) / (1. - Q(:,1:LM)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+            ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+            O3_R(:,1:LM) = O3(:,1:LM) * (MAPL_AIRMW/MAPL_O3MW)
+
+         else  ! need to flip here
+
+            ! interface temperatures (non-flipped)
+            TLEV(:,2:LM) = (T(:,1:LM-1) * DPR(:,2:LM) + T(:,2:LM) * DPR(:,1:LM-1)) / &
+                           (              DPR(:,2:LM) +             DPR(:,1:LM-1))
+
+            PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
+            TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
+
+            PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
+            T_R   (:,1:LM  ) = T   (:,LM:1:-1)
+
+            ! Layer mid-point heights relative to zero at index 1
+            ZL_R(:,1) = 0.
+            do k=2,LM
+               ! dz = RT/g x dp/p
+               ZL_R(:,k) = ZL_R(:,k-1) + MAPL_RGAS * TLEV_R(:,k) / MAPL_GRAV * &
+                  (PL_R(:,k-1) - PL_R(:,k)) / PLE_R(:,k)
+            enddo
+
+            ! Specific humidity is converted to Volume Mixing Ratio
+            Q_R(:,1:LM) = Q(:,LM:1:-1) / (1. - Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW) 
+
+            ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
+            O3_R(:,1:LM) = O3 (:,LM:1:-1) * (MAPL_AIRMW/MAPL_O3MW)
+
+            ! chemistry and cloud fraction
+            ! (cloud water paths and effective radii flipped already)
+            CH4_R (:,1:LM) = CH4(:,LM:1:-1)
+            FCLD_R(:,1:LM) = CL (:,LM:1:-1)
+
+         end if
+
+      end if
+
+      ! assumed well mixed
+      CO2_R = CO2
+      O2_R  = O2
+
+      ! aerosols
+      TAUAER(:,1:LM,:) = TAUA(:,LM:1:-1,:)
+      SSAAER(:,1:LM,:) = SSAA(:,LM:1:-1,:)
+      ASMAER(:,1:LM,:) = ASYA(:,LM:1:-1,:)
+
+      call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
+
+      ! initialize RRTMG SW
+      call MAPL_TimerOn (MAPL,"RRTMG_INIT",__RC__)
+      call RRTMG_SW_INI
+      call MAPL_TimerOff(MAPL,"RRTMG_INIT",__RC__)
+
       ! call RRTMG SW
       ! -------------
 
-!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 4'
+      call MAPL_TimerOn (MAPL,"RRTMG_RUN",__RC__)
 
-      call RRTMG_SW ( MAPL, &
-         RPART, NCOL, LM, cols_last, &
-         SC, ADJES, ZT, ISOLVAR, &
-         PL_R, PLE_R, T_R, &
-         Q_R, O3_R, CO2_R, CH4_R, O2_R, &
-         ICEFLGSW, LIQFLGSW, &
-         FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, &
-         DYOFYR, ZL_R, ALAT, &
-         IAER, TAUAER, SSAAER, ASMAER, &
-         ALBVR, ALBVF, ALBNR, ALBNF, &
-         LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
-         CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
-         NIRR, NIRF, PARR, PARF, UVRR, UVRF,&
-         TAUTP, TAUHP, TAUMP, TAULP, &
-         do_FAR, FAR_TAUMOL_AGE, FAR_taumol_age_limit, &
-         FAR_TAUR, FAR_TAUG, FAR_SFLXZEN, FAR_SSI, &
-         FAR_TAUCLD_AGE, FAR_taucld_age_limit, &
-         FAR_CLDYCOL, FAR_CLDYMC, FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC, &
-         BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
-         __RC__)
-
-!     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 5'
+      if (pack_flip) then
+         call RRTMG_SW (MAPL, &
+            RPART, NCOL, LM, cols_last, &
+            SC, ADJES, ZT, ISOLVAR, &
+            PL/100., PLE/100., T, &
+            Q_R, O3_R, CO2_R, CH4, O2_R, &
+            ICEFLGSW, LIQFLGSW, &
+            CL, CICEWP, CLIQWP, REICE, RELIQ, &
+            DYOFYR, ZL_R, ALAT, &
+            IAER, TAUAER, SSAAER, ASMAER, &
+            ALBVR, ALBVF, ALBNR, ALBNF, &
+            LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
+            CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
+            NIRR, NIRF, PARR, PARF, UVRR, UVRF,&
+            TAUTP, TAUHP, TAUMP, TAULP, &
+            do_FAR, FAR_TAUMOL_AGE, FAR_taumol_age_limit, &
+            FAR_TAUR, FAR_TAUG, FAR_SFLXZEN, FAR_SSI, &
+            FAR_TAUCLD_AGE, FAR_taucld_age_limit, &
+            FAR_CLDYCOL, FAR_CLDYMC, FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC, &
+            BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+            __RC__)
+      else
+         call RRTMG_SW (MAPL, &
+            RPART, NCOL, LM, cols_last, &
+            SC, ADJES, ZT, ISOLVAR, &
+            PL_R, PLE_R, T_R, &
+            Q_R, O3_R, CO2_R, CH4_R, O2_R, &
+            ICEFLGSW, LIQFLGSW, &
+            FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, &
+            DYOFYR, ZL_R, ALAT, &
+            IAER, TAUAER, SSAAER, ASMAER, &
+            ALBVR, ALBVF, ALBNR, ALBNF, &
+            LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
+            CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
+            NIRR, NIRF, PARR, PARF, UVRR, UVRF,&
+            TAUTP, TAUHP, TAUMP, TAULP, &
+            do_FAR, FAR_TAUMOL_AGE, FAR_taumol_age_limit, &
+            FAR_TAUR, FAR_TAUG, FAR_SFLXZEN, FAR_SSI, &
+            FAR_TAUCLD_AGE, FAR_taucld_age_limit, &
+            FAR_CLDYCOL, FAR_CLDYMC, FAR_TAUCMC, FAR_SSACMC, FAR_ASMCMC, FAR_TAORMC, &
+            BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+            __RC__)
+      end if
 
       call MAPL_TimerOff(MAPL,"RRTMG_RUN",__RC__)
       call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
@@ -5239,6 +5299,7 @@ contains
 
       ! Deallocate the working inputs
       !------------------------------
+      deallocate(TLEVsk,__STAT__)
       deallocate(TLEV  ,__STAT__)
       deallocate(TLEV_R,__STAT__)
       deallocate(PLE_R ,__STAT__)
@@ -5284,7 +5345,6 @@ contains
       ! Deallocate the working inputs
       !------------------------------
 
-!     deallocate (PL, RH, PLhPa)
       deallocate (PL, PLhPa)
       deallocate (QQ3, RR3)
       deallocate (O3)
@@ -5952,7 +6012,7 @@ contains
       real, pointer, dimension(:,:  ) :: ALBEDO
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
 
-      real, pointer, dimension(:,:,:)   :: FCLD, CLIN !, RH
+      real, pointer, dimension(:,:,:)   :: FCLD, CLIN
       real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
       real, pointer, dimension(:,:,:)   :: RRL, RRI, RRR, RRS
       real, pointer, dimension(:,:,:)   :: RQL, RQI, RQR, RQS
@@ -6660,6 +6720,7 @@ contains
 
   end subroutine RUN
 
+!PMN: consider making these like PackitT without *
   ! Pack masked locations into buffer
   subroutine PackIt (Packed, UnPacked, MSK, Pdim, Udim, LM)
     integer, intent(IN   ) :: Pdim, Udim(2), LM
@@ -6683,6 +6744,31 @@ contains
 
   end subroutine PackIt
 
+!PMN: consider making these like PackitT without *
+  ! Pack masked locations into buffer with vertical flip
+  subroutine PackItF (Packed, UnPacked, MSK, Pdim, Udim, LM)
+    integer, intent(IN   ) :: Pdim, Udim(2), LM
+    real,    intent(INOUT) ::   Packed(Pdim,*)
+    real,    intent(IN   ) :: UnPacked(Udim(1),Udim(2),*)
+    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
+
+    integer :: I, J, L, M, LF
+
+    do L = 1,LM
+      LF = LM-L+1
+      M = 1
+      do J = 1,Udim(2)
+        do I = 1,Udim(1)
+          if (MSK(I,J)) then
+            Packed(M,LF) = UnPacked(I,J,L)
+            M = M+1
+          end if
+        end do
+      end do
+    end do
+
+  end subroutine PackItF
+
   ! Pack masked locations into buffer with Transpose
   subroutine PackItT (Packed, UnPacked, MSK, Pdim, Hdim, LM)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM
@@ -6692,7 +6778,6 @@ contains
 
     integer :: I, J, L, M
 
-    !05c2a,(05c2f)
     do L = 1,LM
       M = 1
       do J = 1,Hdim(2)
@@ -6709,19 +6794,6 @@ contains
     ! called for 2D variables (LM=1), so an outer LM loop is prefered.
     ! See related comment in PackItTF().
     
-!   !05c3,(05c3f)
-!   M = 1
-!   do J = 1,Hdim(2)
-!     do I = 1,Hdim(1)
-!       if (MSK(I,J)) then
-!         do L = 1,LM
-!           Packed(L,M) = UnPacked(I,J,L)
-!         end do
-!         M = M+1
-!       end if
-!     end do
-!   end do
-
   end subroutine PackItT
 
   ! Pack masked locations into buffer with Transpose and vertical Flip
@@ -6733,7 +6805,6 @@ contains
 
     integer :: I, J, L, M, LF
 
-    !05c2f
     do L = 1,LM
       LF = LM-L+1
       M = 1
@@ -6753,19 +6824,6 @@ contains
     ! to Unpacked (which has a generally large stride of IM*JM, so may have
     ! cache implications). The version above is *slighly* faster.
     
-!   !05c3f
-!   M = 1
-!   do J = 1,Hdim(2)
-!     do I = 1,Hdim(1)
-!       if (MSK(I,J)) then
-!         do L = 1,LM
-!           Packed(L,M) = UnPacked(I,J,LM-L+1)
-!         end do
-!         M = M+1
-!       end if
-!     end do
-!   end do
-
   end subroutine PackItTF
 
   ! Unpack masked locations from buffer
