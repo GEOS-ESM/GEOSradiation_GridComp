@@ -2762,6 +2762,11 @@ contains
       real, parameter :: N2 = 0.7906400E+00 ! approx from rrtmgp input file
       real, parameter :: CO = 0.0           ! currently zero
 
+      ! precalculated constants
+      real, parameter :: RoG = MAPL_RGAS / MAPL_GRAV
+      real, parameter :: rh2o = MAPL_AIRMW / MAPL_H2OMW
+      real, parameter :: ro3  = MAPL_AIRMW / MAPL_O3MW
+
       real    :: ADJES, DIST
       integer :: DYOFYR
       integer :: NCOL
@@ -5021,14 +5026,14 @@ contains
             TLEVk = (T(k-1,icol) * DPR(k,icol) + T(k,icol) * DPR(k-1,icol)) / &
                     (              DPR(k,icol) +             DPR(k-1,icol))
             ZL_R(k,icol) = ZL_R(k-1,icol) + &
-               MAPL_RGAS * TLEVk / MAPL_GRAV * (PL(k-1,icol) - PL(k,icol)) / PLE(k,icol)
+               RoG * TLEVk * (PL(k-1,icol) - PL(k,icol)) / PLE(k,icol)
          enddo
 
          ! Specific humidity is converted to Volume Mixing Ratio
-         Q_R(1:LM,icol) = Q(1:LM,icol) / (1. - Q(1:LM,icol)) * (MAPL_AIRMW/MAPL_H2OMW) 
+         Q_R(1:LM,icol) = Q(1:LM,icol) / (1. - Q(1:LM,icol)) * rh2o
 
          ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
-         O3_R(1:LM,icol) = O3(1:LM,icol) * (MAPL_AIRMW/MAPL_O3MW)
+         O3_R(1:LM,icol) = O3(1:LM,icol) * ro3 
 
       enddo
 
