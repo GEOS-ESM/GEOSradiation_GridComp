@@ -2476,6 +2476,7 @@ contains
 
              ! compute aerosol optics at all solar bands
              SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
+
                 call ESMF_AttributeSet(AERO, &
                    name='band_for_aerosol_optics', &
                    value=(BANDS_SOLAR_OFFSET+band),__RC__)
@@ -3242,7 +3243,7 @@ contains
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
                BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3253,7 +3254,7 @@ contains
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
                BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3264,7 +3265,7 @@ contains
             BUF_AEROSOL = MAPL_UNDEF
             do j=1,NUM_BANDS_SOLAR
                BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
             end do
             iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
             ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
@@ -3298,17 +3299,9 @@ contains
                ! pack 3D imports
                call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
                if (cols_last) then
-                  if (pack_flip) then
-                     call PackItTF (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  else
-                     call PackItT  (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  end if
+                  call PackIt3dT (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
                else
-                  if (pack_flip) then
-                     call PackItF  (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  else
-                     call PackIt   (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  end if
+                  call PackIt3d  (BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
                end if
                iN = i1 + NumMax*size(ptr3,3) - 1
 
@@ -3316,19 +3309,19 @@ contains
 
                ! pack auxilliary variables
                if (NamesInp(k) == 'Ig') then
-                  call PackIt (BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),real(Ig),daytime,NumMax,HorzDims)
                else if (NamesInp(k) == 'Jg') then
-                  call PackIt (BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),real(Jg),daytime,NumMax,HorzDims)
                else if (NamesInp(k) == 'LATS') then
-                  call PackIt (BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),LATS,    daytime,NumMax,HorzDims)
                else if (NamesInp(k) == 'SLR') then
-                  call PackIt (BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),SLR,     daytime,NumMax,HorzDims)
                else if (NamesInp(k) == 'ZTH') then
-                  call PackIt (BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),ZTH,     daytime,NumMax,HorzDims)
                else 
                   ! pack 2D imports
                   call ESMFL_StateGetPointerToData(IMPORT,ptr2,NamesInp(k),__RC__)
-                  call PackIt (BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
+                  call PackIt2d (BufInp(i1),ptr2,daytime,NumMax,HorzDims)
                end if
                iN = i1 + NumMax - 1
 
@@ -3726,22 +3719,20 @@ contains
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
                   do j=1,ugDim(k)
-!pmn compiler        call PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
                      if (IntInOut(k)) then
-                        call PackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                        call PackIt3d(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3),.false.)
                      else
-                        call PackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                        call PackIt3d(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3),.false.)
                      endif
                   end do
                   piN = pi1 + NumMax*size(ptr4,3)*ugDim(k) - 1
                   ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
                   if (IntInOut(k)) then
-                     call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                     call PackIt3d(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
                   else
-                     call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                     call PackIt3d(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
                   endif
                   piN = pi1 + NumMax*ugDim(k) - 1
                   ptr2(1:NumMax,1:ugDim(k)) => Buf(pi1:piN)
@@ -3752,20 +3743,18 @@ contains
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                   if (IntInOut(k)) then
-                     call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                     call PackIt3d(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),.false.)
                   else
-                     call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                     call PackIt3d(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),.false.)
                   endif
                   piN = pi1 + NumMax*size(ptr3,3) - 1
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
                   if (IntInOut(k)) then
-                     call PackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
+                     call PackIt2d(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims)
                   else
-                     call PackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1)
+                     call PackIt2d(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims)
                   endif
                   piN = pi1 + NumMax - 1
             end select
@@ -6527,111 +6516,112 @@ contains
 
   end subroutine RUN
 
-!PMN: consider making these like PackitT without *
   ! Pack masked locations into buffer
-  subroutine PackIt (Packed, UnPacked, MSK, Pdim, Udim, LM)
-    integer, intent(IN   ) :: Pdim, Udim(2), LM
-    real,    intent(INOUT) ::   Packed(Pdim,*)
-    real,    intent(IN   ) :: UnPacked(Udim(1),Udim(2),*)
-    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
+  subroutine PackIt2d (Packed, UnPacked, MSK, Pdim, Hdim)
+    integer, intent(IN   ) :: Pdim, Hdim(2)
+    real,    intent(INOUT) ::   Packed(Pdim)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
 
-    integer :: I, J, L, M
+    integer :: I, J, M
 
-    do L = 1,LM
-      M = 1
-      do J = 1,Udim(2)
-        do I = 1,Udim(1)
-          if (MSK(I,J)) then
-            Packed(M,L) = UnPacked(I,J,L)
-            M = M+1
-          end if
-        end do
+    M = 1
+    do J = 1,Hdim(2)
+      do I = 1,Hdim(1)
+        if (MSK(I,J)) then
+          Packed(M) = UnPacked(I,J)
+          M = M+1
+        end if
       end do
     end do
 
-  end subroutine PackIt
+  end subroutine PackIt2d
 
-!PMN: consider making these like PackitT without *
-  ! Pack masked locations into buffer with vertical flip
-  subroutine PackItF (Packed, UnPacked, MSK, Pdim, Udim, LM)
-    integer, intent(IN   ) :: Pdim, Udim(2), LM
-    real,    intent(INOUT) ::   Packed(Pdim,*)
-    real,    intent(IN   ) :: UnPacked(Udim(1),Udim(2),*)
-    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
+  ! Pack masked locations into buffer.
+  ! pack_flip flips the vertical dimension.
+  subroutine PackIt3d (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM
+    real,    intent(INOUT) ::   Packed(Pdim,LM)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
 
-    integer :: I, J, L, M, LF
+    integer :: I, J, L, LF, M
 
-    do L = 1,LM
-      LF = LM-L+1
-      M = 1
-      do J = 1,Udim(2)
-        do I = 1,Udim(1)
-          if (MSK(I,J)) then
-            Packed(M,LF) = UnPacked(I,J,L)
-            M = M+1
-          end if
+    if (pack_flip) then
+      do L = 1,LM
+        LF = LM-L+1
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              Packed(M,LF) = UnPacked(I,J,L)
+              M = M+1
+            end if
+          end do
         end do
       end do
-    end do
+    else
+      do L = 1,LM
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              Packed(M,L) = UnPacked(I,J,L)
+              M = M+1
+            end if
+          end do
+        end do
+      end do
+    end if
 
-  end subroutine PackItF
+  end subroutine PackIt3d
 
-  ! Pack masked locations into buffer with Transpose
-  subroutine PackItT (Packed, UnPacked, MSK, Pdim, Hdim, LM)
+  ! Pack masked locations into buffer with transpose to cols_last.
+  ! pack_flip flips the vertical dimension.
+  subroutine PackIt3dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM
     real,    intent(INOUT) :: Packed(LM,Pdim)
     real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM)
     logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
 
-    integer :: I, J, L, M
+    integer :: I, J, L, LF, M
 
-    do L = 1,LM
-      M = 1
-      do J = 1,Hdim(2)
-        do I = 1,Hdim(1)
-          if (MSK(I,J)) then
-            Packed(L,M) = UnPacked(I,J,L)
-            M = M+1
-          end if
+    if (pack_flip) then
+      do L = 1,LM
+        LF = LM-L+1
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              Packed(LF,M) = UnPacked(I,J,L)
+              M = M+1
+            end if
+          end do
         end do
       end do
-    end do
-
-    ! Note: This non-flipping version (cf PackitTF below) is generally
-    ! called for 2D variables (LM=1), so an outer LM loop is prefered.
-    ! See related comment in PackItTF().
-    
-  end subroutine PackItT
-
-  ! Pack masked locations into buffer with Transpose and vertical Flip
-  subroutine PackItTF (Packed, UnPacked, MSK, Pdim, Hdim, LM)
-    integer, intent(IN   ) :: Pdim, Hdim(2), LM
-    real,    intent(INOUT) :: Packed(LM,Pdim)
-    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM)
-    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
-
-    integer :: I, J, L, M, LF
-
-    do L = 1,LM
-      LF = LM-L+1
-      M = 1
-      do J = 1,Hdim(2)
-        do I = 1,Hdim(1)
-          if (MSK(I,J)) then
-            Packed(LF,M) = UnPacked(I,J,L)
-            M = M+1
-          end if
+    else
+      do L = 1,LM
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              Packed(L,M) = UnPacked(I,J,L)
+              M = M+1
+            end if
+          end do
         end do
       end do
-    end do
+    end if
 
     ! Note: putting the LM loop inside the mask saves redundant mask evaluations
-    ! and M increments, but costs redundant LF evaluations. It also changes the
-    ! non-contiguous access of memory from Packed above (with a stride of LM),
-    ! to Unpacked (which has a generally large stride of IM*JM, so may have
+    ! and M increments, but for pack_flip costs redundant LF evaluations. It also
+    ! changes the non-contiguous access of memory from Packed (with a stride of
+    ! LM), to Unpacked (which has a generally large stride of IM*JM, so may have
     ! cache implications). The version above is *slighly* faster.
     
-  end subroutine PackItTF
+  end subroutine PackIt3dT
 
   ! Unpack masked locations from buffer
   subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)
