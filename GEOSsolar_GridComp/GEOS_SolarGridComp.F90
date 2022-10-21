@@ -2884,7 +2884,6 @@ contains
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_EXT => null()
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_SSA => null()
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_ASY => null()
-      real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
       integer :: I, J, K, L, i1, iN, M, i1aero
@@ -3229,66 +3228,61 @@ contains
             i1aero = i1
 
             ! Remember: FAR AERO case is handled instead through InOut Internals.
-!PMN: TODO: do cols_last for aerosols too
 
             _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
             _ASSERT(size(AEROSOL_SSA,3)==LM,'mal-dimensioned AEROSOL_SSA')
             _ASSERT(size(AEROSOL_ASY,3)==LM,'mal-dimensioned AEROSOL_ASY')
 
-            allocate(BUF_AEROSOL(size(AEROSOL_EXT,1), &
-                                 size(AEROSOL_EXT,2), &
-                                 size(AEROSOL_EXT,3)), __STAT__)
-
             ! pack extinctions
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
-               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
+            if (cols_last) then
+               call PackIt4dT (BufInp(i1),AEROSOL_EXT,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:LM,1:NUM_BANDS_SOLAR,1:NumMax) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_EXT => ptr3(:,:,1:Num2do)
+            else
+               call PackIt4d (BufInp(i1),AEROSOL_EXT,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
+            end if
 
             ! pack single scattering albedos
             i1 = iN + 1
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
-               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
-               
+            if (cols_last) then
+               call PackIt4dT (BufInp(i1),AEROSOL_SSA,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:LM,1:NUM_BANDS_SOLAR,1:NumMax) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_SSA => ptr3(:,:,1:Num2do)
+            else
+               call PackIt4d (BufInp(i1),AEROSOL_SSA,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
+            end if
+
             ! pack asymmetry factors
             i1 = iN + 1
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
-               call PackIt3d(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM,.false.)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
-
-            deallocate(BUF_AEROSOL, __STAT__)
+            if (cols_last) then
+               call PackIt4dT (BufInp(i1),AEROSOL_ASY,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:LM,1:NUM_BANDS_SOLAR,1:NumMax) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_ASY => ptr3(:,:,1:Num2do)
+            else
+               call PackIt4d (BufInp(i1),AEROSOL_ASY,daytime,NumMax,HorzDims,LM,NUM_BANDS_SOLAR,pack_flip)
+               iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+               BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
+            end if
 
             ! load balancing is done here for cols_last case
             if (cols_last .and. .not. do_FAR) then
 
-               ! currently aerosols are NOT reordered column last
+               ! can do all three together because inSize is constant
                call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-               call MAPL_BalanceWork (BufInp(i1aero:iN), NumMax, &
-                  Direction=MAPL_Distribute, Handle=SolarBalanceHandle, __RC__)
+               call MAPL_BalanceWork (BufInp(i1aero:iN), iN-i1+1, &
+                  Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
+                  inSize = LM * NUM_BANDS_SOLAR, __RC__)
                call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
-
-!     when aerosols reordered column last (because insize is constant)
-!     but need mods to above first to do reordering
-!              call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-!              call MAPL_BalanceWork (BufInp(iaero1:iN), iN-i1+1 &
-!                 Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
-!                 inSize = LM * NUM_BANDS_SOLAR, __RC__)
-!              call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
 
             end if
 
@@ -6622,6 +6616,101 @@ contains
     ! cache implications). The version above is *slighly* faster.
     
   end subroutine PackIt3dT
+
+  ! Pack masked locations into buffer.
+  ! pack_flip flips the vertical dimension.
+  subroutine PackIt4d (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
+    real,    intent(INOUT) ::   Packed(Pdim,LM,FD)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM,FD)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
+
+    integer :: I, J, L, LF, M, Q
+
+    if (pack_flip) then
+      do Q = 1,FD
+        do L = 1,LM
+          LF = LM-L+1
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                Packed(M,LF,Q) = UnPacked(I,J,L,Q)
+                M = M+1
+              end if
+            end do
+          end do
+        end do
+      end do
+    else
+      do Q = 1,FD
+        do L = 1,LM
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                Packed(M,L,Q) = UnPacked(I,J,L,Q)
+                M = M+1
+              end if
+            end do
+          end do
+        end do
+      end do
+    end if
+
+  end subroutine PackIt4d
+
+  ! Pack masked locations into buffer with transpose to cols_last.
+  ! pack_flip flips the vertical dimension.
+  subroutine PackIt4dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
+    real,    intent(INOUT) :: Packed(LM,FD,Pdim)
+    real,    intent(IN   ) :: UnPacked(Hdim(1),Hdim(2),LM,FD)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
+
+    integer :: I, J, L, LF, M, Q
+
+    if (pack_flip) then
+      do Q = 1,FD
+        do L = 1,LM
+          LF = LM-L+1
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                Packed(LF,Q,M) = UnPacked(I,J,L,Q)
+                M = M+1
+              end if
+            end do
+          end do
+        end do
+      end do
+    else
+      do Q = 1,FD
+        do L = 1,LM
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                Packed(L,Q,M) = UnPacked(I,J,L,Q)
+                M = M+1
+              end if
+            end do
+          end do
+        end do
+      end do
+    end if
+
+    ! Note: putting the LM loop inside the mask saves redundant mask evaluations
+    ! and M increments, but for pack_flip costs redundant LF evaluations. It also
+    ! changes the non-contiguous access of memory from Packed (with a stride of
+    ! LM), to Unpacked (which has a generally large stride of IM*JM, so may have
+    ! cache implications). The version above is *slighly* faster.
+!pmn: modify ... this has large strides in Packed TODO <<<<<<<<<<<<<<<<<<<<<<<<<<<
+    
+  end subroutine PackIt4dT
 
   ! Unpack masked locations from buffer
   subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)
