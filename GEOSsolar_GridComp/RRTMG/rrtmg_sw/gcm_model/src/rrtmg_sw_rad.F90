@@ -231,9 +231,12 @@ contains
       ! aerosols (optical props, non-delta-scaled)
       ! ------------------------------------------
       integer, intent(in) :: iaer                    ! aerosol flag (0=off, 10=on)
-      real, intent(in) :: tauaer (ncol,nlay,nbndsw)  ! aer optical depth      (iaer=10 only)
-      real, intent(in) :: ssaaer (ncol,nlay,nbndsw)  ! aer single scat albedo (iaer=10 only)
-      real, intent(in) :: asmaer (ncol,nlay,nbndsw)  ! aer asymmetry param    (iaer=10 only)
+!     real, intent(in) :: tauaer (ncol,nlay,nbndsw)  ! aer optical depth      (iaer=10 only)
+!     real, intent(in) :: ssaaer (ncol,nlay,nbndsw)  ! aer single scat albedo (iaer=10 only)
+!     real, intent(in) :: asmaer (ncol,nlay,nbndsw)  ! aer asymmetry param    (iaer=10 only)
+      real, intent(in) :: tauaer (nlay,nbndsw,ncol)  ! aer optical depth      (iaer=10 only)
+      real, intent(in) :: ssaaer (nlay,nbndsw,ncol)  ! aer single scat albedo (iaer=10 only)
+      real, intent(in) :: asmaer (nlay,nbndsw,ncol)  ! aer asymmetry param    (iaer=10 only)
 
       ! surface albedos
       ! ---------------
@@ -261,10 +264,14 @@ contains
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: clearCounts(ncol,4)
 
-      real, intent(out) :: swuflx  (ncol,nlay+1)     !   All-sky SW up   flux (W/m2)
-      real, intent(out) :: swdflx  (ncol,nlay+1)     !   All-sky SW down flux (W/m2)
-      real, intent(out) :: swuflxc (ncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
-      real, intent(out) :: swdflxc (ncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
+!     real, intent(out) :: swuflx  (ncol,nlay+1)     !   All-sky SW up   flux (W/m2)
+!     real, intent(out) :: swdflx  (ncol,nlay+1)     !   All-sky SW down flux (W/m2)
+!     real, intent(out) :: swuflxc (ncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
+!     real, intent(out) :: swdflxc (ncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
+      real, intent(out) :: swuflx  (nlay+1,ncol)     !   All-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflx  (nlay+1,ncol)     !   All-sky SW down flux (W/m2)
+      real, intent(out) :: swuflxc (nlay+1,ncol)     ! Clear-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflxc (nlay+1,ncol)     ! Clear-sky SW down flux (W/m2)
 
       ! Output added for Land/Surface process (all-sky)
       real, intent(out) :: nirr    (ncol)            ! Near-IR direct  down SW flux (W/m2)
@@ -482,9 +489,12 @@ contains
                                               
       ! aerosols (optical props, non-delta-scaled)
       integer, intent(in) :: iaer                      ! aerosol flag (0=off, 10=on)
-      real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)    
-      real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)    
-      real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)    
+!     real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)    
+!     real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)    
+!     real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)    
+      real, intent(in) :: gtauaer (nlay,nbndsw,gncol)  ! aer optical depth   (iaer=10 only)    
+      real, intent(in) :: gssaaer (nlay,nbndsw,gncol)  ! aer single scat alb (iaer=10 only)    
+      real, intent(in) :: gasmaer (nlay,nbndsw,gncol)  ! aer asymmetry param (iaer=10 only)    
 
       ! surface albedos
       real, intent(in) :: gasdir  (gncol)              ! UV/vis  surface albedo: direct rad
@@ -508,10 +518,14 @@ contains
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: gclearCounts(gncol,4)
 
-      real, intent(out) :: gswuflx  (gncol,nlay+1)     !   All-sky SW up   flux (W/m2)
-      real, intent(out) :: gswdflx  (gncol,nlay+1)     !   All-sky SW down flux (W/m2)
-      real, intent(out) :: gswuflxc (gncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
-      real, intent(out) :: gswdflxc (gncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
+!     real, intent(out) :: gswuflx  (gncol,nlay+1)     !   All-sky SW up   flux (W/m2)
+!     real, intent(out) :: gswdflx  (gncol,nlay+1)     !   All-sky SW down flux (W/m2)
+!     real, intent(out) :: gswuflxc (gncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
+!     real, intent(out) :: gswdflxc (gncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
+      real, intent(out) :: gswuflx  (nlay+1,gncol)     !   All-sky SW up   flux (W/m2)
+      real, intent(out) :: gswdflx  (nlay+1,gncol)     !   All-sky SW down flux (W/m2)
+      real, intent(out) :: gswuflxc (nlay+1,gncol)     ! Clear-sky SW up   flux (W/m2)
+      real, intent(out) :: gswdflxc (nlay+1,gncol)     ! Clear-sky SW down flux (W/m2)
 
       ! Output added for Land/Surface process (all-sky)
       real, intent(out) :: gnirr    (gncol)            ! Near-IR direct  down SW flux (w/m2)
@@ -1091,9 +1105,12 @@ contains
                do icol = 1,ncol
                   gicol = idx(icol)
                   do ibnd = 1,nbndsw
-                     taua(:,ibnd,icol) = gtauaer(gicol,:,ibnd)
-                     asya(:,ibnd,icol) = gasmaer(gicol,:,ibnd)
-                     omga(:,ibnd,icol) = gssaaer(gicol,:,ibnd)
+!                    taua(:,ibnd,icol) = gtauaer(gicol,:,ibnd)
+!                    asya(:,ibnd,icol) = gasmaer(gicol,:,ibnd)
+!                    omga(:,ibnd,icol) = gssaaer(gicol,:,ibnd)
+                     taua(:,ibnd,icol) = gtauaer(:,ibnd,gicol)
+                     asya(:,ibnd,icol) = gasmaer(:,ibnd,gicol)
+                     omga(:,ibnd,icol) = gssaaer(:,ibnd,gicol)
                   enddo
                enddo
             endif   
@@ -1308,14 +1325,18 @@ contains
             endif
 
             ! up and down fluxes
-            ! note the implicit transpose!
+!           ! note the implicit transpose!
             do icol = 1,ncol
                gicol = idx(icol)
                do ilev = 1,nlay+1
-                  gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-                  gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-                  gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
-                  gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
+!                 gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
+!                 gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
+!                 gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
+!                 gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
+                  gswuflxc(ilev,gicol) = zbbcu(ilev,icol) 
+                  gswdflxc(ilev,gicol) = zbbcd(ilev,icol) 
+                  gswuflx (ilev,gicol) = zbbfu(ilev,icol) 
+                  gswdflx (ilev,gicol) = zbbfd(ilev,icol) 
                enddo
             enddo
 
@@ -1360,13 +1381,18 @@ contains
 
       if (normFlx == 1) then
 
-         gswdflx_at_top(:) = max(gswdflx(:,nlay+1),1e-7)
+!        gswdflx_at_top(:) = max(gswdflx(:,nlay+1),1e-7)
+         gswdflx_at_top(:) = max(gswdflx(nlay+1,:),1e-7)
 
          do ilev = 1,nlay+1
-            gswuflxc(:,ilev) = gswuflxc(:,ilev) / gswdflx_at_top(:)
-            gswdflxc(:,ilev) = gswdflxc(:,ilev) / gswdflx_at_top(:)
-            gswuflx (:,ilev) = gswuflx (:,ilev) / gswdflx_at_top(:)
-            gswdflx (:,ilev) = gswdflx (:,ilev) / gswdflx_at_top(:)
+!           gswuflxc(:,ilev) = gswuflxc(:,ilev) / gswdflx_at_top(:)
+!           gswdflxc(:,ilev) = gswdflxc(:,ilev) / gswdflx_at_top(:)
+!           gswuflx (:,ilev) = gswuflx (:,ilev) / gswdflx_at_top(:)
+!           gswdflx (:,ilev) = gswdflx (:,ilev) / gswdflx_at_top(:)
+            gswuflxc(ilev,:) = gswuflxc(ilev,:) / gswdflx_at_top(:)
+            gswdflxc(ilev,:) = gswdflxc(ilev,:) / gswdflx_at_top(:)
+            gswuflx (ilev,:) = gswuflx (ilev,:) / gswdflx_at_top(:)
+            gswdflx (ilev,:) = gswdflx (ilev,:) / gswdflx_at_top(:)
          enddo
 
          gnirr(:) = gnirr(:) / gswdflx_at_top(:)
