@@ -3456,7 +3456,7 @@ contains
 
       ! Load balance the Inputs
       ! -----------------------
-      ! do_FAR does no load blancing
+      ! do_FAR does no load balancing
       ! cols_last does it in INPUT_VARS_2 loop per variable
 
       call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
@@ -3578,6 +3578,8 @@ contains
          ! and two (FAR_TAUR|G) with (LM,ngptsw) inner dimensions. Since there are so few
          ! we will skip the 1D buffer approach and just use a MAPL_BalanceWork for each
          ! variable.
+!pmn: TODO: comment needs updating now CLD variables as well so 9 ... do more genericly to avoid code repetition?
+
          if (NamesInt(k) == 'FAR_SFLXZEN') then
             allocate(SFLXZEN_(ngptsw * NumMax),__STAT__)
             FAR_SFLXZEN(1:ngptsw,1:NumMax) => SFLXZEN_
@@ -3712,24 +3714,46 @@ contains
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
-                  do j=1,ugDim(k)
-                     if (IntInOut(k)) then
-                        call PackIt3d(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3),.false.)
+                  if (IntInOut(k)) then
+                     if (cols_last) then
+                        call PackIt4dT (BufInOut(pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
                      else
-                        call PackIt3d(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3),.false.)
-                     endif
-                  end do
+                        call PackIt4d  (BufInOut(pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
+                     end if
+                  else
+                     if (cols_last) then
+                        call PackIt4dT (BufOut  (pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
+                     else
+                        call PackIt4d  (BufOut  (pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
+                     end if
+                  endif
                   piN = pi1 + NumMax*size(ptr4,3)*ugDim(k) - 1
-                  ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
+                  if (cols_last) then
+                     ptr3(1:size(ptr4,3),1:ugDim(k),1:NumMax) => Buf(pi1:piN)
+                  else
+                     ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
+                  end if
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call PackIt3d(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     if (cols_last) then
+                        call PackIt3dT (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     else
+                        call PackIt3d  (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     end if
                   else
-                     call PackIt3d(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     if (cols_last) then
+                        call PackIt3dT (BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     else
+                        call PackIt3d  (BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     end if
                   endif
                   piN = pi1 + NumMax*ugDim(k) - 1
-                  ptr2(1:NumMax,1:ugDim(k)) => Buf(pi1:piN)
+                  if (cols_last) then
+                     ptr2(1:ugDim(k),1:NumMax) => Buf(pi1:piN)
+                  else
+                     ptr2(1:NumMax,1:ugDim(k)) => Buf(pi1:piN)
+                  end if
             end select
 
          else  ! no ungridded dimensions
@@ -3738,102 +3762,194 @@ contains
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call PackIt3d(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),.false.)
+                     if (cols_last) then
+                        call PackIt3dT (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     else
+                        call PackIt3d  (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     end if
                   else
-                     call PackIt3d(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),.false.)
+                     if (cols_last) then
+                        call PackIt3dT (BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     else
+                        call PackIt3d  (BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     end if
                   endif
                   piN = pi1 + NumMax*size(ptr3,3) - 1
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call PackIt2d(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims)
+                     call PackIt2d (BufInOut(pi1),ptr2,daytime,NumMax,HorzDims)
                   else
-                     call PackIt2d(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims)
+                     call PackIt2d (BufOut  (pi1),ptr2,daytime,NumMax,HorzDims)
                   endif
                   piN = pi1 + NumMax - 1
             end select
-            ptr2(1:NumMax,1:SlicesInt(k)) => Buf(pi1:piN)
+            if (cols_last) then
+               ptr2(1:SlicesInt(k),1:NumMax) => Buf(pi1:piN)
+            else
+               ptr2(1:NumMax,1:SlicesInt(k)) => Buf(pi1:piN)
+            end if
 
          end if
 
          ! Handles for the working InOut/Out variables.
-         ! These have an inner dimension of the balanced work.
-         ! ---------------------------------------------------
-         select case(NamesInt(k))
-            case('FAR_TAUMOL_AGE')
-               FAR_TAUMOL_AGE => ptr2(1:Num2do,1)
-            case('FAR_TAUCLD_AGE')
-               FAR_TAUCLD_AGE => ptr2(1:Num2do,1)
-            case('FAR_CLDYCOL')
-               FAR_CLDYCOL => ptr2(1:Num2do,1)
-            case('FAR_AEROSOL_AGE')
-               FAR_AEROSOL_AGE => ptr2(1:Num2do,1)
-            case('FAR_TAUA')
-               BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
-            case('FAR_SSAA')
-               BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
-            case('FAR_ASYA')
-               BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
-            case('FSWN')    
-               FSW         => ptr2(1:Num2do,:)   
-            case('FSCN')    
-               FSC         => ptr2(1:Num2do,:)               
-            case('FSWUN')   
-               FSWU        => ptr2(1:Num2do,:)           
-            case('FSCUN')   
-               FSCU        => ptr2(1:Num2do,:)               
-            case('FSWBANDN')
-               FSWBAND     => ptr2(1:Num2do,:)               
-            case('DRUVRN')  
-               UVRR        => ptr2(1:Num2do,1)
-            case('DFUVRN')  
-               UVRF        => ptr2(1:Num2do,1)
-            case('DRPARN')  
-               PARR        => ptr2(1:Num2do,1)
-            case('DFPARN')  
-               PARF        => ptr2(1:Num2do,1)
-            case('DRNIRN')  
-               NIRR        => ptr2(1:Num2do,1)
-            case('DFNIRN')  
-               NIRF        => ptr2(1:Num2do,1)
-            case('FSWNAN')  
-               FSWA        => ptr2(1:Num2do,:)               
-            case('FSCNAN')  
-               FSCA        => ptr2(1:Num2do,:)               
-            case('FSWUNAN') 
-               FSWUA       => ptr2(1:Num2do,:)                              
-            case('FSCUNAN') 
-               FSCUA       => ptr2(1:Num2do,:)                              
-            case('FSWBANDNAN')
-               FSWBANDA    => ptr2(1:Num2do,:)                              
-            case('COSZSW')  
-               COSZSW      => ptr2(1:Num2do,1)               
-            case('CLDTTSW')  
-               CLDTS       => ptr2(1:Num2do,1)               
-            case('CLDHISW')  
-               CLDHS       => ptr2(1:Num2do,1)               
-            case('CLDMDSW')  
-               CLDMS       => ptr2(1:Num2do,1)               
-            case('CLDLOSW')  
-               CLDLS       => ptr2(1:Num2do,1)               
-            case('TAUTTPAR')  
-               TAUTP       => ptr2(1:Num2do,1)               
-            case('TAUHIPAR')  
-               TAUHP       => ptr2(1:Num2do,1)               
-            case('TAUMDPAR')  
-               TAUMP       => ptr2(1:Num2do,1)               
-            case('TAULOPAR')  
-               TAULP       => ptr2(1:Num2do,1)               
-         end select
+         ! --------------------------------------------
+         if (cols_last) then
+            select case(NamesInt(k))
+               case('FAR_TAUMOL_AGE')
+                  FAR_TAUMOL_AGE => ptr2(1,1:Num2do)
+               case('FAR_TAUCLD_AGE')
+                  FAR_TAUCLD_AGE => ptr2(1,1:Num2do)
+               case('FAR_CLDYCOL')
+                  FAR_CLDYCOL => ptr2(1,1:Num2do)
+               case('FAR_AEROSOL_AGE')
+                  FAR_AEROSOL_AGE => ptr2(1,1:Num2do)
+               case('FAR_TAUA')
+                  BUFIMP_AEROSOL_EXT => ptr3(:,:,1:Num2do)
+               case('FAR_SSAA')
+                  BUFIMP_AEROSOL_SSA => ptr3(:,:,1:Num2do)
+               case('FAR_ASYA')
+                  BUFIMP_AEROSOL_ASY => ptr3(:,:,1:Num2do)
+               case('FSWN')    
+                  FSW         => ptr2(:,1:Num2do)   
+               case('FSCN')    
+                  FSC         => ptr2(:,1:Num2do)               
+               case('FSWUN')   
+                  FSWU        => ptr2(:,1:Num2do)           
+               case('FSCUN')   
+                  FSCU        => ptr2(:,1:Num2do)               
+               case('FSWBANDN')
+                  FSWBAND     => ptr2(:,1:Num2do)               
+               case('DRUVRN')  
+                  UVRR        => ptr2(1,1:Num2do)
+               case('DFUVRN')  
+                  UVRF        => ptr2(1,1:Num2do)
+               case('DRPARN')  
+                  PARR        => ptr2(1,1:Num2do)
+               case('DFPARN')  
+                  PARF        => ptr2(1,1:Num2do)
+               case('DRNIRN')  
+                  NIRR        => ptr2(1,1:Num2do)
+               case('DFNIRN')  
+                  NIRF        => ptr2(1,1:Num2do)
+               case('FSWNAN')  
+                  FSWA        => ptr2(:,1:Num2do)               
+               case('FSCNAN')  
+                  FSCA        => ptr2(:,1:Num2do)               
+               case('FSWUNAN') 
+                  FSWUA       => ptr2(:,1:Num2do)                              
+               case('FSCUNAN') 
+                  FSCUA       => ptr2(:,1:Num2do)                              
+               case('FSWBANDNAN')
+                  FSWBANDA    => ptr2(:,1:Num2do)                              
+               case('COSZSW')  
+                  COSZSW      => ptr2(1,1:Num2do)               
+               case('CLDTTSW')  
+                  CLDTS       => ptr2(1,1:Num2do)               
+               case('CLDHISW')  
+                  CLDHS       => ptr2(1,1:Num2do)               
+               case('CLDMDSW')  
+                  CLDMS       => ptr2(1,1:Num2do)               
+               case('CLDLOSW')  
+                  CLDLS       => ptr2(1,1:Num2do)               
+               case('TAUTTPAR')  
+                  TAUTP       => ptr2(1,1:Num2do)               
+               case('TAUHIPAR')  
+                  TAUHP       => ptr2(1,1:Num2do)               
+               case('TAUMDPAR')  
+                  TAUMP       => ptr2(1,1:Num2do)               
+               case('TAULOPAR')  
+                  TAULP       => ptr2(1,1:Num2do)               
+            end select
+         else
+            select case(NamesInt(k))
+               case('FAR_TAUMOL_AGE')
+                  FAR_TAUMOL_AGE => ptr2(1:Num2do,1)
+               case('FAR_TAUCLD_AGE')
+                  FAR_TAUCLD_AGE => ptr2(1:Num2do,1)
+               case('FAR_CLDYCOL')
+                  FAR_CLDYCOL => ptr2(1:Num2do,1)
+               case('FAR_AEROSOL_AGE')
+                  FAR_AEROSOL_AGE => ptr2(1:Num2do,1)
+               case('FAR_TAUA')
+                  BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
+               case('FAR_SSAA')
+                  BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
+               case('FAR_ASYA')
+                  BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
+               case('FSWN')    
+                  FSW         => ptr2(1:Num2do,:)   
+               case('FSCN')    
+                  FSC         => ptr2(1:Num2do,:)               
+               case('FSWUN')   
+                  FSWU        => ptr2(1:Num2do,:)           
+               case('FSCUN')   
+                  FSCU        => ptr2(1:Num2do,:)               
+               case('FSWBANDN')
+                  FSWBAND     => ptr2(1:Num2do,:)               
+               case('DRUVRN')  
+                  UVRR        => ptr2(1:Num2do,1)
+               case('DFUVRN')  
+                  UVRF        => ptr2(1:Num2do,1)
+               case('DRPARN')  
+                  PARR        => ptr2(1:Num2do,1)
+               case('DFPARN')  
+                  PARF        => ptr2(1:Num2do,1)
+               case('DRNIRN')  
+                  NIRR        => ptr2(1:Num2do,1)
+               case('DFNIRN')  
+                  NIRF        => ptr2(1:Num2do,1)
+               case('FSWNAN')  
+                  FSWA        => ptr2(1:Num2do,:)               
+               case('FSCNAN')  
+                  FSCA        => ptr2(1:Num2do,:)               
+               case('FSWUNAN') 
+                  FSWUA       => ptr2(1:Num2do,:)                              
+               case('FSCUNAN') 
+                  FSCUA       => ptr2(1:Num2do,:)                              
+               case('FSWBANDNAN')
+                  FSWBANDA    => ptr2(1:Num2do,:)                              
+               case('COSZSW')  
+                  COSZSW      => ptr2(1:Num2do,1)               
+               case('CLDTTSW')  
+                  CLDTS       => ptr2(1:Num2do,1)               
+               case('CLDHISW')  
+                  CLDHS       => ptr2(1:Num2do,1)               
+               case('CLDMDSW')  
+                  CLDMS       => ptr2(1:Num2do,1)               
+               case('CLDLOSW')  
+                  CLDLS       => ptr2(1:Num2do,1)               
+               case('TAUTTPAR')  
+                  TAUTP       => ptr2(1:Num2do,1)               
+               case('TAUHIPAR')  
+                  TAUHP       => ptr2(1:Num2do,1)               
+               case('TAUMDPAR')  
+                  TAUMP       => ptr2(1:Num2do,1)               
+               case('TAULOPAR')  
+                  TAULP       => ptr2(1:Num2do,1)               
+            end select
+         end if
+
+         ! do balancing per variable for cols_last case (because inSize varies)
+         if (cols_last .and. .not. do_FAR) then
+            call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
+            call MAPL_BalanceWork (Buf(pi1:piN), piN-pi1+1, &
+               Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
+               inSize=SlicesInt(k), __RC__)
+            call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+         end if
 
       enddo INT_VARS_2
 
 
       ! Load balance the InOuts for Input
       !----------------------------------
+      ! do_FAR does no load balancing
+      ! cols_last does it in INT_VARS_2 loop per variable
+
       if (size(BufInOut) > 0) then
          call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-         if (.not.do_FAR) &
+         if (.not. do_FAR .and. .not. cols_last) &
             call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
       end if
@@ -3963,9 +4079,15 @@ contains
       ! Begin aerosol code
       ! ------------------
 
-      allocate(TAUA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
-      allocate(SSAA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
-      allocate(ASYA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      if (cols_last) then
+         allocate(TAUA(LM,NUM_BANDS_SOLAR,NCOL),__STAT__)
+         allocate(SSAA(LM,NUM_BANDS_SOLAR,NCOL),__STAT__)
+         allocate(ASYA(LM,NUM_BANDS_SOLAR,NCOL),__STAT__)
+      else
+         allocate(TAUA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+         allocate(SSAA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+         allocate(ASYA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      end if
 
       ! Zero out aerosol arrays.
       ! If num_aero_vars == 0, these zeroes are used inside code.
@@ -4899,17 +5021,13 @@ contains
 
       ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
       ! -------------------------------------------------------------------
+!pmn: TODO: needs updating since really not flipping here anymore
 
       ! cloud microphysical properties
       allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
       allocate(CICEWP(size(Q,1),size(Q,2)),__STAT__)
       allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
       allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
-      ! aerosol optical properties
-!cols_last needed later ...
-      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
-      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
-      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
       ! layer variables
       allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
       allocate(Q_R   (size(Q,1),size(Q,2)),__STAT__)
@@ -4920,23 +5038,10 @@ contains
       ! super-layer cloud fractions
       allocate(CLEARCOUNTS (NCOL,4),__STAT__)
       ! output fluxes
-!     allocate(SWUFLX (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLX (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWUFLXC(size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXC(size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(SWUFLX (NCOL,LM+1),__STAT__)
-      allocate(SWDFLX (NCOL,LM+1),__STAT__)
-      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
-      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
-      ! un-flipped outputs
-!     allocate(SWUFLXR (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXR (size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWUFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
-!     allocate(SWDFLXCR(size(PLE,1),size(PLE,2)),__STAT__)
-      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
-      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
-      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
-      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
+      allocate(SWUFLX (size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWDFLX (size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWUFLXC(size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(SWDFLXC(size(PLE,1),size(PLE,2)),__STAT__)
 
       ! Normalize aerosol inputs
       ! ------------------------
@@ -5024,11 +5129,6 @@ contains
       CO2_R = CO2
       O2_R  = O2
 
-      ! aerosols
-      TAUAER(:,1:LM,:) = TAUA(:,LM:1:-1,:)
-      SSAAER(:,1:LM,:) = SSAA(:,LM:1:-1,:)
-      ASMAER(:,1:LM,:) = ASYA(:,LM:1:-1,:)
-
       call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
 
       ! initialize RRTMG SW
@@ -5048,7 +5148,7 @@ contains
          ICEFLGSW, LIQFLGSW, &
          CL, CICEWP, CLIQWP, REICE, RELIQ, &
          DYOFYR, ZL_R, ALAT, &
-         IAER, TAUAER, SSAAER, ASMAER, &
+         IAER, TAUA, SSAA, ASYA, &
          ALBVR, ALBVF, ALBNR, ALBNF, &
          LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
          CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
@@ -5062,16 +5162,6 @@ contains
          __RC__)
       call MAPL_TimerOff(MAPL,"RRTMG_RUN",__RC__)
 
-      ! unflip the outputs in the vertical
-      ! ----------------------------------
-
-      call MAPL_TimerOn (MAPL,"RRTMG_FLIP",__RC__)
-      SWUFLXR (:,1:LM+1) = SWUFLX (:,LM+1:1:-1)
-      SWDFLXR (:,1:LM+1) = SWDFLX (:,LM+1:1:-1)
-      SWUFLXCR(:,1:LM+1) = SWUFLXC(:,LM+1:1:-1)
-      SWDFLXCR(:,1:LM+1) = SWDFLXC(:,LM+1:1:-1)
-      call MAPL_TimerOff(MAPL,"RRTMG_FLIP",__RC__)
-
       ! required outputs
       ! ----------------
 
@@ -5083,10 +5173,10 @@ contains
         CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
       end if
 
-      FSW  = SWDFLXR  - SWUFLXR 
-      FSC  = SWDFLXCR - SWUFLXCR
-      FSWU = SWUFLXR
-      FSCU = SWUFLXCR
+      FSW  = SWDFLX  - SWUFLX 
+      FSC  = SWDFLXC - SWUFLXC
+      FSWU = SWUFLX
+      FSCU = SWUFLXC
 
       ! MAT Just set the FSWBAND to MAPL_UNDEF. More work will
       !     be needed if this is to be extracted from RRTMG as
@@ -5102,10 +5192,6 @@ contains
       deallocate(RELIQ ,__STAT__)
       deallocate(REICE ,__STAT__)
 
-      deallocate(TAUAER,__STAT__)
-      deallocate(SSAAER,__STAT__)
-      deallocate(ASMAER,__STAT__)
-
       deallocate(Q_R   ,__STAT__)
       deallocate(O2_R  ,__STAT__)
       deallocate(O3_R  ,__STAT__)
@@ -5118,11 +5204,6 @@ contains
       deallocate(SWDFLX ,__STAT__)
       deallocate(SWUFLXC,__STAT__)
       deallocate(SWDFLXC,__STAT__)
-
-      deallocate(SWUFLXR ,__STAT__)
-      deallocate(SWDFLXR ,__STAT__)
-      deallocate(SWUFLXCR,__STAT__)
-      deallocate(SWDFLXCR,__STAT__)
 
       call MAPL_TimerOff(MAPL,"RRTMG",__RC__)
 
@@ -5142,19 +5223,20 @@ contains
 
       ! Complete load balancing by retrieving work done remotely
       !---------------------------------------------------------
+      ! for cols_last do per variable because inSize changes
 
       call MAPL_TimerOn (MAPL,"BALANCE",__RC__)
 
       if (size(BufOut) > 0) then
          call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         if (.not.do_FAR) &
+         if (.not. do_FAR .and. .not. cols_last) &
             call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
 
       if (size(BufInOut) > 0) then
          call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         if (.not.do_FAR) &
+         if (.not. do_FAR .and. .not. cols_last) &
             call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
          call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
       end if
@@ -5209,7 +5291,7 @@ contains
       ! Note: InOut variables do not fill unmasked locations with a default,
       ! since the unmasked locations may contain potentially useful aged data.
 
-      i1InOut = 1; i1Out = 1
+      iNInOut = 0; iNOut = 0
       INT_VARS_3: do k=1,NumInt
 
          if (NamesInt(k) == 'FAR_SFLXZEN') then
@@ -5325,33 +5407,54 @@ contains
          if (SlicesInt(k) == 0) cycle
 
          if (IntInOut(k)) then
-            pi1 => i1InOut
+            buf => bufInOut; pi1 => i1InOut; piN => iNInOut
          else
-            pi1 => i1Out
+            buf => bufOut;   pi1 => i1Out;   piN => iNOut
             call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=def,__RC__)
          endif
+         pi1 = piN + 1
+         piN = piN + NumMax * slicesInt(k)
+
+         ! retrieve per variable if cols_last since inSize varies
+         if (cols_last .and. .not. do_FAR) then
+            call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
+            call MAPL_BalanceWork (Buf(pi1:piN), piN-pi1+1, &
+               Direction=MAPL_Retrieve, Handle=SolarBalanceHandle, &
+               inSize=SlicesInt(k), __RC__)
+            call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+         end if
 
          if (ugDim(k) > 0) then
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     do j=1,ugDim(k)
-                        call UnPackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                           daytime,NumMax,HorzDims,size(ptr4,3))
-                     end do
+                     if (cols_last) then
+                        call UnPackIt4dT (BufInOut(pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
+                     else
+                        call UnPackIt4d  (BufInOut(pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip)
+                     end if
                   else
-                     do j=1,ugDim(k)
-                        call UnPackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                           daytime,NumMax,HorzDims,size(ptr4,3),def)
-                     end do
+                     if (cols_last) then
+                        call UnPackIt4dT (BufOut  (pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip,def)
+                     else
+                        call UnPackIt4d  (BufOut  (pi1),ptr4,daytime,NumMax,HorzDims,size(ptr4,3),ugDim(k),pack_flip,def)
+                     end if
                   endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                     if (cols_last) then
+                        call UnPackIt3dT (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     else
+                        call UnPackIt3d  (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.)
+                     end if
                   else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),def)
+                     if (cols_last) then
+                        call UnPackIt3dT (Bufout  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.,def)
+                     else
+                        call UnPackIt3d  (Bufout  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),.false.,def)
+                     end if
                   endif
             end select
          else
@@ -5359,20 +5462,27 @@ contains
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                     if (cols_last) then
+                        call UnPackIt3dT (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     else
+                        call UnPackIt3d  (BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip)
+                     end if
                   else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),def)
+                     if (cols_last) then
+                        call UnPackIt3dT (Bufout  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip,def)
+                     else
+                        call UnPackIt3d  (Bufout  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),pack_flip,def)
+                     end if
                   endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
+                     call UnPackIt2d (BufInOut(pi1),ptr2,daytime,NumMax,HorzDims)
                   else
-                     call UnPackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1,def)
+                     call UnPackIt2d (BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,def)
                   endif
             end select
          end if
-         pi1 = pi1 + NumMax*SlicesInt(k)
 
       enddo INT_VARS_3
 
@@ -6507,10 +6617,14 @@ contains
       RETURN_(ESMF_SUCCESS)
     end subroutine UPDATE_EXPORT
 
-
   end subroutine RUN
 
-  ! Pack masked locations into buffer
+
+! Pack and Unpack routines to collapse two horizontal dimensions to one according to a mask,
+! such as sunlit locations. Optionally we transpose the horizontal dimension to/from the last
+! dimension ("T" version), and flip the vertical dimension (pack_flip).
+! -------------------------------------------------------------------------------------------
+
   subroutine PackIt2d (Packed, UnPacked, MSK, Pdim, Hdim)
     integer, intent(IN   ) :: Pdim, Hdim(2)
     real,    intent(INOUT) ::   Packed(Pdim)
@@ -6531,8 +6645,29 @@ contains
 
   end subroutine PackIt2d
 
-  ! Pack masked locations into buffer.
-  ! pack_flip flips the vertical dimension.
+  subroutine UnPackIt2d (Packed, UnPacked, MSK, Pdim, Hdim, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Hdim(2)
+    real,    intent(IN   ) ::   Packed(Pdim)
+    real,    intent(INOUT) :: UnPacked(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    real, optional, intent(IN) :: DEFAULT
+
+    integer :: I, J, M
+
+    M = 1
+    do J = 1,Hdim(2)
+      do I = 1,Hdim(1)
+        if (MSK(I,J)) then
+          UnPacked(I,J) = Packed(M)
+          M = M+1
+        elseif (PRESENT(DEFAULT)) then
+          UnPacked(I,J) = DEFAULT
+        end if
+      end do
+    end do
+
+  end subroutine UnPackIt2d
+
   subroutine PackIt3d (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM
     real,    intent(INOUT) ::   Packed(Pdim,LM)
@@ -6571,8 +6706,49 @@ contains
 
   end subroutine PackIt3d
 
-  ! Pack masked locations into buffer with transpose to cols_last.
-  ! pack_flip flips the vertical dimension.
+  subroutine UnPackIt3d (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM
+    real,    intent(IN   ) ::   Packed(Pdim,LM)
+    real,    intent(INOUT) :: UnPacked(Hdim(1),Hdim(2),LM)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
+    real, optional, intent(IN) :: DEFAULT
+
+    integer :: I, J, L, LF, M
+
+    if (pack_flip) then
+      do L = 1,LM
+        LF = LM-L+1
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              UnPacked(I,J,L) = Packed(M,LF)
+              M = M+1
+            elseif (PRESENT(DEFAULT)) then
+              UnPacked(I,J,L) = DEFAULT
+            end if
+          end do
+        end do
+      end do
+    else
+      do L = 1,LM
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              UnPacked(I,J,L) = Packed(M,L)
+              M = M+1
+            elseif (PRESENT(DEFAULT)) then
+              UnPacked(I,J,L) = DEFAULT
+            end if
+          end do
+        end do
+      end do
+    end if
+
+  end subroutine UnPackIt3d
+
   subroutine PackIt3dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM
     real,    intent(INOUT) :: Packed(LM,Pdim)
@@ -6617,8 +6793,49 @@ contains
     
   end subroutine PackIt3dT
 
-  ! Pack masked locations into buffer.
-  ! pack_flip flips the vertical dimension.
+  subroutine UnPackIt3dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, pack_flip, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM
+    real,    intent(IN   ) :: Packed(LM,Pdim)
+    real,    intent(INOUT) :: UnPacked(Hdim(1),Hdim(2),LM)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
+    real, optional, intent(IN) :: DEFAULT
+
+    integer :: I, J, L, LF, M
+
+    if (pack_flip) then
+      do L = 1,LM
+        LF = LM-L+1
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              UnPacked(I,J,L) = Packed(LF,M)
+              M = M+1
+            elseif (PRESENT(DEFAULT)) then
+              UnPacked(I,J,L) = DEFAULT
+            end if
+          end do
+        end do
+      end do
+    else
+      do L = 1,LM
+        M = 1
+        do J = 1,Hdim(2)
+          do I = 1,Hdim(1)
+            if (MSK(I,J)) then
+              UnPacked(I,J,L) = Packed(L,M)
+              M = M+1
+            elseif (PRESENT(DEFAULT)) then
+              UnPacked(I,J,L) = DEFAULT
+            end if
+          end do
+        end do
+      end do
+    end if
+
+  end subroutine UnPackIt3dT
+
   subroutine PackIt4d (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
     real,    intent(INOUT) ::   Packed(Pdim,LM,FD)
@@ -6661,8 +6878,53 @@ contains
 
   end subroutine PackIt4d
 
-  ! Pack masked locations into buffer with transpose to cols_last.
-  ! pack_flip flips the vertical dimension.
+  subroutine UnPackIt4d (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
+    real,    intent(IN   ) ::   Packed(Pdim,LM,FD)
+    real,    intent(INOUT) :: UnPacked(Hdim(1),Hdim(2),LM,FD)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
+    real, optional, intent(IN) :: DEFAULT
+
+    integer :: I, J, L, LF, M, Q
+
+    if (pack_flip) then
+      do Q = 1,FD
+        do L = 1,LM
+          LF = LM-L+1
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                UnPacked(I,J,L,Q) = Packed(M,LF,Q)
+                M = M+1
+              elseif (PRESENT(DEFAULT)) then
+                UnPacked(I,J,L,Q) = DEFAULT
+              end if
+            end do
+          end do
+        end do
+      end do
+    else
+      do Q = 1,FD
+        do L = 1,LM
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                UnPacked(I,J,L,Q) = Packed(M,L,Q)
+                M = M+1
+              elseif (PRESENT(DEFAULT)) then
+                UnPacked(I,J,L,Q) = DEFAULT
+              end if
+            end do
+          end do
+        end do
+      end do
+    end if
+
+  end subroutine UnPackIt4d
+
   subroutine PackIt4dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip)
     integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
     real,    intent(INOUT) :: Packed(LM,FD,Pdim)
@@ -6703,46 +6965,59 @@ contains
       end do
     end if
 
-    ! Note: putting the LM loop inside the mask saves redundant mask evaluations
-    ! and M increments, but for pack_flip costs redundant LF evaluations. It also
-    ! changes the non-contiguous access of memory from Packed (with a stride of
-    ! LM), to Unpacked (which has a generally large stride of IM*JM, so may have
-    ! cache implications). The version above is *slighly* faster.
-!pmn: modify ... this has large strides in Packed TODO <<<<<<<<<<<<<<<<<<<<<<<<<<<
-    
   end subroutine PackIt4dT
 
-  ! Unpack masked locations from buffer
-  subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)
-    integer, intent(IN   ) :: Pdim, Udim(2), LM
-    real,    intent(IN   ) ::   Packed(Pdim,*)
-    real,    intent(INOUT) :: UnPacked(Udim(1),Udim(2),*)
-    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
+  subroutine UnPackIt4dT (Packed, UnPacked, MSK, Pdim, Hdim, LM, FD, pack_flip, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Hdim(2), LM, FD
+    real,    intent(IN   ) :: Packed(LM,FD,Pdim)
+    real,    intent(INOUT) :: UnPacked(Hdim(1),Hdim(2),LM,FD)
+    logical, intent(IN   ) :: MSK(Hdim(1),Hdim(2))
+    logical, intent(IN   ) :: pack_flip
     real, optional, intent(IN) :: DEFAULT
 
-    integer :: I, J, L, M
+    integer :: I, J, L, LF, M, Q
 
-    do L = 1,LM
-      M = 1
-      do J = 1,Udim(2)
-        do I = 1,Udim(1)
-          if (MSK(I,J)) then
-            Unpacked(I,J,L) = Packed(M,L)
-            M = M+1
-          elseif (PRESENT(DEFAULT)) then
-            UnPacked(I,J,L) = DEFAULT
-          end if
+    if (pack_flip) then
+      do Q = 1,FD
+        do L = 1,LM
+          LF = LM-L+1
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                UnPacked(I,J,L,Q) = Packed(LF,Q,M)
+                M = M+1
+              elseif (PRESENT(DEFAULT)) then
+                UnPacked(I,J,L,Q) = DEFAULT
+              end if
+            end do
+          end do
         end do
       end do
-    end do
+    else
+      do Q = 1,FD
+        do L = 1,LM
+          M = 1
+          do J = 1,Hdim(2)
+            do I = 1,Hdim(1)
+              if (MSK(I,J)) then
+                UnPacked(I,J,L,Q) = Packed(L,Q,M)
+                M = M+1
+              elseif (PRESENT(DEFAULT)) then
+                UnPacked(I,J,L,Q) = DEFAULT
+              end if
+            end do
+          end do
+        end do
+      end do
+    end if
 
-  end subroutine UnPackIt
+  end subroutine UnPackIt4dT
 
-
-  ! Decide which radiation to use for thermodynamics state evolution.
-  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
-  ! Chou-Suarez is the default if nothing else asked for in Resource file.
-  !----------------------------------------------------------------------
+! Decide which radiation to use for thermodynamics state evolution.
+! RRTMGP dominates RRTMG dominates Chou-Suarez.
+! Chou-Suarez is the default if nothing else asked for in Resource file.
+!----------------------------------------------------------------------
 
   subroutine choose_solar_scheme (MAPL, &
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
