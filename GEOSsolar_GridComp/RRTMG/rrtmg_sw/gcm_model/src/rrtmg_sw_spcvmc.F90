@@ -303,12 +303,6 @@ contains
          end do
          call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
 
-      else
-         ! no calculations, but exact timer tree must be mirrored for correct timing
-         call MAPL_TimerOn (MAPL,"RRTMG_SETCOEF",__RC__)
-         call MAPL_TimerOff(MAPL,"RRTMG_SETCOEF",__RC__)
-         call MAPL_TimerOn (MAPL,"RRTMG_TAUMOL",__RC__)
-         call MAPL_TimerOff(MAPL,"RRTMG_TAUMOL",__RC__)
       end if
 
       call MAPL_TimerOn (MAPL,"RRTMG_SPSCALE",__RC__)

@@ -1256,11 +1256,6 @@ contains
                   end do
                   call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC",__RC__)
 
-               else  ! nrc == 0
-                  call MAPL_TimerOn (MAPL,"RRTMG_CLDSGEN",__RC__)
-                  call MAPL_TimerOff(MAPL,"RRTMG_CLDSGEN",__RC__)
-                  call MAPL_TimerOn (MAPL,"RRTMG_CLDPRMC",__RC__)
-                  call MAPL_TimerOff(MAPL,"RRTMG_CLDPRMC",__RC__)
                endif
 
             else  ! cc == 1 (clear gridcolumns)

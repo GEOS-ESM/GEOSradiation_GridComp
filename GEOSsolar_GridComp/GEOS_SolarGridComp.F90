@@ -2021,7 +2021,6 @@ contains
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
     call MAPL_TimerOn (MAPL,"TOTAL",__RC__)
-
     call MAPL_TimerOn (MAPL,"PRELIMS",__RC__)
 
     ! Get parameters from generic state.
@@ -3016,13 +3015,10 @@ contains
       if (.not.do_FAR) then 
 
          call MAPL_TimerOn (MAPL,"CREATE",__RC__)
-
          call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
-
          call MAPL_BalanceCreate( &
             OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
             BalLen=Num2do, BufLen=NumMax, __RC__)
-
          call MAPL_TimerOff(MAPL,"CREATE",__RC__)
 
          ! in this case we can assume that load-balancing will give
@@ -3177,7 +3173,9 @@ contains
          ! If Import is aerosol bundle, make space for aerosol optical props.
          ! Note: assume all aerosol species are dimensioned by LM levels.
          !    This will be asserted later.
-         ! Note: FAR case is handled instead through InOut Internals.
+         ! Note: FAR case is handled instead through InOut Internals, since
+         !    goal is to eventaully only update FAR aerosols on sunlit points
+         !    where they are actually needed.
 
          if (NamesInp(k) == "AERO") then
 
@@ -3459,10 +3457,11 @@ contains
       ! do_FAR does no load balancing
       ! cols_last does it in INPUT_VARS_2 loop per variable
 
-      call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-      if (.not. do_FAR .and. .not. cols_last) &
+      if (.not. do_FAR .and. .not. cols_last) then
+         call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
          call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-      call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+         call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+      end if
 
 !     write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__, '>>>here 3'
 
@@ -3574,11 +3573,11 @@ contains
       INT_VARS_2: do k=1,NumInt
 
          ! Handle far_rrtmg_state variables first, which use inSize balancing.
-         ! There are only four of these, two (FAR_SFLXZEN|SSI) with inner dimension ngptsw,
-         ! and two (FAR_TAUR|G) with (LM,ngptsw) inner dimensions. Since there are so few
-         ! we will skip the 1D buffer approach and just use a MAPL_BalanceWork for each
-         ! variable.
-!pmn: TODO: comment needs updating now CLD variables as well so 9 ... do more genericly to avoid code repetition?
+         ! There are only nine of these, two (FAR_SFLXZEN|SSI) with inner dimension ngptsw,
+         ! and seven (FAR_TAUR|G, plus 5 taucld FAR_s) with (LM,ngptsw) inner dimensions.
+         ! Since there are so few we will skip the 1D buffer approach for now and just use
+         ! code for each variable.
+!pmn: should revise using FAR_3d(k), FAR_4d(k) and BufFAR3d, BUfFAR4d, etc.
 
          if (NamesInt(k) == 'FAR_SFLXZEN') then
             allocate(SFLXZEN_(ngptsw * NumMax),__STAT__)
@@ -3948,15 +3947,17 @@ contains
       ! cols_last does it in INT_VARS_2 loop per variable
 
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
-         if (.not. do_FAR .and. .not. cols_last) &
+         if (.not. do_FAR .and. .not. cols_last) then
+            call MAPL_TimerOn (MAPL,"DISTRIBUTE",__RC__)
             call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+            call MAPL_TimerOff(MAPL,"DISTRIBUTE",__RC__)
+         end if
       end if
 
       ! Explicit inSize LoadBalancing for far_rrtmg_state variables,
       ! which have the gridcolumn (balanced) dimension outermost,
       ! and so use the inSize optional facility of MAPL_BalanceWork.
+      ! TURNED OFF: too slow so kill LoadBalancing for FAR_
       !-------------------------------------------------------------
       if (do_FAR) then
          if (use_RRTMG) then
@@ -5228,19 +5229,22 @@ contains
       call MAPL_TimerOn (MAPL,"BALANCE",__RC__)
 
       if (size(BufOut) > 0) then
-         call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         if (.not. do_FAR .and. .not. cols_last) &
+         if (.not. do_FAR .and. .not. cols_last) then
+            call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
             call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+            call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+         end if
       end if
 
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
-         if (.not. do_FAR .and. .not. cols_last) &
+         if (.not. do_FAR .and. .not. cols_last) then
+            call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
             call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+            call MAPL_TimerOff(MAPL,"RETRIEVE",__RC__)
+         end if
       end if
 
+      ! Again: Load Balancing too slow for do_FAR
       if (do_FAR) then
          if (use_RRTMG) then
 !           call MAPL_TimerOn (MAPL,"RETRIEVE",__RC__)
@@ -5491,9 +5495,11 @@ contains
       deallocate(SlicesInt,NamesInt,__STAT__)
       deallocate(IntInOut,rgDim,ugDim,__STAT__)
       deallocate(BufInp,BufInOut,BufOut,__STAT__)
-      call MAPL_TimerOn (MAPL,"DESTROY",__RC__)
-      if (.not.do_FAR) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
-      call MAPL_TimerOff(MAPL,"DESTROY",__RC__)
+      if (.not.do_FAR) then
+         call MAPL_TimerOn (MAPL,"DESTROY",__RC__)
+         call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
+         call MAPL_TimerOff(MAPL,"DESTROY",__RC__)
+      end if
 
       call MAPL_TimerOff(MAPL,"BALANCE",__RC__)
 
