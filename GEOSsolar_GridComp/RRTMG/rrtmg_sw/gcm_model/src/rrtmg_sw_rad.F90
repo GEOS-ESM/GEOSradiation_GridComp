@@ -183,20 +183,12 @@ contains
 
       ! profile
       ! -------
-!     real, intent(in) :: play   (ncol,nlay)         ! Layer pressures (hPa)
-!     real, intent(in) :: plev   (ncol,nlay+1)       ! Interface pressures (hPa)
-!     real, intent(in) :: tlay   (ncol,nlay)         ! Layer temperatures (K)
-      real, intent(in) :: play   (nlay,ncol)         ! Layer pressures (hPa)
+      real, intent(in) :: play   (nlay,  ncol)       ! Layer pressures (hPa)
       real, intent(in) :: plev   (nlay+1,ncol)       ! Interface pressures (hPa)
-      real, intent(in) :: tlay   (nlay,ncol)         ! Layer temperatures (K)
+      real, intent(in) :: tlay   (nlay,  ncol)       ! Layer temperatures (K)
 
       ! gases
       ! -----
-!     real, intent(in) :: h2ovmr (ncol,nlay)         ! H2O volume mixing ratio
-!     real, intent(in) :: o3vmr  (ncol,nlay)         ! O3 volume mixing ratio
-!     real, intent(in) :: co2vmr (ncol,nlay)         ! CO2 volume mixing ratio
-!     real, intent(in) :: ch4vmr (ncol,nlay)         ! Methane volume mixing ratio
-!     real, intent(in) :: o2vmr  (ncol,nlay)         ! Oxygen volume mixing ratio
       real, intent(in) :: h2ovmr (nlay,ncol)         ! H2O volume mixing ratio
       real, intent(in) :: o3vmr  (nlay,ncol)         ! O3 volume mixing ratio
       real, intent(in) :: co2vmr (nlay,ncol)         ! CO2 volume mixing ratio
@@ -210,11 +202,6 @@ contains
 
       ! clouds
       ! ------
-!     real, intent(in) :: cld    (ncol,nlay)         ! Cloud fraction
-!     real, intent(in) :: ciwp   (ncol,nlay)         ! In-cloud ice water path (g/m2)
-!     real, intent(in) :: clwp   (ncol,nlay)         ! In-cloud liquid water path (g/m2)
-!     real, intent(in) :: rei    (ncol,nlay)         ! Cloud ice effective radius (microns)
-!     real, intent(in) :: rel    (ncol,nlay)         ! Cloud water drop effective radius (microns)
       real, intent(in) :: cld    (nlay,ncol)         ! Cloud fraction
       real, intent(in) :: ciwp   (nlay,ncol)         ! In-cloud ice water path (g/m2)
       real, intent(in) :: clwp   (nlay,ncol)         ! In-cloud liquid water path (g/m2)
@@ -224,16 +211,12 @@ contains
       ! cloud overlap (exponential)
       ! ---------------------------
       integer, intent(in) :: dyofyr                  ! Day of the year
-!     real, intent(in) :: zm     (ncol,nlay)         ! Heights of level midpoints
       real, intent(in) :: zm     (nlay,ncol)         ! Heights of level midpoints
       real, intent(in) :: alat   (ncol)              ! Latitude of column [radians]
 
       ! aerosols (optical props, non-delta-scaled)
       ! ------------------------------------------
       integer, intent(in) :: iaer                    ! aerosol flag (0=off, 10=on)
-!     real, intent(in) :: tauaer (ncol,nlay,nbndsw)  ! aer optical depth      (iaer=10 only)
-!     real, intent(in) :: ssaaer (ncol,nlay,nbndsw)  ! aer single scat albedo (iaer=10 only)
-!     real, intent(in) :: asmaer (ncol,nlay,nbndsw)  ! aer asymmetry param    (iaer=10 only)
       real, intent(in) :: tauaer (nlay,nbndsw,ncol)  ! aer optical depth      (iaer=10 only)
       real, intent(in) :: ssaaer (nlay,nbndsw,ncol)  ! aer single scat albedo (iaer=10 only)
       real, intent(in) :: asmaer (nlay,nbndsw,ncol)  ! aer asymmetry param    (iaer=10 only)
@@ -264,10 +247,6 @@ contains
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: clearCounts(ncol,4)
 
-!     real, intent(out) :: swuflx  (ncol,nlay+1)     !   All-sky SW up   flux (W/m2)
-!     real, intent(out) :: swdflx  (ncol,nlay+1)     !   All-sky SW down flux (W/m2)
-!     real, intent(out) :: swuflxc (ncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
-!     real, intent(out) :: swdflxc (ncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
       real, intent(out) :: swuflx  (nlay+1,ncol)     !   All-sky SW up   flux (W/m2)
       real, intent(out) :: swdflx  (nlay+1,ncol)     !   All-sky SW down flux (W/m2)
       real, intent(out) :: swuflxc (nlay+1,ncol)     ! Clear-sky SW up   flux (W/m2)
@@ -446,19 +425,11 @@ contains
       real, intent(in), optional :: solcycfrac
 
       ! profile
-!     real, intent(in) :: gplay   (gncol,nlay)         ! Layer pressures (hPa)
-!     real, intent(in) :: gplev   (gncol,nlay+1)       ! Interface pressures (hPa)
-!     real, intent(in) :: gtlay   (gncol,nlay)         ! Layer temperatures (K)
-      real, intent(in) :: gplay   (nlay,gncol)         ! Layer pressures (hPa)
+      real, intent(in) :: gplay   (nlay  ,gncol)       ! Layer pressures (hPa)
       real, intent(in) :: gplev   (nlay+1,gncol)       ! Interface pressures (hPa)
-      real, intent(in) :: gtlay   (nlay,gncol)         ! Layer temperatures (K)
+      real, intent(in) :: gtlay   (nlay  ,gncol)       ! Layer temperatures (K)
 
       ! gases
-!     real, intent(in) :: gh2ovmr (gncol,nlay)         ! H2O volume mixing ratio
-!     real, intent(in) :: go3vmr  (gncol,nlay)         ! O3 volume mixing ratio
-!     real, intent(in) :: gco2vmr (gncol,nlay)         ! CO2 volume mixing ratio
-!     real, intent(in) :: gch4vmr (gncol,nlay)         ! Methane volume mixing ratio
-!     real, intent(in) :: go2vmr  (gncol,nlay)         ! Oxygen volume mixing ratio
       real, intent(in) :: gh2ovmr (nlay,gncol)         ! H2O volume mixing ratio
       real, intent(in) :: go3vmr  (nlay,gncol)         ! O3 volume mixing ratio
       real, intent(in) :: gco2vmr (nlay,gncol)         ! CO2 volume mixing ratio
@@ -470,11 +441,6 @@ contains
       integer, intent(in) :: liqflgsw                  ! Flag for liquid droplet specifn
       
       ! clouds
-!     real, intent(in) :: gcld    (gncol,nlay)         ! Cloud fraction
-!     real, intent(in) :: gciwp   (gncol,nlay)         ! In-cloud ice water path (g/m2)
-!     real, intent(in) :: gclwp   (gncol,nlay)         ! In-cloud liquid water path (g/m2)
-!     real, intent(in) :: grei    (gncol,nlay)         ! Cloud ice effective radius (um)
-!     real, intent(in) :: grel    (gncol,nlay)         ! Cloud drop effective radius (um)
       real, intent(in) :: gcld    (nlay,gncol)         ! Cloud fraction
       real, intent(in) :: gciwp   (nlay,gncol)         ! In-cloud ice water path (g/m2)
       real, intent(in) :: gclwp   (nlay,gncol)         ! In-cloud liquid water path (g/m2)
@@ -483,15 +449,11 @@ contains
                                                       
       ! cloud overlap
       integer, intent(in) :: dyofyr                    ! Day of the year
-!     real, intent(in) :: gzm     (gncol,nlay)         ! Heights of level midpoints
       real, intent(in) :: gzm     (nlay,gncol)         ! Heights of level midpoints
       real, intent(in) :: galat   (gncol)              ! Latitudes of columns [radians]
                                               
       ! aerosols (optical props, non-delta-scaled)
       integer, intent(in) :: iaer                      ! aerosol flag (0=off, 10=on)
-!     real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)    
-!     real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)    
-!     real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)    
       real, intent(in) :: gtauaer (nlay,nbndsw,gncol)  ! aer optical depth   (iaer=10 only)    
       real, intent(in) :: gssaaer (nlay,nbndsw,gncol)  ! aer single scat alb (iaer=10 only)    
       real, intent(in) :: gasmaer (nlay,nbndsw,gncol)  ! aer asymmetry param (iaer=10 only)    
@@ -518,10 +480,6 @@ contains
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: gclearCounts(gncol,4)
 
-!     real, intent(out) :: gswuflx  (gncol,nlay+1)     !   All-sky SW up   flux (W/m2)
-!     real, intent(out) :: gswdflx  (gncol,nlay+1)     !   All-sky SW down flux (W/m2)
-!     real, intent(out) :: gswuflxc (gncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
-!     real, intent(out) :: gswdflxc (gncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
       real, intent(out) :: gswuflx  (nlay+1,gncol)     !   All-sky SW up   flux (W/m2)
       real, intent(out) :: gswdflx  (nlay+1,gncol)     !   All-sky SW down flux (W/m2)
       real, intent(out) :: gswuflxc (nlay+1,gncol)     ! Clear-sky SW up   flux (W/m2)
@@ -565,7 +523,7 @@ contains
       real :: coszen (pncol)          ! Cosine of solar zenith angle
       real :: cossza (pncol)          ! Cosine of solar zenith angle
       real :: adjflux (jpband)        ! adjustment for curr Earth/Sun distance
-      real :: gswdflx_at_top (gncol)  ! swdflx at TOA
+      real :: gswdflx_at_top          ! swdflx at TOA
 
       ! surface albedos
       real :: albdir (nbndsw,pncol)   ! surface albedo, direct
@@ -653,8 +611,7 @@ contains
       real, parameter :: amd = 28.9660     ! Effective molecular weight of dry air (g/mol)
       real, parameter :: amw = 18.0160     ! Molecular weight of water vapor (g/mol)
 
-! Set molecular weight ratios (for converting mmr to vmr), e.g. h2ovmr = h2ommr * amdw
-
+      ! Set molecular weight ratios (for converting mmr to vmr), e.g. h2ovmr = h2ommr * amdw
       real, parameter :: amdw  = 1.607793  ! Molecular weight of dry air / water vapor
       real, parameter :: amdc  = 0.658114  ! Molecular weight of dry air / carbon dioxide
       real, parameter :: amdo  = 0.603428  ! Molecular weight of dry air / ozone
@@ -968,7 +925,6 @@ contains
       ncol_cld = 0
       if (.not.do_FAR) then
          do gicol = 1,gncol
-!           if (any(gcld(gicol,:) > 0)) then
             if (any(gcld(:,gicol) > 0)) then
                ncol_cld = ncol_cld + 1
                gicol_cld(ncol_cld) = gicol
@@ -979,7 +935,6 @@ contains
          end do
       else  ! FAR
          do gicol = 1,gncol
-!           if (gtaucld_recalc(gicol)) Rgcldycol(gicol) = merge(1., 0., any(gcld(gicol,:) > 0))
             if (gtaucld_recalc(gicol)) Rgcldycol(gicol) = merge(1., 0., any(gcld(:,gicol) > 0))
             if (Rgcldycol(gicol).ne.0.) then
                ncol_cld = ncol_cld + 1
@@ -1068,12 +1023,8 @@ contains
             enddo
           
             ! copy in partition (general)
-!           ! note the implicit transpose!
             do icol = 1,ncol
                gicol = idx(icol)
-!              play(:,icol) = gplay(gicol,:)
-!              plev(:,icol) = gplev(gicol,:)
-!              tlay(:,icol) = gtlay(gicol,:)
                play(:,icol) = gplay(:,gicol)
                plev(:,icol) = gplev(:,gicol)
                tlay(:,icol) = gtlay(:,gicol)
@@ -1084,12 +1035,6 @@ contains
             if (cc == 2) then    
                do icol = 1,ncol
                   gicol = idx(icol)
-!                 cld (:,icol) = gcld (gicol,:)
-!                 ciwp(:,icol) = gciwp(gicol,:)
-!                 clwp(:,icol) = gclwp(gicol,:)
-!                 rei (:,icol) = grei (gicol,:) 
-!                 rel (:,icol) = grel (gicol,:)
-!                 zm  (:,icol) = gzm  (gicol,:)
                   cld (:,icol) = gcld (:,gicol)
                   ciwp(:,icol) = gciwp(:,gicol)
                   clwp(:,icol) = gclwp(:,gicol)
@@ -1105,9 +1050,6 @@ contains
                do icol = 1,ncol
                   gicol = idx(icol)
                   do ibnd = 1,nbndsw
-!                    taua(:,ibnd,icol) = gtauaer(gicol,:,ibnd)
-!                    asya(:,ibnd,icol) = gasmaer(gicol,:,ibnd)
-!                    omga(:,ibnd,icol) = gssaaer(gicol,:,ibnd)
                      taua(:,ibnd,icol) = gtauaer(:,ibnd,gicol)
                      asya(:,ibnd,icol) = gasmaer(:,ibnd,gicol)
                      omga(:,ibnd,icol) = gssaaer(:,ibnd,gicol)
@@ -1118,11 +1060,6 @@ contains
             ! copy in partition (gases)
             do icol = 1,ncol
                gicol = idx(icol)
-!              colh2o(:,icol) = gh2ovmr(gicol,:)
-!              colco2(:,icol) = gco2vmr(gicol,:)
-!              colo3 (:,icol) = go3vmr (gicol,:)
-!              colch4(:,icol) = gch4vmr(gicol,:)
-!              colo2 (:,icol) = go2vmr (gicol,:)   
                colh2o(:,icol) = gh2ovmr(:,gicol)
                colco2(:,icol) = gco2vmr(:,gicol)
                colo3 (:,icol) = go3vmr (:,gicol)
@@ -1320,14 +1257,9 @@ contains
             endif
 
             ! up and down fluxes
-!           ! note the implicit transpose!
             do icol = 1,ncol
                gicol = idx(icol)
                do ilev = 1,nlay+1
-!                 gswuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-!                 gswdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-!                 gswuflx (gicol,ilev) = zbbfu(ilev,icol) 
-!                 gswdflx (gicol,ilev) = zbbfd(ilev,icol) 
                   gswuflxc(ilev,gicol) = zbbcu(ilev,icol) 
                   gswdflxc(ilev,gicol) = zbbcd(ilev,icol) 
                   gswuflx (ilev,gicol) = zbbfu(ilev,icol) 
@@ -1375,28 +1307,25 @@ contains
       ! MAT This requires only lit points passed in
 
       if (normFlx == 1) then
+         do gicol = 1,gncol
 
-!        gswdflx_at_top(:) = max(gswdflx(:,nlay+1),1e-7)
-         gswdflx_at_top(:) = max(gswdflx(nlay+1,:),1e-7)
+            gswdflx_at_top = max(gswdflx(nlay+1,gicol),1e-7)
 
-         do ilev = 1,nlay+1
-!           gswuflxc(:,ilev) = gswuflxc(:,ilev) / gswdflx_at_top(:)
-!           gswdflxc(:,ilev) = gswdflxc(:,ilev) / gswdflx_at_top(:)
-!           gswuflx (:,ilev) = gswuflx (:,ilev) / gswdflx_at_top(:)
-!           gswdflx (:,ilev) = gswdflx (:,ilev) / gswdflx_at_top(:)
-            gswuflxc(ilev,:) = gswuflxc(ilev,:) / gswdflx_at_top(:)
-            gswdflxc(ilev,:) = gswdflxc(ilev,:) / gswdflx_at_top(:)
-            gswuflx (ilev,:) = gswuflx (ilev,:) / gswdflx_at_top(:)
-            gswdflx (ilev,:) = gswdflx (ilev,:) / gswdflx_at_top(:)
-         enddo
+            do ilev = 1,nlay+1
+               gswuflxc(ilev,gicol) = gswuflxc(ilev,gicol) / gswdflx_at_top
+               gswdflxc(ilev,gicol) = gswdflxc(ilev,gicol) / gswdflx_at_top
+               gswuflx (ilev,gicol) = gswuflx (ilev,gicol) / gswdflx_at_top
+               gswdflx (ilev,gicol) = gswdflx (ilev,gicol) / gswdflx_at_top
+            enddo
 
-         gnirr(:) = gnirr(:) / gswdflx_at_top(:)
-         gnirf(:) = gnirf(:) / gswdflx_at_top(:)
-         gparr(:) = gparr(:) / gswdflx_at_top(:)
-         gparf(:) = gparf(:) / gswdflx_at_top(:)
-         guvrr(:) = guvrr(:) / gswdflx_at_top(:)
-         guvrf(:) = guvrf(:) / gswdflx_at_top(:)
+            gnirr(gicol) = gnirr(gicol) / gswdflx_at_top
+            gnirf(gicol) = gnirf(gicol) / gswdflx_at_top
+            gparr(gicol) = gparr(gicol) / gswdflx_at_top
+            gparf(gicol) = gparf(gicol) / gswdflx_at_top
+            guvrr(gicol) = guvrr(gicol) / gswdflx_at_top
+            guvrf(gicol) = guvrf(gicol) / gswdflx_at_top
 
+         end do
       endif
 
       _RETURN(_SUCCESS)
