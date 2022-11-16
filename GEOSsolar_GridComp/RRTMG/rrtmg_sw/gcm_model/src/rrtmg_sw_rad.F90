@@ -75,8 +75,9 @@ contains
       asdir, asdif, aldir, aldif, &
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
-      nirr, nirf, parr, parf, uvrr, uvrf, &
+      nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
       tautp, tauhp, taump, taulp, &
+      do_drfband, drband, dfband, &
 
       ! optional inputs
       bndscl, indsolvar, solcycfrac)
@@ -231,9 +232,11 @@ contains
                                                      !   0 = no normalization
                                                      !   1 = normalize (by scon*coszen)
 
+      logical, intent(in) :: do_drfband              ! Compute drband, dfband?
+
       ! ----- Outputs -----
 
-      ! subcolumn clear counts for Tot|High|Mid|Low super-layers
+      ! Subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: clearCounts(ncol,4)
 
       real, intent(out) :: swuflx  (ncol,nlay+1)     ! Total sky SW up   flux (W/m2)
@@ -249,8 +252,16 @@ contains
       real, intent(out) :: uvrr    (ncol)            ! UV      direct  down SW flux (W/m2)
       real, intent(out) :: uvrf    (ncol)            ! UV      diffuse down SW flux (W/m2)
 
+      ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
+      real, intent(out) :: fswband (ncol,nbndsw)
+
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (ncol) :: tautp, tauhp, taump, taulp
+
+      ! Surface downwelling direct and diffuse (W/m2) in each solar band:
+      ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
+      ! if (do_drfband), must point to (ncol,nbndsw) space.
+      real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
       ! ----- Locals -----
 
@@ -378,8 +389,9 @@ contains
          asdir, asdif, aldir, aldif, &
          cloudLM, cloudMH, normFlx, &
          clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
-         nirr, nirf, parr, parf, uvrr, uvrf, &
+         nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
          tautp, tauhp, taump, taulp, &
+         do_drfband, drband, dfband, &
          ! optional inputs
          bndscl, indsolvar, solcycfrac)
                                                       
@@ -401,8 +413,9 @@ contains
       gasdir, gasdif, galdir, galdif, &
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
-      nirr, nirf, parr, parf, uvrr, uvrf, &
+      nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
       tautp, tauhp, taump, taulp, &
+      do_drfband, drband, dfband, &
       ! optional inputs
       bndscl, indsolvar, solcycfrac)
 
@@ -485,6 +498,8 @@ contains
 
       integer, intent(in) :: normFlx                   ! Normalize fluxes flag
 
+      logical, intent(in) :: do_drfband                ! Compute drband, dfband?
+
       ! ----- Outputs -----
 
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
@@ -505,6 +520,14 @@ contains
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (gncol) :: tautp, tauhp, taump, taulp
+
+      ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
+      real, intent(out) :: fswband (gncol,nbndsw)
+
+      ! Surface downwelling direct and diffuse (W/m2) in each solar band:
+      ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
+      ! if (do_drfband), must point to (gncol,nbndsw) space.
+      real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
       ! ----- Locals -----
 
@@ -606,6 +629,11 @@ contains
 
       real, dimension (pncol) :: &
          znirr, znirf, zparr, zparf, zuvrr, zuvrf
+
+      real :: fndsbnd (pncol,nbndsw)   ! net downwelling flux @ sfc in bands
+                                       ! (all-sky and diffuse+direct)
+
+      real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
       ! in-cloud PAR optical thicknesses
       real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
@@ -1179,8 +1207,9 @@ contains
                selffac, selffrac, indself, forfac, forfrac, indfor, &
                zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
                zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
-               znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
-               ztautp, ztauhp, ztaump, ztaulp)
+               znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
+               ztautp, ztauhp, ztaump, ztaulp, &
+               do_drfband, zdrband, zdfband)
 
             ! Copy out up and down, clear and total sky fluxes to output arrays.
             ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
@@ -1222,6 +1251,25 @@ contains
                   uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
                end do
 
+               ! net downward flux at surface in bands
+               do ibnd = 1,nbndsw
+                  do icol = 1,ncol
+                     gicol = gicol_clr(icol + cols - 1)
+                     fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
+                  end do
+               end do
+
+               ! downward beam and diffuse fluxes at surface in bands
+               if (do_drfband) then
+                  do ibnd = 1,nbndsw
+                     do icol = 1,ncol
+                        gicol = gicol_clr(icol + cols - 1)
+                        drband(gicol,ibnd) = zdrband(icol,ibnd)
+                        dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                     end do
+                  end do
+               end if
+
             else ! cloudy columns
 
                do icol = 1,ncol
@@ -1251,6 +1299,25 @@ contains
                   uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
                enddo
 
+               ! net downward flux at surface in bands
+               do ibnd = 1,nbndsw
+                  do icol = 1,ncol
+                     gicol = gicol_cld(icol + cols - 1)
+                     fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
+                  end do
+               end do
+
+               ! downward beam and diffuse fluxes at surface in bands
+               if (do_drfband) then
+                  do ibnd = 1,nbndsw
+                     do icol = 1,ncol
+                        gicol = gicol_cld(icol + cols - 1)
+                        drband(gicol,ibnd) = zdrband(icol,ibnd)
+                        dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                     end do
+                  end do
+               end if
+
             endif  ! clear/cloudy
 
          enddo  ! over partitions
@@ -1278,6 +1345,17 @@ contains
          parf(:) = parf(:) / swdflx_at_top(:)
          uvrr(:) = uvrr(:) / swdflx_at_top(:)
          uvrf(:) = uvrf(:) / swdflx_at_top(:)
+
+         do ibnd = 1,nbndsw
+            fswband(:,ibnd) = fswband(:,ibnd) / swdflx_at_top(:)
+         end do
+
+         if (do_drfband) then
+            do ibnd = 1,nbndsw
+               drband(:,ibnd) = drband(:,ibnd) / swdflx_at_top(:)
+               dfband(:,ibnd) = dfband(:,ibnd) / swdflx_at_top(:)
+            end do
+         end if
 
       endif
 
