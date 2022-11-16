@@ -241,6 +241,7 @@ module GEOS_SolarGridCompMod
   INTEGER, PARAMETER :: NB_CHOU     = NB_CHOU_UV + NB_CHOU_NIR ! Total number of bands
   INTEGER, PARAMETER :: NB_RRTMG    = 14
   INTEGER, PARAMETER :: NB_RRTMGP   = 14
+  INTEGER, PARAMETER :: NB_OBIO     = 33
 
 #define PACKIT   1
 #define UNPACKIT 2
@@ -307,6 +308,7 @@ contains
     logical      :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     real         :: RFLAG
     integer      :: NUM_BANDS_SOLAR
+    logical      :: RRTMG_TO_OBIO
 
     type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
     type (ty_RRTMGP_wrap)           :: wrap
@@ -375,6 +377,14 @@ contains
       NUM_BANDS_SOLAR = NB_RRTMG
     else
       NUM_BANDS_SOLAR = NB_CHOU
+    end if
+
+    ! Decide if should make OBIO exports
+    if (USE_RRTMG) then
+       call ESMF_ConfigGetAttribute(CF, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', &
+          DEFAULT=.TRUE., __RC__)
+    else
+       RRTMG_TO_OBIO = .FALSE.
     end if
 
 ! Set the state variable specs.
@@ -658,6 +668,26 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+    if (RRTMG_TO_OBIO) then
+
+       call MAPL_AddInternalSpec(GC,                                         &
+          LONG_NAME      = 'normalized_surface_downwelling_shortwave_beam_flux_per_band',&
+          UNITS          = '1',                                              &
+          SHORT_NAME     = 'DRBANDN',                                        &
+          DIMS           = MAPL_DimsHorzOnly,                                &
+          UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                            &
+          VLOCATION      = MAPL_VLocationNone,                         __RC__)
+
+       call MAPL_AddInternalSpec(GC,                                         &
+          LONG_NAME      = 'normalized_surface_downwelling_shortwave_diffuse_flux_per_band',&
+          UNITS          = '1',                                              &
+          SHORT_NAME     = 'DFBANDN',                                        &
+          DIMS           = MAPL_DimsHorzOnly,                                &
+          UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                            &
+          VLOCATION      = MAPL_VLocationNone,                         __RC__)
+
+    end if
+
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  ='normalized_net_downward_shortwave_flux_in_air_assuming_no_aerosol',&
        UNITS      ='1',                                                      &
@@ -696,7 +726,6 @@ contains
 
 
 !  !EXPORT STATE:
-  
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  ='net_downward_shortwave_flux_in_air',                     &
@@ -902,6 +931,26 @@ contains
        SHORT_NAME = 'DFNIR',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    if (RRTMG_TO_OBIO) then
+
+       call MAPL_AddExportSpec(GC,                                           &
+          LONG_NAME      = 'surface_downwelling_shortwave_beam_flux_per_OBIO_band',&
+          UNITS          = 'W m-2',                                          &
+          SHORT_NAME     = 'DROBIO',                                         &
+          DIMS           = MAPL_DimsHorzOnly,                                &
+          UNGRIDDED_DIMS = (/ NB_OBIO /),                                    &
+          VLOCATION      = MAPL_VLocationNone,                         __RC__)
+
+       call MAPL_AddExportSpec(GC,                                           &
+          LONG_NAME      = 'surface_downwelling_shortwave_diffuse_flux_per_OBIO_band',&
+          UNITS          = 'W m-2',                                          &
+          SHORT_NAME     = 'DFOBIO',                                         &
+          DIMS           = MAPL_DimsHorzOnly,                                &
+          UNGRIDDED_DIMS = (/ NB_OBIO /),                                    &
+          VLOCATION      = MAPL_VLocationNone,                         __RC__)
+
+    end if
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'cloud_area_fraction',                                   &
@@ -1504,6 +1553,7 @@ contains
     logical            :: USE_CHOU  , USE_CHOU_IRRAD
     real               :: RFLAG
     integer            :: NUM_BANDS_SOLAR, NUM_BANDS, TOTAL_RAD_BANDS
+    logical            :: RRTMG_TO_OBIO
 
     integer, parameter :: BANDS_SOLAR_OFFSET = 0
 
@@ -1662,6 +1712,14 @@ contains
       NUM_BANDS_SOLAR = NB_RRTMG
     else
       NUM_BANDS_SOLAR = NB_CHOU
+    end if
+
+    ! Decide if should make OBIO exports
+    if (USE_RRTMG) then
+       call MAPL_GetResource( MAPL, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', & 
+          DEFAULT=.TRUE., __RC__)
+    else
+       RRTMG_TO_OBIO = .FALSE.
     end if
 
 ! Test to see if AGCM.rc is set up correctly for the Radiation selected
@@ -2130,6 +2188,8 @@ contains
       real, pointer, dimension(:,:)   :: FSWBAND  ! Flux shortwave surface per band
       real, pointer, dimension(:,:)   :: FSWBANDA ! Flux shortwave surface per band no aerosol
                                          
+      real, pointer, dimension(:,:)   :: DRBAND, DFBAND
+
       integer :: ICEFLGSW        ! Flag for ice particle specification
       integer :: LIQFLGSW        ! Flag for liquid droplet specification
 
@@ -2146,7 +2206,6 @@ contains
       real,    allocatable, dimension(:,:)   :: CO2_R, CH4_R
       integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
       real,    allocatable, dimension(:,:)   :: SWUFLX, SWDFLX, SWUFLXC, SWDFLXC
-      real,    allocatable, dimension(:)     :: NIRR_R, NIRF_R, PARR_R, PARF_R, UVRR_R, UVRF_R
 
       ! pmn: should we update these?
       real, parameter :: O2   = 0.2090029E+00 ! preexisting
@@ -2709,9 +2768,20 @@ contains
             cycle
          end if
 
+         ! Don't calculate D[RF]BANDN for NO_AERO
+         if (NO_AERO) then
+            if (NamesOut(k) == 'DRBANDN' .or. NamesOut(k) == 'DFBANDN') then
+               SlicesOut(k) = 0
+               cycle
+            end if
+         end if
+
          if (dims == MAPL_DIMSHORZVERT   .or. &
              NamesOut(k) == 'FSWBANDN'   .or. &
-             NamesOut(k) == 'FSWBANDNAN') then
+             NamesOut(k) == 'FSWBANDNAN' .or. &
+             NamesOut(k) == 'DRBANDN'    .or. &
+             NamesOut(k) == 'DFBANDN'         &
+         ) then
 
             call ESMFL_StateGetPointerToData(INTERNAL, ptr3, NamesOut(k), __RC__)
             SlicesOut(k) = size(ptr3,3)
@@ -2769,6 +2839,10 @@ contains
             NIRR      => ptr2(1:Num2do,1)
          case('DFNIRN')  
             NIRF      => ptr2(1:Num2do,1)
+         case('DRBANDN')  
+            DRBAND    => ptr2(1:Num2do,:)
+         case('DFBANDN')  
+            DFBAND    => ptr2(1:Num2do,:)
          case('FSWNAN')  
             FSWA      => ptr2(1:Num2do,:)               
          case('FSCNAN')  
@@ -2810,7 +2884,7 @@ contains
       ! Point to correct outputs
       ! ------------------------
 
-      if(NO_AERO) then
+      if (NO_AERO) then
          FSW  => FSWA
          FSC  => FSCA
          FSWU => FSWUA
@@ -3613,13 +3687,6 @@ contains
       allocate(SWDFLXR (size(Q,1),size(Q,2)+1),__STAT__)
       allocate(SWUFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
       allocate(SWDFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
-      ! surface broadband fluxes
-      allocate(NIRR_R (size(Q,1)),__STAT__)
-      allocate(NIRF_R (size(Q,1)),__STAT__)
-      allocate(PARR_R (size(Q,1)),__STAT__)
-      allocate(PARF_R (size(Q,1)),__STAT__)
-      allocate(UVRR_R (size(Q,1)),__STAT__)
-      allocate(UVRF_R (size(Q,1)),__STAT__)
 
       ! Set flags related to cloud properties (see RRTMG_SW)
       ! ----------------------------------------------------
@@ -3855,8 +3922,9 @@ contains
          ALBVR, ALBVF, ALBNR, ALBNF, &
          LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
          CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
-         NIRR_R, NIRF_R, PARR_R, PARF_R, UVRR_R, UVRF_R,&
+         NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
          TAUTP, TAUHP, TAUMP, TAULP, &
+         RRTMG_TO_OBIO .and. .not. NO_AERO, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC)
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
@@ -3885,19 +3953,6 @@ contains
       FSC  = SWDFLXCR - SWUFLXCR
       FSWU = SWUFLXR
       FSCU = SWUFLXCR
-
-      ! MAT Just set the FSWBAND to MAPL_UNDEF. More work will
-      !     be needed if this is to be extracted from RRTMG as
-      !     it does not seem to be an output
-
-      FSWBAND = MAPL_UNDEF
-
-      NIRR(:) = NIRR_R(:)
-      NIRF(:) = NIRF_R(:)
-      PARR(:) = PARR_R(:)
-      PARF(:) = PARF_R(:)
-      UVRR(:) = UVRR_R(:)
-      UVRF(:) = UVRF_R(:)
 
       ! Deallocate the working inputs
       !------------------------------
@@ -3934,13 +3989,6 @@ contains
       deallocate(SWDFLXR ,__STAT__)
       deallocate(SWUFLXCR,__STAT__)
       deallocate(SWDFLXCR,__STAT__)
-
-      deallocate(NIRR_R,__STAT__)
-      deallocate(NIRF_R,__STAT__)
-      deallocate(PARR_R,__STAT__)
-      deallocate(PARF_R,__STAT__)
-      deallocate(UVRR_R,__STAT__)
-      deallocate(UVRF_R,__STAT__)
 
       call MAPL_TimerOff(MAPL,"-RRTMG")
 
@@ -4442,6 +4490,12 @@ contains
 !==========================================================
 
     subroutine UPDATE_EXPORT(IM,JM,LM, RC)
+
+      ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
+      ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+      use parrrsw,  only: nbndsw, jpb1, jpb2
+      use rrsw_wvn, only: wavenum1, wavenum2
+
       integer,           intent(IN ) :: IM, JM, LM
       integer, optional, intent(OUT) :: RC
 
@@ -4471,6 +4525,9 @@ contains
       real, pointer, dimension(:,:,:) ::    FSWBANDN
       real, pointer, dimension(:,:,:) ::   FSWBANDNA
       real, pointer, dimension(:,:,:) ::  FSWBANDNAN
+
+      real, pointer, dimension(:,:,:) ::  DRBANDN, DFBANDN
+      real, pointer, dimension(:,:,:) ::  DROBIO , DFOBIO
 
       real, pointer, dimension(:,:  ) ::  DFUVR,  DRUVR
       real, pointer, dimension(:,:  ) ::  DFPAR,  DRPAR
@@ -4537,6 +4594,52 @@ contains
       real    :: FAC
       integer :: idx
       integer,external:: GetAeroIndex
+
+      ! OBIO bands (start, finish) in [nm]
+      real, parameter :: OBIO_bands_nm (2,NB_OBIO) = reshape([ &
+          200.0,  300.0, &  ! 01
+          300.0,  350.0, &  ! 02
+          350.0,  362.5, &  ! 03
+          362.5,  387.5, &  ! 04
+          387.5,  412.5, &  ! 05
+          412.5,  437.5, &  ! 06
+          437.5,  462.5, &  ! 07
+          462.5,  487.5, &  ! 08
+          487.5,  512.5, &  ! 09
+          512.5,  537.5, &  ! 10
+          537.5,  562.5, &  ! 11
+          562.5,  587.5, &  ! 12
+          587.5,  612.5, &  ! 13
+          612.5,  637.5, &  ! 14
+          637.5,  662.5, &  ! 15
+          662.5,  687.5, &  ! 16
+          687.5,  700.0, &  ! 17
+          700.0,  750.0, &  ! 18
+          750.0,  800.0, &  ! 19
+          800.0,  900.0, &  ! 20
+          900.0, 1000.0, &  ! 21
+         1000.0, 1100.0, &  ! 22
+         1100.0, 1200.0, &  ! 23
+         1200.0, 1300.0, &  ! 24
+         1300.0, 1400.0, &  ! 25
+         1400.0, 1500.0, &  ! 26
+         1500.0, 1600.0, &  ! 27
+         1600.0, 1700.0, &  ! 28
+         1700.0, 1800.0, &  ! 29
+         1800.0, 2000.0, &  ! 30
+         2000.0, 2400.0, &  ! 31
+         2400.0, 3400.0, &  ! 32
+         3400.0, 4000.0  &  ! 33
+      ], shape(OBIO_bands_nm))
+
+      ! We will do the conversion from RRTMG to OBIO bands in wavenumber [cm^-1],
+      ! since RRTMG bands are defined so, and since photon energy \propto wavenumber,
+      ! where wavenumber \def 1 / wavelength.
+      real, parameter :: OBIO_bands_wavenum (2,NB_OBIO) = 1.e7 / OBIO_bands_nm
+
+      real :: rwvn1, rwvn2, owvn1, owvn2, rfrac
+      integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
+      logical :: rfirst, ofirst
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -4660,6 +4763,13 @@ contains
       call MAPL_GetPointer(EXPORT  , CLDMDSWHB,  'CLDMDSWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDHISWHB,  'CLDHISWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTTSWHB,  'CLDTTSWHB',  __RC__)
+
+      if (RRTMG_TO_OBIO) then
+         call MAPL_GetPointer(INTERNAL, DRBANDN, 'DRBANDN',    __RC__)
+         call MAPL_GetPointer(INTERNAL, DFBANDN, 'DFBANDN',    __RC__)
+         call MAPL_GetPointer(EXPORT  , DROBIO,  'DROBIO',     __RC__)
+         call MAPL_GetPointer(EXPORT  , DFOBIO,  'DFOBIO',     __RC__)
+      end if
 
       if (associated(FCLD)) FCLD = CLIN
 
@@ -5187,6 +5297,108 @@ contains
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
       
+! RRTMG TO OBIO conversion ...
+! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
+! ---------------------------------------------------------------------------------------
+
+      if (RRTMG_TO_OBIO) then
+         if (associated(DROBIO) .or. associated(DFOBIO)) then
+
+            _ASSERT(jpb2-jpb1+1 == NUM_BANDS_SOLAR, 'RRTMG band inconsistency!')
+            _ASSERT(NUM_BANDS_SOLAR == 14, 'wrong number of RRTMG bands!')
+
+            ! zero accumulators
+            if (associated(DROBIO)) DROBIO = 0.
+            if (associated(DFOBIO)) DFOBIO = 0.
+
+            ! We attempt to do the conversion efficiently by taking into account the RRTMG
+            ! band 14 mis-ordering and knowing there are no gaps or overlaps in either RRTMG
+            ! or OBIO bands. We loop over the two segments of RRTMG bands that render the
+            ! RRTMG bands monotonically increasing in wavenumber.
+            rfirst = .true.
+            ofirst = .true.
+            kb_start = NB_OBIO
+            do iseg = 1,2
+               if (iseg == 1) then
+                  ibbeg = 14; ibend = 14
+               else
+                  ibbeg =  1; ibend = 13
+               end if
+
+               ! loop in increasing wavenumber RRTMG bands
+               do ib = ibbeg,ibend
+
+                  ! convert to wavenum1&2 index
+                  jb = ib + jpb1 - 1
+
+                  ! RRTMG band (rwvn1,rwvn2)
+                  rwvn1 = wavenum1(jb)
+                  if (.not.rfirst) then
+                     _ASSERT(rwvn1 == rwvn2, 'RRTMG bands not complete and unique!')
+                  end if
+                  rwvn2 = wavenum2(jb)
+                  rfirst = .false.
+
+                  ! Now find which OBIO bands it contributes to. OBIO bands are in
+                  ! increasing wavelength, decreasing wavenumber, so this loop is
+                  ! in increasing wavenumber
+                  do kb = kb_start,1,-1
+
+                     ! OBIO band lower wavenumber limit
+                     ! (1&2 indicies on RHS were defined for wavelength ordering)
+                     owvn1 = OBIO_bands_wavenum(2,kb)
+
+                     ! check OBIO band continuity before updating owvn2
+                     if (.not. ofirst) then
+                        if (kb .ne. kb_used_last) then
+                           _ASSERT(owvn1 == owvn2, 'OBIO bands not complete and unique!')
+                        end if
+                     end if
+
+                     ! OBIO band upper wavenumber limit
+                     owvn2 = OBIO_bands_wavenum(1,kb)
+                     kb_used_last = kb
+                     ofirst = .false.
+
+                     ! if we exit the OBIO band loop for any reason, begin
+                     ! processing the next RRTMG band into the same OBIO band
+                     kb_start = kb
+
+                     ! OBIO band has wavenumbers all higher than current RRTMG
+                     ! band, so immediately move on to the next RRTMG band
+                     if (owvn1 >= rwvn2) exit
+
+                     ! OBIO band has wavenumbers all lower than current RRTMG
+                     ! band, so skip it and move on to the next OBIO band
+                     if (owvn2 <= rwvn1) cycle
+
+                     ! now there is some overlap between the RRTMG and OBIO bands ...
+
+                     ! accumulate assuming constant energy spread across each RRTMG band
+                     rfrac = (min(rwvn2,owvn2)-max(rwvn1,owvn1)) / (rwvn2 - rwvn1)
+                     _ASSERT(min(rwvn2,owvn2)-max(rwvn1,owvn1) > 0.,'temp 1')
+                     _ASSERT(rwvn2-rwvn1 > 0.,                      'temp 2')
+                     _ASSERT(rfrac > 0. .and. rfrac < 1.,           'temp 3')
+                     if (associated(DROBIO)) DROBIO (:,:,kb) = DROBIO (:,:,kb) + DRBANDN (:,:,ib) * rfrac
+                     if (associated(DFOBIO)) DFOBIO (:,:,kb) = DFOBIO (:,:,kb) + DFBANDN (:,:,ib) * rfrac
+
+                     ! OBIO band has some wavenumbers higher than current
+                     ! RRTMG band, so move on to the next RRTMG band
+                     if (owvn2 > rwvn2) exit
+
+                  end do  ! kb (OBIO band)
+               end do  ! ib (RRTMG band)
+            end do  ! iseg
+
+            ! unnormalise to W/m2
+            do kb = 1,NB_OBIO
+               if (associated(DROBIO)) DROBIO (:,:,kb) = DROBIO (:,:,kb) * SLR
+               if (associated(DFOBIO)) DFOBIO (:,:,kb) = DFOBIO (:,:,kb) * SLR
+            end do
+
+         end if
+      end if
+
 ! Solar zenith angles: mean for time step and at end of time step.
 !  Note SLR should not be used after this point!!
 !-----------------------------------------------------------------
