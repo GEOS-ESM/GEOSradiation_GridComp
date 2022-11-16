@@ -382,7 +382,7 @@ contains
     ! Decide if should make OBIO exports
     if (USE_RRTMG) then
        call ESMF_ConfigGetAttribute(CF, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', &
-          DEFAULT=.TRUE., __RC__)
+          DEFAULT=.FALSE., __RC__)
     else
        RRTMG_TO_OBIO = .FALSE.
     end if
@@ -1717,7 +1717,7 @@ contains
     ! Decide if should make OBIO exports
     if (USE_RRTMG) then
        call MAPL_GetResource( MAPL, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', & 
-          DEFAULT=.TRUE., __RC__)
+          DEFAULT=.FALSE., __RC__)
     else
        RRTMG_TO_OBIO = .FALSE.
     end if
