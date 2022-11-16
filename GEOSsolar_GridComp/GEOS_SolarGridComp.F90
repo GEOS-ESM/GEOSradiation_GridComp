@@ -5339,9 +5339,9 @@ contains
                   rwvn2 = wavenum2(jb)
                   rfirst = .false.
 
-                  ! Now find which OBIO bands it contributes to. OBIO bands are in
-                  ! increasing wavelength, decreasing wavenumber, so this loop is
-                  ! in increasing wavenumber
+                  ! Now find which OBIO bands the RRTMG band contributes to. OBIO bands
+                  ! are in increasing wavelength, decreasing wavenumber, so this loop is
+                  ! in increasing wavenumber.
                   do kb = kb_start,1,-1
 
                      ! OBIO band lower wavenumber limit
@@ -5374,11 +5374,8 @@ contains
 
                      ! now there is some overlap between the RRTMG and OBIO bands ...
 
-                     ! accumulate assuming constant energy spread across each RRTMG band
+                     ! accumulate assuming constant energy spread across each RRTMG band, rfrac in (0,1]
                      rfrac = (min(rwvn2,owvn2)-max(rwvn1,owvn1)) / (rwvn2 - rwvn1)
-                     _ASSERT(min(rwvn2,owvn2)-max(rwvn1,owvn1) > 0.,'temp 1')
-                     _ASSERT(rwvn2-rwvn1 > 0.,                      'temp 2')
-                     _ASSERT(rfrac > 0. .and. rfrac < 1.,           'temp 3')
                      if (associated(DROBIO)) DROBIO (:,:,kb) = DROBIO (:,:,kb) + DRBANDN (:,:,ib) * rfrac
                      if (associated(DFOBIO)) DFOBIO (:,:,kb) = DFOBIO (:,:,kb) + DFBANDN (:,:,ib) * rfrac
 
