@@ -9,8 +9,8 @@ module GEOS_IrradGridCompMod
 ! !MODULE: GEOS_Irrad -- A Module to compute longwaves radiative transfer through a cloudy atmosphere
 
 ! !DESCRIPTION:
-! 
-!   {\tt Irrad} is a light-weight gridded component to compute longwave 
+!
+!   {\tt Irrad} is a light-weight gridded component to compute longwave
 ! radiative fluxes. It operates on the ESMF grid that appears in the
 ! gridded component passed to its {\tt Initialize} method. Unlike
 ! heavier gridded components, it does not enforce its own grid.
@@ -24,27 +24,27 @@ module GEOS_IrradGridCompMod
 ! M.-D. Chou et al., NASA/TM-2001-104606, Vol. 19, 55 pp, 2003.
 ! Based on the 1996-version of the Air Force Geophysical Laboratory HITRAN data
 ! base (Rothman et al., 1998), the parameterization includes the absorption due
-! to major gaseous absorption (water vapor, CO2 , O3 ) and most of the minor 
+! to major gaseous absorption (water vapor, CO2 , O3 ) and most of the minor
 ! trace gases (N2O, CH4 , CFC's), as well as clouds and aerosols. The thermal
 ! infrared spectrum is divided into nine bands and a subband. To achieve a high
 ! degree of accuracy and speed, various approaches of computing the transmission
-! function are applied to different spectral bands and gases. The gaseous 
-! transmission function is computed either using the k-distribution method or 
-! the table look-up method. To include the effect of scattering due to clouds 
+! function are applied to different spectral bands and gases. The gaseous
+! transmission function is computed either using the k-distribution method or
+! the table look-up method. To include the effect of scattering due to clouds
 ! and aerosols, the optical thickness is scaled by the single-scattering albedo
-! and asymmetry factor. The optical thickness, the single-scattering albedo, 
+! and asymmetry factor. The optical thickness, the single-scattering albedo,
 ! and the asymmetry factor of clouds are parameterized as functions of the ice
 ! and water content and the particle size.
 
 !   All outputs are optional and are filled only if they have been
-! initialized by a coupler. 
+! initialized by a coupler.
 !
 !   The net (+ve downward) fluxes are returned at the layer
 ! interfaces, which are indexed from the top of the atmosphere (L=0)
-! to the surface. It also computes the sensitivity of net downward flux to 
+! to the surface. It also computes the sensitivity of net downward flux to
 ! surface temperature and emission by the surface.
 ! The full transfer calculation, including the linearization w.r.t. the surface temperature,
-! is done intermitently, on the component's main time step and its results are 
+! is done intermitently, on the component's main time step and its results are
 ! kept in the internal state. Exports are refreshed each heartbeat based on the
 ! latest surface temperature.
 !
@@ -55,8 +55,8 @@ module GEOS_IrradGridCompMod
 !    is called after, it should occur during the last step. The behavior
 !    of the component needs to be somewhat different in these two cases
 !    and so a means is provided, through the logical attribute \texttt{CALL\_LAST} in
-!    configuration, of telling the component how it is being used. The 
-!    default is \texttt{CALL\_LAST = "TRUE"}. 
+!    configuration, of telling the component how it is being used. The
+!    default is \texttt{CALL\_LAST = "TRUE"}.
 !
 !
 ! !USES:
@@ -74,7 +74,7 @@ module GEOS_IrradGridCompMod
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
 
   use irradmod, only: IRRAD
-  
+
   implicit none
   private
 
@@ -104,7 +104,7 @@ module GEOS_IrradGridCompMod
    ! temperature (Tbr) calculations in Update_Flx(), which
    ! use specified wavenumber endpoints, may require mod-
    ! ification for band 16 (pmn: TODO). For the moment,
-   ! the limits [2600,3250] are used. 
+   ! the limits [2600,3250] are used.
 
    ! Which bands are supported?
    !    (Currently RRTMG only)
@@ -161,7 +161,7 @@ contains
 
 ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
 !                the Initialize and Finalize services, as well as allocating
-!   our instance of a generic state and putting it in the 
+!   our instance of a generic state and putting it in the
 !   gridded component (GC). Here we only need to set the run method and
 !   add the state variable specifications (also generic) to our instance
 !   of the generic state. This is the way our true state variables get into
@@ -510,7 +510,7 @@ contains
         UNITS      = 'W m-2',                                     &
         DIMS       = MAPL_DimsHorzVert,                           &
         VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
-    
+
     call MAPL_AddExportSpec(GC,                                   &
         SHORT_NAME = 'FLCU',                                      &
         LONG_NAME  = 'upward_longwave_flux_in_air_assuming_clear_sky', &
@@ -621,7 +621,7 @@ contains
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
              write(wvn_rng,'(I0,"-",I0)') nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
-   
+
              call MAPL_AddExportSpec(GC,                                    &
                 SHORT_NAME = 'OLRB'//bb//'RG',                              &
                 LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RRTMG_band' &
@@ -770,7 +770,7 @@ contains
         VLOCATION  = MAPL_VLocationNone,                         __RC__ )
 
 !  Irrad does not have a "real" internal state. To update the net_longwave_flux
-!  due to the change of surface temperature every time step, we keep 
+!  due to the change of surface temperature every time step, we keep
 !  several variables in the internal state.
 
 !  !INTERNAL STATE:
@@ -961,7 +961,7 @@ contains
     call MAPL_GenericSetServices(GC, __RC__)
 
     RETURN_(ESMF_SUCCESS)
-  
+
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -973,7 +973,7 @@ contains
 subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! !ARGUMENTS:
-  type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component 
+  type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
   type(ESMF_State),    intent(inout) :: IMPORT ! Import state
   type(ESMF_State),    intent(inout) :: EXPORT ! Export state
   type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
@@ -1055,7 +1055,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 !=============================================================================
 
-! Begin... 
+! Begin...
 
 ! Get the target components name and set-up traceback handle.
 ! -----------------------------------------------------------
@@ -1189,7 +1189,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! If it is time, refresh internal state.
 !---------------------------------------
-   
+
    if ( ESMF_AlarmIsRinging   (ALARM, RC=STATUS) ) then
       call ESMF_AlarmRingerOff(ALARM, RC=STATUS)
       VERIFY_(STATUS)
@@ -1198,7 +1198,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        call LW_Driver( IM,JM,LM,LATS,LONS,CoresPerNode, RC=STATUS )
        VERIFY_(STATUS)
       call MAPL_TimerOff(MAPL,"-LW_DRIVER")
- 
+
    endif
 
 ! Fill exported fluxes based on latest Ts
@@ -1257,7 +1257,7 @@ contains
    integer,                   intent(IN )    :: IM, JM, LM, CoresPerNode
    real,    dimension(IM,JM), intent(IN )    :: LATS, LONS
    integer, optional,         intent(OUT)    :: RC
-     
+
 !  Locals
 
    character(len=ESMF_MAXSTR)        :: IAm
@@ -1267,7 +1267,7 @@ contains
 
    logical, parameter :: TRACE    = .true.
 
-   integer, parameter :: NS       = 1       ! number of sub-grid surface types 
+   integer, parameter :: NS       = 1       ! number of sub-grid surface types
 
    integer, parameter :: KICE     = 1
    integer, parameter :: KLIQUID  = 2
@@ -1327,7 +1327,7 @@ contains
 ! --------------------
    type (ESMF_State)                    :: AERO
    type (ESMF_Field)                    :: AS_FIELD
-   character(len=ESMF_MAXSTR)           :: AS_FIELD_NAME   
+   character(len=ESMF_MAXSTR)           :: AS_FIELD_NAME
    type (ESMF_Field)                    :: AS_FIELD_Q
    integer                              :: AS_STATUS
    real, pointer,     dimension(:,:,:)  :: AS_PTR_3D
@@ -1343,7 +1343,7 @@ contains
 
    real, pointer,     dimension(:,:,:)  :: VAR_PTR_3D
 
-   logical                              :: implements_aerosol_optics 
+   logical                              :: implements_aerosol_optics
 
    integer                              :: band
 
@@ -1360,10 +1360,10 @@ contains
    real,    allocatable, dimension(:,:)   :: PLE_R        ! Reverse of level pressure
    real,    allocatable, dimension(:,:)   :: ZM_R         ! Reverse of layer height
    real,    allocatable, dimension(:,:)   :: EMISS        ! Surface emissivity at 16 RRTMG bands
-   real,    allocatable, dimension(:,:)   :: CLIQWP       ! Cloud liquid water path 
-   real,    allocatable, dimension(:,:)   :: CICEWP       ! Cloud ice water path 
-   real,    allocatable, dimension(:,:)   :: RELIQ        ! Cloud liquid effective radius 
-   real,    allocatable, dimension(:,:)   :: REICE        ! Cloud ice effective radius 
+   real,    allocatable, dimension(:,:)   :: CLIQWP       ! Cloud liquid water path
+   real,    allocatable, dimension(:,:)   :: CICEWP       ! Cloud ice water path
+   real,    allocatable, dimension(:,:)   :: RELIQ        ! Cloud liquid effective radius
+   real,    allocatable, dimension(:,:)   :: REICE        ! Cloud ice effective radius
    real,    allocatable, dimension(:,:,:) :: TAUAER
    real,    allocatable, dimension(:,:)   :: PL_R, T_R,  Q_R, O2_R,  O3_R
    real,    allocatable, dimension(:,:)   :: CO2_R, CH4_R, N2O_R, CFC11_R, CFC12_R, CFC22_R, CCL4_R
@@ -1412,7 +1412,7 @@ contains
    class(ty_optical_props_arry), allocatable :: &
      cloud_props, cloud_props_subset, &
        aer_props,   aer_props_subset
- 
+
    ! The g-point cloud optical properties used for mcICA
    class(ty_optical_props_arry), allocatable :: cloud_props_gpt
 
@@ -1494,7 +1494,7 @@ contains
    real, pointer, dimension(:,:  )   :: CLDLOLW
    real, pointer, dimension(:,:  )   :: TSREFF
    real, pointer, dimension(:,:  )   :: SFCEM
-   real, pointer, dimension(:,:  )   :: LWS0 
+   real, pointer, dimension(:,:  )   :: LWS0
    real, pointer, dimension(:,:  )   :: DSFDTS
 
    ! for compact multi-export handling
@@ -1519,7 +1519,7 @@ contains
 
 ! Pointer to Imports used only for full transfer calculation
 !-----------------------------------------------------------
-   
+
    call MAPL_GetPointer(IMPORT, PLE,    'PLE',    RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, T,      'T',      RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, Q,      'QV',     RC=STATUS); VERIFY_(STATUS)
@@ -1574,7 +1574,7 @@ contains
    if (USE_RRTMGP_SORAD) then
       OFFSET = NB_RRTMGP_SORAD
    else if (USE_RRTMG_SORAD) then
-      OFFSET = NB_RRTMG_SORAD 
+      OFFSET = NB_RRTMG_SORAD
    else
       OFFSET = NB_CHOU_SORAD
    end if
@@ -1583,7 +1583,7 @@ contains
    if (USE_RRTMGP) then
       NB_IRRAD = NB_RRTMGP
    else if (USE_RRTMG) then
-      NB_IRRAD = NB_RRTMG 
+      NB_IRRAD = NB_RRTMG
    else
       NB_IRRAD = NB_CHOU
    end if
@@ -1614,7 +1614,7 @@ contains
    end if
 
 ! Compute surface air temperature ("2 m") adiabatically
-!------------------------------------------------------ 
+!------------------------------------------------------
 
    T2M = T(:,:,LM)*(0.5*(1.0 + PLE(:,:,LM-1)/PLE(:,:,LM)))**(-MAPL_KAPPA)
 
@@ -1634,7 +1634,7 @@ contains
    EV                  = 0.0
    RV                  = 0.0
 
-! Copy cloud constituent properties into contiguous buffers 
+! Copy cloud constituent properties into contiguous buffers
 !----------------------------------------------------------
 
    CWC (:,:,:,KICE   ) = QI
@@ -1740,7 +1740,7 @@ contains
       if (AS_FIELD_NAME /= '') then
          call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), RC=STATUS)
          VERIFY_(STATUS)
-           
+
          AS_PTR_3D = PLE
       end if
 
@@ -1770,7 +1770,7 @@ contains
          if (AS_FIELD_NAME /= '') then
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1782,7 +1782,7 @@ contains
          if (AS_FIELD_NAME /= '') then
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1795,7 +1795,7 @@ contains
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS)
             VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1954,7 +1954,7 @@ contains
       top_at_1 = p_lay(1, 1) < p_lay(1, LM)
       _ASSERT(top_at_1, 'unexpected vertical ordering')
 
-      ! pmn: pressure KLUGE 
+      ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
@@ -1973,7 +1973,7 @@ contains
         endif
       endif
 
-      ! pmn: temperature KLUGE 
+      ! pmn: temperature KLUGE
       ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
       ! temperature below this occasionally (< 1% of time). (The lowest temp
       ! seen is so far 151K). Consequently we will limit min(t_lay) to 160K.
@@ -2243,7 +2243,7 @@ contains
 
         ! note: have made cloud_props for all ncol columns
         !   and will subset below into blocks ... we can also
-        !   look at option of making cloud_props for each block 
+        !   look at option of making cloud_props for each block
         !   as its needed ... same for aer_props
 
         ! set desired cloud overlap type
@@ -2267,7 +2267,7 @@ contains
         ! that remains the same for the members of an ensemble. If a different set is
         ! required for ensemble members, then the model state, such as the fractional
         ! part of the surface pressure, should be incorporated into the key.
-        !   To get a different set of random numbers for the SW, for example, either a 
+        !   To get a different set of random numbers for the SW, for example, either a
         ! key change or a counter advance will be needed.
         !
         ! Time Component of key:
@@ -2281,7 +2281,7 @@ contains
         ! 1. should be based on some globally unique index for a gridcolumn, so that
         !   each gridcolumn is independent and so it is agnostic to runs with varying
         !   decompositions among processors.
-        ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent 
+        ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent
         !   globe at over 1/180th degree resolution, so plenty for forseeable
         !   future.
         !
@@ -2366,7 +2366,7 @@ contains
       !--------------------------------------------------!
       ! Loop over subsets (blocks) of blockSize columns  !
       !  - choose rrtmgp_blockSize for efficiency        !
-      !  - one possible partial block is done at the end ! 
+      !  - one possible partial block is done at the end !
       !--------------------------------------------------!
 
       call MAPL_GetResource( MAPL, &
@@ -2542,20 +2542,20 @@ contains
               select type (clean_optical_props)
                 class is (ty_optical_props_2str)
                   dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%g   = clean_optical_props%g  
+                  dirty_optical_props%g   = clean_optical_props%g
               end select
             class is (ty_optical_props_nstr)
               TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_subset, LM, clean_optical_props))
               select type (clean_optical_props)
                 class is (ty_optical_props_nstr)
                   dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%p   = clean_optical_props%p  
+                  dirty_optical_props%p   = clean_optical_props%p
               end select
           end select
           ! all streams have tau
           dirty_optical_props%tau = clean_optical_props%tau
         end if
-        
+
         ! clean all-sky case
         if (calc_allnoa) then
 
@@ -2613,7 +2613,7 @@ contains
 
           else
 
-            ! there are no aerosols so we are done because the 
+            ! there are no aerosols so we are done because the
             !   dirty cases are the same as the clean ones
             if (export_clrsky) then
               flux_up_clrsky(colS:colE,:) = flux_up_clrnoa(colS:colE,:)
@@ -2625,7 +2625,7 @@ contains
               flux_dn_allsky(colS:colE,:) = flux_dn_allnoa(colS:colE,:)
               dfupdts_allsky(colS:colE,:) = dfupdts_allnoa(colS:colE,:)
             end if
-          
+
           end if ! implements_aerosol_optics
         end if ! export dirty clear-sky or all-sky
 
@@ -2705,7 +2705,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"--RRTMG",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_GetResource(MAPL,PARTITION_SIZE,'RRTMGLW_PARTITION_SIZE:',DEFAULT=4,RC=STATUS)
       VERIFY_(STATUS)
 
@@ -2755,7 +2755,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       ! reverse super-layer interface indicies
       LCLDMH = LM - LCLDMH + 1
       LCLDLM = LM - LCLDLM + 1
@@ -2795,7 +2795,7 @@ contains
             CICEWP(IJ,K) = xx*CWC(I,J,LV,KICE)
             RELIQ (IJ,K) =   REFF(I,J,LV,KLIQUID)
             REICE (IJ,K) =   REFF(I,J,LV,KICE   )
-               
+
             ! impose RRTMG re_liq limits
             if    (LIQFLGLW.eq.0) then
                ! pmn: this one not available inside RRTMG_LW
@@ -2877,17 +2877,17 @@ contains
 
       call MAPL_TimerOff(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_INIT",RC=STATUS)
       VERIFY_(STATUS)
- 
+
 ! pmn: consider putting futher up calling tree?
 ! pmn: only needs to be done once per run, but does consume memory
       call RRTMG_LW_INI
 
       call MAPL_TimerOff(MAPL,"---RRTMG_INIT",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
 
@@ -2902,10 +2902,10 @@ contains
 
       call MAPL_TimerOff(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       ! for outputs, unpack flattened horizontal and flip back vertical
       IJ = 0
       do J = 1,JM
@@ -3018,7 +3018,7 @@ contains
    FLXA_INT = FLXAD_INT + FLXAU_INT
    FLC_INT  = FLCD_INT  + FLCU_INT
    FLA_INT  = FLAD_INT  + FLAU_INT
-   
+
    ! Revert to SFCEM to a positive quantity.
    ! Earlier surface emitted positive downwards per Chou-Suarez.
    SFCEM_INT = -SFCEM_INT
@@ -3209,7 +3209,7 @@ contains
    VERIFY_(STATUS)
    call MAPL_GetPointer( IMPORT, PREF, 'PREF', RC=STATUS)
    VERIFY_(STATUS)
-   
+
    ALLOCATE( DUMTT(IM,JM), STAT=STATUS)
    VERIFY_(STATUS)
 
@@ -3312,8 +3312,8 @@ contains
 
        ! absorbed (non-reflected) downward surface fluxes
        ! (remember: downward fluxes are not not linearized)
-       if(associated(LWS  )) LWS   =  FLX_INT(:,:,LM) + SFCEM_INT  
-       if(associated(LWSA )) LWSA  = FLXA_INT(:,:,LM) + SFCEM_INT  
+       if(associated(LWS  )) LWS   =  FLX_INT(:,:,LM) + SFCEM_INT
+       if(associated(LWSA )) LWSA  = FLXA_INT(:,:,LM) + SFCEM_INT
        if(associated(LCS  )) LCS   =  FLC_INT(:,:,LM) + SFCEM_INT
        if(associated(LAS  )) LAS   =  FLA_INT(:,:,LM) + SFCEM_INT
        if(associated(LCSC5)) then
@@ -3378,7 +3378,7 @@ contains
 
        ! absorbed (non-reflected) downward surface fluxes
        ! (remember: downward fluxes are not not linearized)
-       if(associated(LWS  )) LWS   = FLX_INT(:,:,LM) + SFCEM_INT  
+       if(associated(LWS  )) LWS   = FLX_INT(:,:,LM) + SFCEM_INT
        if(associated(LWSA )) LWSA  = MAPL_UNDEF
        if(associated(LCS  )) LCS   = FLC_INT(:,:,LM) + SFCEM_INT
        if(associated(LAS  )) LAS   = MAPL_UNDEF

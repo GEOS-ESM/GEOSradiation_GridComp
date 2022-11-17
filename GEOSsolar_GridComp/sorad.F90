@@ -57,33 +57,33 @@ contains
 !    RRTMG aerosol work to be done similarly in the GC.
 
 ! Changes in July 2010:
-!   
+!
 !   (1) Code relooped to have one, main loop over the soundings, many
 !       arrays reduced in dimensionality, some to scalars.
 !   (2) Instead of calling to external aerosol Mie code, efficiency and
 !       asymmetry tables are now passed in.
-! 
+!
 ! Changes in August 2004:
 !
-!   (1) A layer was added above pl(1) to account for the absorption 
+!   (1) A layer was added above pl(1) to account for the absorption
 !       in the region 0-pl(1) hPa. pl(1) can be either 0 or >0 hPa.
 !   (2) All parameters in the subroutine deledd were assigned to real*8
 !   (3) The minimun values of water vapor and ozone, as well as tausto,
-!       were changed to avoid computer precision problem. 
+!       were changed to avoid computer precision problem.
 !
 !***********************************************************************
 !
 !
 ! The maximum-random assumption is applied for treating cloud
 !  overlapping. Clouds are grouped into high, middle, and low clouds
-!  separated by the level indices ict and icb.  Note: ict must be 
+!  separated by the level indices ict and icb.  Note: ict must be
 ! less than icb, and icb must be less than np+1.
 !
 ! In a high spatial-resolution atmospheric model, fractional cloud cover
 !  might be computed to be either 0 or 1.  In such a case, scaling of the
 !  cloud optical thickness is not necessary, and the computation can be
 !  made faster by compiling with -DOVERCAST.  Otherwise, do not compile
-!  with the -DOVERCAST flag. (note: for the case that fractional cloud 
+!  with the -DOVERCAST flag. (note: for the case that fractional cloud
 !  cover in a layer is either 0 or 1, the results of using either option
 !  are identical).
 !
@@ -91,7 +91,7 @@ contains
 !                                                   units      size
 !  number of soundings (m)                          n/d         1
 !  number of atmospheric layers (np)                n/d         1
-!  number of bands (nb)                             n/d         1   
+!  number of bands (nb)                             n/d         1
 !  cosine of solar zenith angle (cosz)              n/d         m
 !  level pressure (pl)                              mb        m*(np+1)
 !        pl(np+1) is the surface pressure
@@ -121,12 +121,12 @@ contains
 !  aerosol optical thickness (taua)                 n/d      m*np*nb
 !  aerosol single scattering albedo (ssaa)          n/d      m*np*nb
 !  aerosol asymmetry factor (asya)                  n/d      m*np*nb
-!  surface reflectivity     
+!  surface reflectivity
 !        in the UV+par region:
-!           for beam insolation    (rsuvbm)        fraction     m 
-!           for diffuse insolation (rsuvdf)        fraction     m 
+!           for beam insolation    (rsuvbm)        fraction     m
+!           for diffuse insolation (rsuvdf)        fraction     m
 !        in the near-ir region:
-!           for beam insolation    (rsirbm)        fraction     m  
+!           for beam insolation    (rsirbm)        fraction     m
 !           for diffuse insolation (rsirdf)        fraction     m
 !
 !  The 8 bands are:
@@ -177,7 +177,7 @@ contains
 !      to 400 and 700 mb.
 !
 !-----Please notify Ming-Dah Chou for coding errors.
-!        
+!
 !*************************************************************************
       implicit none
 
@@ -241,7 +241,7 @@ contains
 
       integer :: im
 
-      integer :: ic,iw 
+      integer :: ic,iw
       real :: ulog,wlog,dc,dd,x0,x1,x2,y0,y1,y2,du2,dw2
 
       integer :: ih
@@ -274,7 +274,7 @@ contains
 
 !-----Beginning of sorad code
 
-!-----wvtoa and o3toa are the water vapor and o3 amounts of the region 
+!-----wvtoa and o3toa are the water vapor and o3 amounts of the region
 !     above the pl(1) level.
 !     snt is the secant of the solar zenith angle
 
@@ -292,8 +292,8 @@ contains
 
             dp(k) = pl(i,k+1)-pl(i,k)
             dp_pa(k) = dp(k) * 100. ! dp in pascals
- 
-!-----compute scaled water vapor amount following Eqs. (3.3) and (3.5) 
+
+!-----compute scaled water vapor amount following Eqs. (3.3) and (3.5)
 !     unit is g/cm**2
 !
             pa   = 0.5*(pl(i,k)+pl(i,k+1))
@@ -418,9 +418,9 @@ contains
          call getvistau(np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
                         taubeam,taudiff,asycl)
 
-!-----clouds within each of the high, middle, and low clouds are 
-!     assumed to be maximally overlapped, and the cloud cover (cc) 
-!     for a group (high, middle, or low) is the maximum cloud cover 
+!-----clouds within each of the high, middle, and low clouds are
+!     assumed to be maximally overlapped, and the cloud cover (cc)
+!     for a group (high, middle, or low) is the maximum cloud cover
 !     of all the layers within a group
 !     The cc1,2,3 are still needed in the flux calculations below
 
@@ -489,7 +489,7 @@ contains
                rs(k,1)=rst
                ts(k,1)=tst
 
-!-----compute reflectance and transmittance of the cloudy portion 
+!-----compute reflectance and transmittance of the cloudy portion
 !     of a layer
 
 !-----for direct incident radiation
@@ -508,12 +508,12 @@ contains
                asytof=(asysto+asycl(k)*tauclf(k))/(ssatof*tautof)
 
 !-----for direct incident radiation
-!     note that the cloud optical thickness is scaled differently 
+!     note that the cloud optical thickness is scaled differently
 !     for direct and diffuse insolation, Eqs. (7.3) and (7.4).
 
                call deledd(tautob,ssatob,asytob,cosz(i),rrt,ttt,tdt)
 
-!-----diffuse incident radiation is approximated by beam radiation 
+!-----diffuse incident radiation is approximated by beam radiation
 !     with an incident angle of 53 degrees, Eqs. (6.5) and (6.6)
 
                call deledd(tautof,ssatof,asytof,dsm,rst,tst,dum)
@@ -526,7 +526,7 @@ contains
             end do
 
 !-----flux calculations
-!     initialize clear-sky flux (fclr), all-sky flux (fall), 
+!     initialize clear-sky flux (fclr), all-sky flux (fall),
 !     and surface downward fluxes (fsdir and fsdif)
 
             do k=1,np+1
@@ -543,7 +543,7 @@ contains
 
 !-----Inline CLDFLXY
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is either 0 or 1.
 
 !-----layers are added one at a time, going up from the surface.
@@ -554,7 +554,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated by 
+!     tda is the composite direct transmittance illuminated by
 !         beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -604,7 +604,7 @@ contains
                fdndif=(xx4*rsaold+yy)*denm
                fupdif=(xx4+yy*rxa(k))*denm
                flxdn=fdndir+fdndif-fupdif
-               fupc(k)=fupdif 
+               fupc(k)=fupdif
                fclr(k)=flxdn
 
                tdaold = tdanew
@@ -670,7 +670,7 @@ contains
 
 #else
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is allowed to be between 0 and 1.
 !     the all-sky flux, fall is the summation inside the brackets
 !     of Eq. (7.11)
@@ -679,7 +679,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated 
+!     tda is the composite direct transmittance illuminated
 !         by beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -687,9 +687,9 @@ contains
 !         by diffuse radiation
 !     tta and rsa are computed from Eqs. (6.10) and (6.12)
 
-!-----To save memory space, tda, tta, and rsa are pre-computed 
-!     for k<icb. The dimension of these parameters is (m,np,2,2). 
-!     It would have been (m,np,2,2,2) if these parameters were 
+!-----To save memory space, tda, tta, and rsa are pre-computed
+!     for k<icb. The dimension of these parameters is (m,np,2,2).
+!     It would have been (m,np,2,2,2) if these parameters were
 !     computed for all k's.
 
 !-----for high clouds
@@ -773,7 +773,7 @@ contains
 
             do ih=1,2
 
-!-----clear portion 
+!-----clear portion
                if(ih.eq.1) then
                   ch=1.0-cc1
 !-----cloudy portion
@@ -782,18 +782,18 @@ contains
                end if
 
                do im=1,2
-!-----clear portion 
+!-----clear portion
                   if(im.eq.1) then
                      cm=ch*(1.0-cc2)
 !-----cloudy portion
                   else
-                     cm=ch*cc2 
+                     cm=ch*cc2
                   end if
 
                   do is=1,2
-!-----clear portion 
+!-----clear portion
                      if(is.eq.1) then
-                        ct=cm*(1.0-cc3) 
+                        ct=cm*(1.0-cc3)
 !-----cloudy portion
                      else
                         ct=cm*cc3
@@ -945,9 +945,9 @@ contains
             call getnirtau(ib,np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
                            taubeam,taudiff,asycl,ssacl)
 
-!-----clouds within each of the high, middle, and low clouds are 
-!     assumed to be maximally overlapped, and the cloud cover (cc) 
-!     for a group (high, middle, or low) is the maximum cloud cover 
+!-----clouds within each of the high, middle, and low clouds are
+!     assumed to be maximally overlapped, and the cloud cover (cc)
+!     for a group (high, middle, or low) is the maximum cloud cover
 !     of all the layers within a group
 
 !MAT--DO NOT FUSE THIS LOOP
@@ -995,7 +995,7 @@ contains
                   ssatob=ssatau/tautob+1.0e-8
                   ssatob=min(ssatob,0.999999)
 
-!-----Compute reflectance and transmittance of the clear portion 
+!-----Compute reflectance and transmittance of the clear portion
 !     of a layer
 
 !-----for direct incident radiation
@@ -1013,7 +1013,7 @@ contains
                   rs(k,1)=rst
                   ts(k,1)=tst
 
-!-----compute reflectance and transmittance of the cloudy portion 
+!-----compute reflectance and transmittance of the cloudy portion
 !     of a layer
 
 !-----for direct incident radiation. Eqs.(6.2)-(6.4)
@@ -1048,7 +1048,7 @@ contains
 
 !-----FLUX CALCULATIONS
 
-!     initialize clear-sky flux (fclr), all-sky flux (fall), 
+!     initialize clear-sky flux (fclr), all-sky flux (fall),
 !     and surface downward fluxes (fsdir and fsdif)
 
                do k=1,np+1
@@ -1061,7 +1061,7 @@ contains
                fsdir=0.0
                fsdif=0.0
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is either 0 or 1.
 
 #ifdef OVERCAST
@@ -1076,7 +1076,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated by 
+!     tda is the composite direct transmittance illuminated by
 !         beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -1193,7 +1193,7 @@ contains
 
 #else
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is allowed to be between 0 and 1.
 !     the all-sky flux, fall is the summation inside the brackets
 !     of Eq. (7.11)
@@ -1202,7 +1202,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated 
+!     tda is the composite direct transmittance illuminated
 !         by beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -1210,9 +1210,9 @@ contains
 !         by diffuse radiation
 !     tta and rsa are computed from Eqs. (6.10) and (6.12)
 
-!-----To save memory space, tda, tta, and rsa are pre-computed 
-!     for k<icb. The dimension of these parameters is (m,np,2,2). 
-!     It would have been (m,np,2,2,2) if these parameters were 
+!-----To save memory space, tda, tta, and rsa are pre-computed
+!     for k<icb. The dimension of these parameters is (m,np,2,2).
+!     It would have been (m,np,2,2,2) if these parameters were
 !     computed for all k's.
 
 !-----for high clouds
@@ -1295,7 +1295,7 @@ contains
 !     ih, im, is denote high, middle and low cloud groups.
 
                do ih=1,2
-!-----clear portion 
+!-----clear portion
                   if(ih.eq.1) then
                      ch=1.0-cc1
 !-----cloudy portion
@@ -1304,18 +1304,18 @@ contains
                   end if
 
                   do im=1,2
-!-----clear portion 
+!-----clear portion
                      if(im.eq.1) then
                         cm=ch*(1.0-cc2)
 !-----cloudy portion
                      else
-                        cm=ch*cc2 
+                        cm=ch*cc2
                      end if
 
                      do is=1,2
-!-----clear portion 
+!-----clear portion
                         if(is.eq.1) then
-                           ct=cm*(1.0-cc3) 
+                           ct=cm*(1.0-cc3)
 !-----cloudy portion
                         else
                            ct=cm*cc3
@@ -1408,7 +1408,7 @@ contains
          do k=1,np
             so2(k+1) = so2(k) + scal(k)*cnt
 ! LLT increased parameter 145 to 155 to enhance effect
-            df(k+1) = 0.0633*(1.0 - exp(-0.000155*sqrt(so2(k+1)))) 
+            df(k+1) = 0.0633*(1.0 - exp(-0.000155*sqrt(so2(k+1))))
          end do
 
 !-----for solar heating due to co2 scaling follows Eq(3.5) with f=1.
@@ -1449,7 +1449,7 @@ contains
             if(ic.gt.nu) ic=nu
             if(iw.gt.nw) iw=nw
             dc=ulog-real(ic-2)*du-u1
-            dd=wlog-real(iw-2)*dw-w1   
+            dd=wlog-real(iw-2)*dw-w1
             x2=cah(ic-1,iw-1)+(cah(ic-1,iw)-cah(ic-1,iw-1))/dw*dd
             y2=x2+(cah(ic,iw-1)-cah(ic-1,iw-1))/du*dc
             y2=max(y2,0.0)
@@ -1485,7 +1485,7 @@ contains
             if(ic.gt.nx) ic=nx
             if(iw.gt.ny) iw=ny
             dc=ulog-real(ic-2)*du-u1
-            dd=wlog-real(iw-2)*dw-w1   
+            dd=wlog-real(iw-2)*dw-w1
             x2=coa(ic-1,iw-1)+(coa(ic-1,iw)-coa(ic-1,iw-1))/dw*dd
             y2=x2+(coa(ic,iw-1)-coa(ic-1,iw-1))/du*dc
             y2=max(y2,0.0)
@@ -1523,7 +1523,7 @@ contains
             flc(i,k) = flc(i,k) - df(k)
          end do
 
-!-----update the downward surface fluxes 
+!-----update the downward surface fluxes
 
 !        xx4 = fdirir (i) + fdifir (i) +&
 !              fdiruv (i) + fdifuv (i) +&
@@ -1537,10 +1537,10 @@ contains
             xx4 = 0.0
          end if
 
-         fdirir(i)  = xx4*fdirir(i) 
-         fdifir(i)  = xx4*fdifir(i) 
-         fdiruv(i)  = xx4*fdiruv(i) 
-         fdifuv(i)  = xx4*fdifuv(i) 
+         fdirir(i)  = xx4*fdirir(i)
+         fdifir(i)  = xx4*fdifir(i)
+         fdiruv(i)  = xx4*fdiruv(i)
+         fdifuv(i)  = xx4*fdifuv(i)
          fdirpar(i) = xx4*fdirpar(i)
          fdifpar(i) = xx4*fdifpar(i)
 
@@ -1597,7 +1597,7 @@ contains
       real(kind=MAPL_R8), parameter :: seven = 7.0_MAPL_R8
       real(kind=MAPL_R8), parameter :: thresh = 1.e-8_MAPL_R8
 
-      real(kind=MAPL_R8) ::  tau,ssc,g0,rr,tt,td 
+      real(kind=MAPL_R8) ::  tau,ssc,g0,rr,tt,td
       real(kind=MAPL_R8) ::  zth,ff,xx,taup,sscp,gp,gm1,gm2,gm3,akk,alf1,alf2
       real(kind=MAPL_R8) ::  all,bll,st7,st8,cll,dll,fll,ell,st1,st2,st3,st4
 
@@ -1612,7 +1612,7 @@ contains
       sscp= ssc*(one-ff)/xx
       gp  = g0/(one+g0)
 
-      xx  = three*gp 
+      xx  = three*gp
       gm1 = (seven-sscp*(four+xx))*fourth
       gm2 =-(one  -sscp*(four-xx))*fourth
 
@@ -1625,7 +1625,7 @@ contains
 
       if (abs(st3) .lt. thresh) then
          zth = zth+0.0010
-         if(zth > 1.0) zth = zth-0.0020 
+         if(zth > 1.0) zth = zth-0.0020
          xx  = akk*zth
          st7 = one-xx
          st8 = one+xx
