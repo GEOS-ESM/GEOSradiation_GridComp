@@ -40,8 +40,9 @@ contains
       selffac, selffrac, indself, forfac, forfrac, indfor, &
       pbbfd, pbbfu, pbbcd, pbbcu, puvfd, puvcd, pnifd, pnicd, &
       pbbfddir, pbbcddir, puvfddir, puvcddir, pnifddir, pnicddir, &
-      znirr, znirf, zparr, zparf, zuvrr, zuvrf, &
-      ztautp, ztauhp, ztaump, ztaulp)
+      znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
+      ztautp, ztauhp, ztaump, ztaulp, &
+      do_drfband, zdrband, zdfband)
    ! ---------------------------------------------------------------------------
    !
    ! Purpose: Contains spectral loop to compute the shortwave radiative fluxes, 
@@ -135,6 +136,8 @@ contains
       integer, intent(in) :: cloudLM  ! Low-mid
       integer, intent(in) :: cloudMH  ! Mid-high
 
+      logical, intent(in) :: do_drfband  ! Compute zdrband, zdfband?
+
       ! ------- Output -------
 
       real, intent(out) :: pbbcd    (nlay+1,pncol) 
@@ -158,9 +161,16 @@ contains
       real, intent(out), dimension(pncol) :: &
          znirr, znirf, zparr, zparf, zuvrr, zuvrf
 
+      ! net downwelling flux @ sfc in bands (all-sky and diffuse+direct)
+      real, intent(out) :: fndsbnd (pncol,nbndsw)
+
       ! in-cloud PAR optical thicknesses
       real, intent(out), dimension (pncol) :: &
          ztautp, ztauhp, ztaump, ztaulp
+
+      ! Surface downwelling direct and diffuse fluxes (W/m2)
+      !    in each band (all-sky): Only filled if (do_drfband).
+      real, intent(out), dimension (pncol,nbndsw) :: zdrband, zdfband
 
       ! ------- Local -------
 
@@ -216,6 +226,11 @@ contains
       zparf    = 0.
       zuvrr    = 0.
       zuvrf    = 0.
+      fndsbnd  = 0.
+      if (do_drfband) then
+         zdrband  = 0.
+         zdfband  = 0.
+      end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
       call taumol_sw( &
@@ -485,8 +500,19 @@ contains
                znirf(icol) = znirf(icol) + 0.5 * zincflx * zfd  (nlay+1,iw,icol)  ! Total flux
             endif
 
+            fndsbnd(icol,ibm) = fndsbnd(icol,ibm) + &
+               zincflx * (zfd (nlay+1,iw,icol) - zfu (nlay+1,iw,icol))
+
+            if (do_drfband) then
+               zdrband(icol,ibm) = zdrband(icol,ibm) + zincflx * ztdbt(nlay+1,iw,icol)  ! direct
+               zdfband(icol,ibm) = zdfband(icol,ibm) + zincflx * zfd  (nlay+1,iw,icol)  ! total
+            end if
+
          end do
       enddo                    
+
+      ! convert from total to diffuse only
+      if (do_drfband) zdfband = zdfband - zdrband
 
       ! diagnostic in-cloud optical thicknesses in PAR super-band
       ! (weighted across and within bands by TOA incident flux)
