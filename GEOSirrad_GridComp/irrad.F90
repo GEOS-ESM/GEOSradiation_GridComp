@@ -37,14 +37,14 @@ contains
 !*********************************************************************
 !
 !
-!   THE EQUATION NUMBERS noted in this code follows the latest  
-!    version (May 2003) of the NASA Tech. Memo. (2001), which can 
+!   THE EQUATION NUMBERS noted in this code follows the latest
+!    version (May 2003) of the NASA Tech. Memo. (2001), which can
 !    be accessed at ftp://climate.gsfc.nasa.gov/pub/chou/clirad_lw/
 !
 !
 !*********************************************************************
 !  CHANGE IN NOVEMBER 2011
-!    
+!
 !    Code rewritten to pass in the full taua, ssaa, and asya arrays
 !    in echo of the old, original irrad.f. This is done to allow for
 !    RRTMG aerosol work to be done similarly in the GC.
@@ -52,7 +52,7 @@ contains
 !    Move to use the new getirtau routine in gettau
 !
 !  CHANGE IN SEPTEMBER 2010
-!   
+!
 !   (1) Code relooped to have one, main loop over the soundings, many
 !       arrays reduced in dimensionality, some to scalars.
 !   (2) Instead of calling to external aerosol Mie code, efficiency and
@@ -63,7 +63,7 @@ contains
 !
 !  CHANGE IN AUGUST 2004
 !
-!   (1) A layer was added above ple(1) to account for the downward  
+!   (1) A layer was added above ple(1) to account for the downward
 !       radiation from above.
 !
 !  CHANGE IN SEPTEMBER 2003
@@ -76,14 +76,14 @@ contains
 !
 !  CHANGE IN MAY 2003
 !
-!    The effective size of ice particles was changed to the  
-!    effective radius of cloud particles, and the definition of the 
-!    effective radius followed that given in Chou, Lee and Yang 
+!    The effective size of ice particles was changed to the
+!    effective radius of cloud particles, and the definition of the
+!    effective radius followed that given in Chou, Lee and Yang
 !    (JGR, 2002). The reff is no longer an input parameter.
 !
 !  CHANGE IN DECEMBER 2002
 !
-!    Do-loop 1500 was created inside the do-loop 1000 to compute 
+!    Do-loop 1500 was created inside the do-loop 1000 to compute
 !    the upward and downward emission of a layer
 !
 !   CHANGE IN JULY 2002
@@ -104,26 +104,26 @@ contains
 !    The number of aerosol types is allowed to be more than one.
 !    Include sub-grid surface variability and vegetation canopy.
 !    Include the CKD continuum absorption coefficient as an option.
-!    
+!
 !********************************************************************
 !
 !
 ! Ice and liquid cloud particles are allowed to co-exist in each of the
-!  np layers. 
+!  np layers.
 !
-! The maximum-random assumption is applied for cloud overlapping. 
-!  Clouds are grouped into high, middle, and low clouds separated 
+! The maximum-random assumption is applied for cloud overlapping.
+!  Clouds are grouped into high, middle, and low clouds separated
 !  by the level indices ict and icb.  Within each of the three groups,
-!  clouds are assumed maximally overlapped.  Clouds among the three 
-!  groups are assumed randomly overlapped. The indices ict and icb 
+!  clouds are assumed maximally overlapped.  Clouds among the three
+!  groups are assumed randomly overlapped. The indices ict and icb
 !  correspond approximately to the 400 mb and 700 mb levels.
 !
-! Various types of aerosols are allowed to be in any of the np layers. 
-!  Aerosol optical properties can be specified as functions of height  
+! Various types of aerosols are allowed to be in any of the np layers.
+!  Aerosol optical properties can be specified as functions of height
 !  and spectral band.
 !
-! The surface can be divided into a number of sub-regions either with or 
-!  without vegetation cover. Reflectivity and emissivity can be 
+! The surface can be divided into a number of sub-regions either with or
+!  without vegetation cover. Reflectivity and emissivity can be
 !  specified for each sub-region.
 !
 ! There are options for computing fluxes:
@@ -133,22 +133,22 @@ contains
 !   table look-up.  cooling rates are computed accurately from the
 !   surface up to 0.01 mb.
 !
-!   If trace = .true., absorption due to n2o, ch4, cfcs, and the 
+!   If trace = .true., absorption due to n2o, ch4, cfcs, and the
 !   two minor co2 bands in the window region is included.
 !   Otherwise, absorption in those minor bands is neglected.
 !
-!   If overcast=.true. (i.e., compiled with -DOVERCAST), the layer cloud 
+!   If overcast=.true. (i.e., compiled with -DOVERCAST), the layer cloud
 !   cover is either 0 or 1.
-!   If overcast=.false. (not compiled with -DOVERCAST), the cloud cover 
+!   If overcast=.false. (not compiled with -DOVERCAST), the cloud cover
 !   can be anywhere between 0 and 1.
 !   Computation is faster for the .true. option than the .false. option.
 !
 !   If aerosol = .true., aerosols are included in calculating transmission
 !   functions. Otherwise, aerosols are not included.
-!   
+!
 !
 ! The IR spectrum is divided into nine bands:
-!   
+!
 !   band     wavenumber (/cm)   absorber
 !
 !    1           0 - 340           h2o
@@ -231,7 +231,7 @@ contains
 !   downwelling flux, all-sky no aerosol (flxad)  fraction   m*(np+1)
 !   downwelling flux, clear-sky (flcd)            fraction   m*(np+1)
 !   downwelling flux, clear-sky no aerosol (flad) fraction   m*(np+1)
-!   sensitivity of net downward flux  
+!   sensitivity of net downward flux
 !       to surface temperature (dfdts)           fraction/k  m*(np+1)
 !   emission by the surface (sfcem)               fraction     m
 !
@@ -243,8 +243,8 @@ contains
 !   h11,h12,h13: for h2o (band 1)
 !   h21,h22,h23: for h2o (band 2)
 !   h81,h82,h83: for h2o (band 8)
-! 
-! Notes: 
+!
+! Notes:
 !
 !   (1) Scattering is parameterized for clouds and aerosols.
 !   (2) Diffuse cloud and aerosol transmissions are computed
@@ -324,10 +324,10 @@ contains
    real :: taant
    real :: trant,tranal
    real :: transfc(0:np+1),transfca(0:np+1),trantcr(0:np+1),trantca(0:np+1)
-   real :: flau(0:np+1),flad(0:np+1)
-   real :: flcu(0:np+1),flcd(0:np+1)
-   real :: flxu(0:np+1),flxd(0:np+1)
-   real :: flxau(0:np+1),flxad(0:np+1)
+   real :: flau_col(0:np+1),flad_col(0:np+1)
+   real :: flcu_col(0:np+1),flcd_col(0:np+1)
+   real :: flxu_col(0:np+1),flxd_col(0:np+1)
+   real :: flxau_col(0:np+1),flxad_col(0:np+1)
    real :: taerlyr(0:np)
 
 !mjs
@@ -348,7 +348,7 @@ contains
 
    logical :: oznbnd,co2bnd,h2otable,conbnd,n2obnd
    logical :: ch4bnd,combnd,f11bnd,f12bnd,f22bnd,b10bnd
-   logical :: do_aerosol 
+   logical :: do_aerosol
 
 !---- Temp arrays and variables for consolidation of tables
    integer, parameter :: max_num_tables = 17
@@ -397,7 +397,7 @@ contains
 !     df22 : cfc22 amount (cm-atm)stp
 !     the factor 1.02 is equal to 1000/980
 !     factors 789 and 476 are for unit conversion
-!     the factor 0.001618 is equal to 1.02/(.622*1013.25) 
+!     the factor 0.001618 is equal to 1.02/(.622*1013.25)
 !     the factor 6.081 is equal to 1800/296
 
          dh2o(k) = 1.02*wa   (i,k)*dp(k)
@@ -420,7 +420,7 @@ contains
          dcont(k) = xx*exp(1800./ta(i,k)-6.081)
 
 !-----Fill the reff, cwc, and fcld for the column
-         
+
          fcld_col(k) = fcld(i,k)
          do l = 1, 4
             reff_col(k,l) = reff(i,k,l)
@@ -606,7 +606,7 @@ contains
 !     bs and dbs include the effect of surface emissivity.
 
          call sfcflux (ibn,m,i,cb,dcb,ns,fs,tg,eg,tv,ev,rv,&
-               bs,dbs,rflxs) 
+               bs,dbs,rflxs)
 
          blayer(np+1)=bs
 
@@ -650,7 +650,7 @@ contains
 
          do k=1,np
             taudiag(i,k,ibn) = taudiag(i,k,ibn) + &
-                  taudiaglyr(k,1) + taudiaglyr(k,2) + taudiaglyr(k,3) + taudiaglyr(k,4) 
+                  taudiaglyr(k,1) + taudiaglyr(k,2) + taudiaglyr(k,3) + taudiaglyr(k,4)
          end do
 
 !MAT-- icx and ncld only used when overcast=.false.
@@ -675,13 +675,13 @@ contains
 !-----taerlyr is the aerosol diffuse transmittance
 
                taerlyr(k)=1.0
-               if (taua(i,k,ibn) > 0.001) then 
+               if (taua(i,k,ibn) > 0.001) then
                   if (ssaa(i,k,ibn) > 0.001) then
                      asya(i,k,ibn)=asya(i,k,ibn)/ssaa(i,k,ibn)
                      ssaa(i,k,ibn)=ssaa(i,k,ibn)/taua(i,k,ibn)
 
 !-----Parameterization of aerosol scattering following Eqs. (6.11)
-!     and (6.12). 
+!     and (6.12).
 
                      ff=.5+(.3739+(0.0076+0.1185*asya(i,k,ibn))*asya(i,k,ibn))*asya(i,k,ibn)
                      taua(i,k,ibn)=taua(i,k,ibn)*(1.-ssaa(i,k,ibn)*ff)
@@ -700,7 +700,7 @@ contains
 
 !-----compute the exponential terms (Eq. 4.24) at each layer due to
 !     water vapor continuum absorption.
-!     ne is the number of terms used in each band to compute water 
+!     ne is the number of terms used in each band to compute water
 !     vapor continuum transmittance (Table 9).
 
          ne=0
@@ -765,7 +765,7 @@ contains
                a1  = 9.65130e-4
                b1  = 1.31280e-5
                fk1 = 6.18536e+0
-               a2  =-3.00010e-5 
+               a2  =-3.00010e-5
                b2  = 5.25010e-7
                fk2 = 3.27912e+1
                call cfcexps(ibn,np,a1,b1,fk1,a2,b2,fk2,df22,dt,&
@@ -946,14 +946,14 @@ contains
 
 !-----initialize fluxes
 
-         flxu  = 0.0
-         flxd  = 0.0
-         flxau = 0.0
-         flxad = 0.0
-         flcu  = 0.0
-         flcd  = 0.0
-         flau  = 0.0
-         flad  = 0.0
+         flxu_col  = 0.0
+         flxd_col  = 0.0
+         flxau_col = 0.0
+         flxad_col = 0.0
+         flcu_col  = 0.0
+         flcd_col  = 0.0
+         flau_col  = 0.0
+         flad_col  = 0.0
 
 !-----Compute upward and downward fluxes for each spectral band, ibn.
 
@@ -1158,7 +1158,7 @@ contains
                   end if
 
 !-----Compute transmittance in band 10 using k-distribution method.
-!     For band 10, trant is the change in transmittance due to n2o 
+!     For band 10, trant is the change in transmittance due to n2o
 !     absorption.
 
                   if (b10bnd) then
@@ -1210,41 +1210,41 @@ contains
 !-----The first terms on the rhs of Eqs. (8.15) and (8.16)
 
                if (k2 == k1+1 .and. ibn /= 10) then
-                  flau (k1) = flau (k1) - au(k1)
-                  flad (k2) = flad (k2) + ad(k1)
-                  flcu (k1) = flcu (k1) - cu(k1)
-                  flcd (k2) = flcd (k2) + cd(k1)
-                  flxu (k1) = flxu (k1) - bu(k1)
-                  flxd (k2) = flxd (k2) + bd(k1)
-                  flxau(k1) = flxau(k1) - du(k1)
-                  flxad(k2) = flxad(k2) + dd(k1)
+                  flau_col (k1) = flau_col (k1) - au(k1)
+                  flad_col (k2) = flad_col (k2) + ad(k1)
+                  flcu_col (k1) = flcu_col (k1) - cu(k1)
+                  flcd_col (k2) = flcd_col (k2) + cd(k1)
+                  flxu_col (k1) = flxu_col (k1) - bu(k1)
+                  flxd_col (k2) = flxd_col (k2) + bd(k1)
+                  flxau_col(k1) = flxau_col(k1) - du(k1)
+                  flxad_col(k2) = flxad_col(k2) + dd(k1)
                end if
 
 !-----The summation terms on the rhs of Eqs. (8.15) and (8.16).
 !     Also see Eqs. (5.4) and (5.5) for Band 10.
 
                xx=trant*(bu(k2-1)-bu(k2))
-               flxu(k1)=flxu(k1)+xx*fclr
+               flxu_col(k1)=flxu_col(k1)+xx*fclr
 
                if(do_aerosol) then
                   xx = taant*(du(k2-1)-du(k2))
                end if
-               flxau(k1)=flxau(k1)+xx*fclr
+               flxau_col(k1)=flxau_col(k1)+xx*fclr
 
                xx=trant*(cu(k2-1)-cu(k2))
-               flcu(k1)=flcu(k1)+xx
+               flcu_col(k1)=flcu_col(k1)+xx
 
                if(do_aerosol) then
                   xx = taant*(au(k2-1)-au(k2))
                end if
-               flau(k1)=flau(k1)+xx
+               flau_col(k1)=flau_col(k1)+xx
 
                if (k1 == 0) then !mjs  bd(-1) is not defined
                   xx=-trant*bd(k1)
                else
                   xx= trant*(bd(k1-1)-bd(k1))
                end if
-               flxd(k2)=flxd(k2)+xx*fclr
+               flxd_col(k2)=flxd_col(k2)+xx*fclr
 
                if(do_aerosol) then
                   if (k1 == 0) then  !mjs  bd(-1) is not defined
@@ -1253,14 +1253,14 @@ contains
                      xx= taant*(dd(k1-1)-dd(k1))
                   end if
                end if
-               flxad(k2)=flxad(k2)+xx*fclr
+               flxad_col(k2)=flxad_col(k2)+xx*fclr
 
                if (k1 == 0) then !mjs  bd(-1) is not defined
                   xx=-trant*cd(k1)
                else
                   xx= trant*(cd(k1-1)-cd(k1))
                end if
-               flcd(k2)=flcd(k2)+xx
+               flcd_col(k2)=flcd_col(k2)+xx
 
                if(do_aerosol) then
                   if (k1 == 0) then  !mjs  bd(-1) is not defined
@@ -1269,14 +1269,14 @@ contains
                      xx= taant*(ad(k1-1)-ad(k1))
                   end if
                end if
-               flad(k2)=flad(k2)+xx
+               flad_col(k2)=flad_col(k2)+xx
 !MAT--End of original 4000 loop
 
                fclr_above = fclr
 
             end do LOOP_3000_4000
 
-!-----Here, fclr and trant are, respectively, the clear line-of-sight 
+!-----Here, fclr and trant are, respectively, the clear line-of-sight
 !     and the transmittance between k1 and the surface.
 
             trantca (k1) = taant
@@ -1285,7 +1285,7 @@ contains
             transfca(k1) = taant*fclr
 
 !-----compute the partial derivative of fluxes with respect to
-!     surface temperature (Eq. 3.12). 
+!     surface temperature (Eq. 3.12).
 !     Note: upward flux is negative, and so is dfdts.
 
             if (k1 > 0)then
@@ -1297,13 +1297,13 @@ contains
 
          if (.not. b10bnd) then
 
-!-----Note: blayer(np+1) and dbs include the surface emissivity 
+!-----Note: blayer(np+1) and dbs include the surface emissivity
 !     effect. Both dfdts and sfcem are negative quantities.
 
-            flau(np+1)       =             -blayer(np+1)
-            flcu(np+1)       =             -blayer(np+1)
-            flxu(np+1)       =             -blayer(np+1)
-            flxau(np+1)      =             -blayer(np+1)
+            flau_col(np+1)       =             -blayer(np+1)
+            flcu_col(np+1)       =             -blayer(np+1)
+            flxu_col(np+1)       =             -blayer(np+1)
+            flxau_col(np+1)      =             -blayer(np+1)
             sfcem(i)     = sfcem(i)-blayer(np+1)
             dfdts(i,np+1)= dfdts(i,np+1)-dbs
 
@@ -1311,25 +1311,25 @@ contains
 !     rhs of Eq. 8.16). rflxs is the surface reflectivity.
 
             do k=1,np+1
-               flau (k) = flau (k)-flad (np+1)*trantca (k)*rflxs
-               flcu (k) = flcu (k)-flcd (np+1)*trantcr (k)*rflxs
-               flxu (k) = flxu (k)-flxd (np+1)*transfc (k)*rflxs
-               flxau(k) = flxau(k)-flxad(np+1)*transfca(k)*rflxs
+               flau_col (k) = flau_col (k)-flad_col (np+1)*trantca (k)*rflxs
+               flcu_col (k) = flcu_col (k)-flcd_col (np+1)*trantcr (k)*rflxs
+               flxu_col (k) = flxu_col (k)-flxd_col (np+1)*transfc (k)*rflxs
+               flxau_col(k) = flxau_col(k)-flxad_col(np+1)*transfca(k)*rflxs
             end do
          end if
 
 !-----Summation of fluxes over spectral bands
 
          do k=1,np+1
-            flau (i,k) = flau (i,k) + flau (k)
-            flcu (i,k) = flcu (i,k) + flcu (k)
-            flxu (i,k) = flxu (i,k) + flxu (k)
-            flxau(i,k) = flxau(i,k) + flxau(k)
+            flau (i,k) = flau (i,k) + flau_col (k)
+            flcu (i,k) = flcu (i,k) + flcu_col (k)
+            flxu (i,k) = flxu (i,k) + flxu_col (k)
+            flxau(i,k) = flxau(i,k) + flxau_col(k)
 
-            flad (i,k) = flad (i,k) + flad (k)
-            flcd (i,k) = flcd (i,k) + flcd (k)
-            flxd (i,k) = flxd (i,k) + flxd (k)
-            flxad(i,k) = flxad(i,k) + flxad(k)
+            flad (i,k) = flad (i,k) + flad_col (k)
+            flcd (i,k) = flcd (i,k) + flcd_col (k)
+            flxd (i,k) = flxd (i,k) + flxd_col (k)
+            flxad(i,k) = flxad(i,k) + flxad_col(k)
          end do
 
       end do BAND_LOOP
@@ -1355,9 +1355,9 @@ contains
 
    end subroutine planck
 
-   
+
 !***********************************************************************
-   subroutine plancd(ibn,dcb,t,dbdt) 
+   subroutine plancd(ibn,dcb,t,dbdt)
 !***********************************************************************
 !
 !-----Compute the derivative of Planck flux wrt temperature
@@ -1384,7 +1384,7 @@ contains
 !---- input parameters
 !  spectral band (ib)
 !  number of layers (np)
-!  layer water vapor amount for line absorption (dh2o) 
+!  layer water vapor amount for line absorption (dh2o)
 !  layer pressure (pa)
 !  layer temperature minus 250K (dt)
 !  absorption coefficients for the first k-distribution
@@ -1468,7 +1468,7 @@ contains
 !---- input parameters
 !  spectral band (ib)
 !  number of layers (np)
-!  layer scaled water vapor amount for continuum absorption (dcont) 
+!  layer scaled water vapor amount for continuum absorption (dcont)
 !  absorption coefficients for the first k-distribution function
 !     due to water vapor continuum absorption (xke)
 !
@@ -1499,7 +1499,7 @@ contains
 
 !-----The absorption coefficients for sub-bands 3b and 3a are, respectively,
 !     two and four times the absorption coefficient for sub-band 3c (Table 9).
-!     Note that conexp(3) is for sub-band 3a. 
+!     Note that conexp(3) is for sub-band 3a.
 
       if (ib  ==  3) then
          conexp(k,2) = conexp(k,1) *conexp(k,1)
@@ -1514,7 +1514,7 @@ contains
 !**********************************************************************
    subroutine n2oexps(ib,np,dn2o,pa,dt,n2oexp)
 !**********************************************************************
-!   Compute n2o exponentials for individual layers 
+!   Compute n2o exponentials for individual layers
 !
 !---- input parameters
 !  spectral band (ib)
@@ -1655,7 +1655,7 @@ contains
 !**********************************************************************
    subroutine comexps(ib,np,dcom,dt,comexp)
 !**********************************************************************
-!   Compute co2-minor exponentials for individual layers using 
+!   Compute co2-minor exponentials for individual layers using
 !   Eqs. (8.21) and (8.22).
 !
 !---- input parameters
@@ -1899,8 +1899,8 @@ contains
 !  layer absorber amount (dw)
 !  layer pressure in mb (p)
 !  deviation of layer temperature from 250K (dt)
-!  first value of absorber amount (log10) in the table (w1) 
-!  first value of pressure (log10) in the table (p1) 
+!  first value of absorber amount (log10) in the table (w1)
+!  first value of pressure (log10) in the table (p1)
 !  size of the interval of absorber amount (log10) in the table (dwe)
 !  size of the interval of pressure (log10) in the table (dpe)
 !  pre-computed coefficients (coef1, coef2, and coef3)
@@ -1914,7 +1914,7 @@ contains
 !
 !  Note: Units of s1 are g/cm**2 for water vapor and
 !       (cm-atm)stp for co2 and o3.
-!   
+!
 !**********************************************************************
    implicit none
 
@@ -1936,7 +1936,7 @@ contains
    real :: x1,x2,x3,xx, x1c
    integer :: iw,ip
 
-!-----Compute effective pressure (x2) and temperature (x3) following 
+!-----Compute effective pressure (x2) and temperature (x3) following
 !     Eqs. (8.28) and (8.29)
 
    s1=s1+dw
@@ -1960,7 +1960,7 @@ contains
    we=min(we,float(nh-1))
    pe=min(pe,float(nx-1))
 
-!-----assign iw and ip and compute the distance of we and pe 
+!-----assign iw and ip and compute the distance of we and pe
 !     from iw and ip.
 
    iw=int(we+1.0)
@@ -2030,8 +2030,8 @@ contains
 !    h2o continuum absorption (gkw)
 !  number of terms used in each band to compute water vapor
 !     continuum transmittance (ne)
-!  exponentials for line absorption (h2oexp) 
-!  exponentials for continuum absorption (conexp) 
+!  exponentials for line absorption (h2oexp)
+!  exponentials for continuum absorption (conexp)
 !
 !---- updated parameters
 !  transmittance between levels k1 and k2 due to
@@ -2058,11 +2058,11 @@ contains
    real :: trnth2o
    integer :: i
 
-!-----tco2 are the six exp factors between levels k1 and k2 
+!-----tco2 are the six exp factors between levels k1 and k2
 !     tran is the updated total transmittance between levels k1 and k2
 
 !-----th2o is the 6 exp factors between levels k1 and k2 due to
-!     h2o line absorption. 
+!     h2o line absorption.
 
 !-----tcon is the 3 exp factors between levels k1 and k2 due to
 !     h2o continuum absorption.
@@ -2178,7 +2178,7 @@ contains
 
    real :: xc
 
-!-----tn2o is computed from Eq. (8.23). 
+!-----tn2o is computed from Eq. (8.23).
 !     xc is the total n2o transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 5.
 
@@ -2249,7 +2249,7 @@ contains
 
    real :: xc
 
-!-----tch4 is computed from Eq. (8.23). 
+!-----tch4 is computed from Eq. (8.23).
 !     xc is the total ch4 transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 5.
 
@@ -2317,7 +2317,7 @@ contains
 
    real :: xc
 
-!-----tcom is computed from Eq. (8.23). 
+!-----tcom is computed from Eq. (8.23).
 !     xc is the total co2 transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 6.
 
@@ -2391,7 +2391,7 @@ contains
 
    real :: tcfc,tran
 
-!-----tcfc is the exp factors between levels k1 and k2. 
+!-----tcfc is the exp factors between levels k1 and k2.
 
    tcfc=tcfc*cfcexp(k)
    tran=tran*tcfc
@@ -2607,7 +2607,7 @@ contains
 !***********************************************************************
    subroutine sfcflux (ibn,m,i,cb,dcb,ns,fs,tg,eg,tv,ev,rv,bs,dbs,rflxs)
 !***********************************************************************
-! Compute emission and reflection by an homogeneous/inhomogeneous 
+! Compute emission and reflection by an homogeneous/inhomogeneous
 !  surface with vegetation cover.
 !
 !-----Input parameters
@@ -2621,7 +2621,7 @@ contains
 !  sub-grid vegetation temperature (tv)
 !  sub-grid vegetation emissivity (ev)
 !  sub-grid vegetation reflectivity (rv)
-!                      
+!
 !-----Output parameters                                Unit
 !  Emission by the surface (ground+vegetation) (bs)    W/m^2
 !  Derivative of bs rwt to temperature (dbs)           W/m^2
@@ -2747,7 +2747,7 @@ contains
 !***********************************************************************
 
    implicit none
-   
+
    integer, intent(  OUT) :: NC
    integer, intent(IN   ) :: IBG, IEND
    real,    intent(IN   ) :: ENN(IBG:IEND)
