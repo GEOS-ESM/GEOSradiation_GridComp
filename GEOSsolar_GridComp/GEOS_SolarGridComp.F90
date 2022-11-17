@@ -11,19 +11,19 @@ module GEOS_SolarGridCompMod
 
 ! /*
 ! !DESCRIPTION:
-! 
+!
 ! {\tt GEOS\_SolarGridCompMod} is an ESMF/MAPL gridded component that performs
 !  a broadband calculation of shortwave radiative fluxes for use as a
 !  solar radiation parameterization in atmospheric models on a sphere. \newline
-! 
+!
 ! {\em Scientific Basis:} The radiative transfer calculation is based on M-D Chou shortwave
 ! parameterization. The basic reference for the scheme is:
 ! Chou and Suarez 1999: A Solar Radiation Parameterization for Atmospheric Studies,
 ! NASA-TM-1999-104606, Vol 15. An updated version of this report can be
 ! found in SolarDoc.pdf in this directory. \newline
 !
-! The parameterization treats direct and diffuse fluxes of solar 
-! radiation in eight spectral bands:  
+! The parameterization treats direct and diffuse fluxes of solar
+! radiation in eight spectral bands:
 ! \begin{verbatim}
 !        in the uv region :
 !           index  1 for the 0.225-0.285 micron band
@@ -39,17 +39,17 @@ module GEOS_SolarGridCompMod
 ! \end{verbatim}
 ! It includes gaseous absorption due to water vapor, ozone, CO$_2$, and
 ! molecular oxygen and the effects of molecular scattering,
-! as well as multiple scattering due to clouds and aerosols. 
+! as well as multiple scattering due to clouds and aerosols.
 !
-! It allows clouds to occur in any layer and 
-! horizontal cloud cover fractions must be specified 
+! It allows clouds to occur in any layer and
+! horizontal cloud cover fractions must be specified
 ! for all layers; clear layers
-! simply have a fraction of zero. Vertically, the layers are 
+! simply have a fraction of zero. Vertically, the layers are
 ! assumed to be filled by cloud. To simplify the treatment of
 ! cloud effects, the model layers,
 ! are grouped into three super layers. Effective cloud properties are then
 ! parameterized by assuming that clouds are maximally overlapped within the super layers
-! and randomly overlapped between the super layers.  The  
+! and randomly overlapped between the super layers.  The
 ! optical properties of cloud particles depend on the liquid, ice, and rain mixing ratios,
 ! as well as on spatially dependent effective radii for the three species.
 ! These are all inputs to the component. \newline
@@ -62,9 +62,9 @@ module GEOS_SolarGridCompMod
 !
 !
 ! {\em Code Implementation:} \newline
-! 
+!
 !  {\tt GEOS\_SolarGridCompMod} is an encapsulation of Chou's plug-compatible
-!  SORAD Fortran routine in a MAPL/ESMF gridded component (GC). 
+!  SORAD Fortran routine in a MAPL/ESMF gridded component (GC).
 !  It follows the standard rules for an ESMF/MAPL GCs.
 !  It operates on the ESMF grid that appears in the
 !  gridded component. This grid must
@@ -74,12 +74,12 @@ module GEOS_SolarGridCompMod
 !  with only the horizontal dimensions decomposed. The vertical dimension
 !  is also assumed to the the thrid dimension of the Fortran arrays and
 !  is indexed from the top down. No particular vertical coordinate is assumed,
-!  rather the 3-dimensional field of air pressure at the layer interfaces is 
+!  rather the 3-dimensional field of air pressure at the layer interfaces is
 !  a required Import. \newline
 !
-!  This module contains only SetServices and Run methods. 
+!  This module contains only SetServices and Run methods.
 !  The Initialize and Finalize methods
-!  being defaulted to the MAPL\_Generic versions. 
+!  being defaulted to the MAPL\_Generic versions.
 !  The SetServices method is the only public
 !  entity. There are no public types or data. \newline
 !
@@ -88,15 +88,15 @@ module GEOS_SolarGridCompMod
 !  All quantities in these states are in either ESMF Fields or Bundles,
 !  and all share a common grid---the ESMF grid in the gridded component
 !  at the time Initialize (MAPL\_GenericInitialize, in this case) was called.
-!  All outputs appearing in the Export state are optional and are 
+!  All outputs appearing in the Export state are optional and are
 !  filled only if they have been allocated. All filled Exports are valid
 !  for the time interval on the GC's clock when the run method is invoked.
 !  Imports can be from either an instantaneous or a time-averaged state of the
 !  atmosphere. All Imports are read-only; none are Friendly.
-!  Most imports are simple ESMF Fields containing 2- or 
+!  Most imports are simple ESMF Fields containing 2- or
 !  3-dimensional quantities, such as temperature and humidity, needed in
-!  the flux calculation. Non-cloud aerosol amounts are the exception; they 
-!  appear in an ESMF Bundle.  \newline 
+!  the flux calculation. Non-cloud aerosol amounts are the exception; they
+!  appear in an ESMF Bundle.  \newline
 !
 !  The net (+ve downward) fluxes on the Export state are defined at the layer
 !  interfaces, which are indexed from the top of the atmosphere (L=0)
@@ -105,15 +105,15 @@ module GEOS_SolarGridCompMod
 !  into direct (beam) and diffuse fluxes for three spectral bands
 !  (uv, par, nir), as defined in the table above.  \newline
 !
-!  The full transfer calculation is done infrequently and 
-!  its results kept in the Internal state. 
+!  The full transfer calculation is done infrequently and
+!  its results kept in the Internal state.
 !  The frequency of full calculations is controlled
 !  by an alarm whose interval can be set
-!  from a value in the configuration and whose origin is taken as the 
+!  from a value in the configuration and whose origin is taken as the
 !  beginning of the run.
 !  For the full calculations, solar fluxes are computed based on
-!  mean zenith angles averaged over sun positions for a 
-!  given period (the long interval, which can be specified in 
+!  mean zenith angles averaged over sun positions for a
+!  given period (the long interval, which can be specified in
 !  the configuration) beyond the
 !  current time on the input clock. On every call to the Run method,
 !  whatever the state of the alarm that controls the full calculation,
@@ -125,12 +125,12 @@ module GEOS_SolarGridCompMod
 !  intermittent scheme, checkpoint-restart sequences are seamless
 !  only when interrupted at the time of the full calculation.\newline
 !
-!  The calculation relies in MAPL's Astronomy layer, which in turn 
+!  The calculation relies in MAPL's Astronomy layer, which in turn
 !  assumes that the ESMF grid can be queried for latitude and longitude
 !  coordinates. \newline
 !
 ! {\em Configuration:} \newline
-!  
+!
 !  Like all MAPL GCs, {\tt GEOS\_SolarGridCompMod} assumes that the configuration
 !  in the ESMF GC is open and treats it as an environment from which it can
 !  {\em at any time} read control information. It uses MAPL rules for scanning this
@@ -139,7 +139,7 @@ module GEOS_SolarGridCompMod
 !
 !VARIABLE             DESCRIPTION           UNITS      DEFAULT   NOTES
 !
-!RUN_DT:              Short time interval   (seconds)  none   
+!RUN_DT:              Short time interval   (seconds)  none
 !DT:                  Long time interval    (seconds)  RUN_DT
 !AVGR:                Averaging interval    (seconds)  DT
 !PRS_LOW_MID_CLOUDS:  Interface pressure    (Pa)       70000.
@@ -156,8 +156,8 @@ module GEOS_SolarGridCompMod
 !
 ! !BUGS:
 !
-!\end{verbatim} 
-!\begin{itemize} 
+!\end{verbatim}
+!\begin{itemize}
 !    \item Aerosol properties for each aerosol in the Bundle are obtained by
 !    calling a global method (Get\_AeroOptProp) that must recognize
 !    the aerosol by its Field name in the Bundle. This is a placeholder
@@ -170,10 +170,10 @@ module GEOS_SolarGridCompMod
 !    \item The load-balancing relies on the grid describing a sphere. Everything
 !    works for non-spherical grids but the load-balancing should be disabled
 !    and this can be done only by going into the code.
-!\end{itemize} 
+!\end{itemize}
 ! \begin{verbatim}
 !
-!   */  
+!   */
 
 ! !USES:
 
@@ -183,44 +183,7 @@ module GEOS_SolarGridCompMod
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
 
-#ifdef _CUDA
-  use cudafor
-  ! NOTE: USE renames are used below to prevent name clashes with
-  !       CUDA copies to the GPU.
-  use sorad_constants, only: &
-        ZK_UV_CONST=>ZK_UV, WK_UV_CONST=>WK_UV, RY_UV_CONST=>RY_UV, &
-        XK_IR_CONST=>XK_IR, RY_IR_CONST=>RY_IR,                     &
-          COA_CONST=>COA,     CAH_CONST=>CAH
-  use rad_constants, only: &
-         AIB_UV_CONST=>AIB_UV,   AWB_UV_CONST=>AWB_UV,   ARB_UV_CONST=>ARB_UV,  &
-         AIG_UV_CONST=>AIG_UV,   AWG_UV_CONST=>AWG_UV,   ARG_UV_CONST=>ARG_UV,  &
-        AIB_NIR_CONST=>AIB_NIR, AWB_NIR_CONST=>AWB_NIR, ARB_NIR_CONST=>ARB_NIR, &
-        AIA_NIR_CONST=>AIA_NIR, AWA_NIR_CONST=>AWA_NIR, ARA_NIR_CONST=>ARA_NIR, &
-        AIG_NIR_CONST=>AIG_NIR, AWG_NIR_CONST=>AWG_NIR, ARG_NIR_CONST=>ARG_NIR, &
-           CAIB_CONST=>CAIB,       CAIF_CONST=>CAIF
-  use soradmod, only: &
-        ! Subroutines
-        SORAD, &
-        ! Device Inputs
-        COSZ_DEV, PL_DEV, TA_DEV, WA_DEV, OA_DEV, CWC_DEV, FCLD_DEV, REFF_DEV, &
-        RSUVBM_DEV, RSUVDF_DEV, RSIRBM_DEV, RSIRDF_DEV, &
-        ! Aerosol inputs
-        TAUA_DEV, SSAA_DEV, ASYA_DEV, &
-        ! Constants in Global Memory
-        COA, CAH, CAIB, CAIF, &
-        ! Device Outputs
-        FLX_DEV, FLC_DEV, FLXU_DEV, FLCU_DEV, &
-        FDIRUV_DEV, FDIFUV_DEV, FDIRPAR_DEV, FDIFPAR_DEV, FDIRIR_DEV, FDIFIR_DEV, &
-        FLX_SFC_BAND_DEV, &
-        ! Constants
-         ZK_UV,  WK_UV,  RY_UV, AIB_UV, AWB_UV, ARB_UV, &
-        AIG_UV, AWG_UV, ARG_UV,  XK_IR,  RY_IR, AIB_NIR, &
-        AWB_NIR, ARB_NIR, AIA_NIR, AWA_NIR, ARA_NIR, AIG_NIR, &
-        AWG_NIR, ARG_NIR, HK_UV, HK_IR
-
-#else
   use soradmod, only: SORAD
-#endif
   use sorad_constants, only : HK_IR_OLD, HK_UV_OLD
   use gettau, only: getvistau
 
@@ -279,10 +242,10 @@ contains
 
 ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
 !                the Initialize and Finalize services, as well as allocating
-!   our instance of a MAPL\_MetaComp and putting it in the 
+!   our instance of a MAPL\_MetaComp and putting it in the
 !   gridded component (GC). Here we only need to register the Run method with ESMF and
 !   register the state variable specifications with MAPL. \newline
-!   
+!
 
 !EOP
 
@@ -584,7 +547,7 @@ contains
 
 
 !  Solar does not have a "real" state. We keep an internal variable
-!  for each variable produced by solar during the compute steps. 
+!  for each variable produced by solar during the compute steps.
 !  Versions of these, weighted by the appropriate TOA insolation,
 !  are returned at each time step.
 
@@ -994,7 +957,7 @@ contains
 ! with with the full CLDxx set above. But they should NOT be used to subsample
 ! fields that are produced on the model heartbeat (e.g. subsampling for cloud
 ! presence). Note, also, that when comparing CLDxxSW with CLDxx, it is better
-! to subsample both with COSZSW >= cmin, (e.g., 0.25). This COSZSW is a 
+! to subsample both with COSZSW >= cmin, (e.g., 0.25). This COSZSW is a
 ! REFRESH-frequency version of MCOSZ and, as such, is most appropriate for
 ! subsampling REFRESH-frequency fields like CLDxxSW. Of course, you can also
 ! subsample CLDxx with COSZSW since CLDxx are global. By sampling both
@@ -1033,7 +996,7 @@ contains
 ! fractions based on essentially the same subcolumn cloud generation used
 ! by RRTMG SW but called from within the SOLAR UPDATE at the HEARTBEAT.
 ! They are GLOBAL (not just sunlit) fields and generated on the heartbeat.
-! But because subcolumn cloud generation is EXPENSIVE, asking for any of 
+! But because subcolumn cloud generation is EXPENSIVE, asking for any of
 ! these exports will DOUBLE the cost of running the SOLAR GC. As such,
 ! they are for SPECIAL VALIDATION PURPOSES ONLY. No cost is incurred if
 ! they are not exported. Note, also, that they are NOT EXACTLY heartbeat
@@ -1397,11 +1360,6 @@ contains
     call MAPL_TimerAdd(GC, name="-AEROSOLS"               , __RC__)
     call MAPL_TimerAdd(GC, name="-SORAD"                  , __RC__)
     call MAPL_TimerAdd(GC, name="--SORAD_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_DATA"            , __RC__)
-    call MAPL_TimerAdd(GC, name="---SORAD_DATA_DEVICE"    , __RC__)
-    call MAPL_TimerAdd(GC, name="---SORAD_DATA_CONST"     , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_ALLOC"           , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_DEALLOC"         , __RC__)
     call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
@@ -1428,14 +1386,14 @@ contains
     call MAPL_TimerAdd(GC, name="--DESTROY"               , __RC__)
     call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
     call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
-    
+
 ! Set Run method and use generic init and final methods
 ! -----------------------------------------------------
 
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
 
-    RETURN_(ESMF_SUCCESS)  
+    RETURN_(ESMF_SUCCESS)
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1450,7 +1408,7 @@ contains
 
 ! !ARGUMENTS:
 
-    type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component 
+    type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
     type(ESMF_State),    intent(inout) :: IMPORT ! Import state
     type(ESMF_State),    intent(inout) :: EXPORT ! Export state
     type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
@@ -1468,19 +1426,19 @@ contains
 !   the configuration. \newline
 !
 !   A simple load balancing scheme is used that evens work between antipodal
-!   processors. \newline 
+!   processors. \newline
 ! \newline
 ! */
 
 ! !BUGS:
 !
-!\end{verbatim} 
+!\end{verbatim}
 !
 ! \begin{itemize}
 !  \item Deciding on the correct behavior for intermitent calls can be tricky.
 !
 !  \item Load-balancing communication needs to be upgraded to most up-to-date
-!  ESMF machine model. 
+!  ESMF machine model.
 ! \end{itemize}
 !
 ! \begin{verbatim}
@@ -1533,7 +1491,7 @@ contains
     real, pointer, dimension(:,:  )     ::  DFNIR,  DRNIR
 
     type (ESMF_State)                     :: AERO
-    character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME   
+    character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME
     integer                               :: AS_STATUS
     real, pointer,     dimension(:,:,:)   :: AS_PTR_3D
     real, pointer,     dimension(:,:,:)   :: AS_PTR_PLE
@@ -1597,7 +1555,7 @@ contains
 
 !=============================================================================
 
-! Begin... 
+! Begin...
 
 ! Get the target components name and set-up traceback handle.
 ! -----------------------------------------------------------
@@ -1632,7 +1590,7 @@ contains
 
 ! Get parameters from configuration
 !----------------------------------
-    
+
     call MAPL_GetResource (MAPL, PRS_LOW_MID,  'PRS_LOW_MID_CLOUDS:' , DEFAULT=70000., __RC__)
     call MAPL_GetResource (MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', DEFAULT=40000., __RC__)
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
@@ -1649,7 +1607,7 @@ contains
     call MAPL_GetResource (MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', DEFAULT=1, __RC__)
 
     if (adjustl(DYCORE)=="DATMO" .OR. SOLAR_LOAD_BALANCE==0) then
-       LoadBalance = .FALSE. 
+       LoadBalance = .FALSE.
     else
        LoadBalance = .TRUE.
     end if
@@ -1782,7 +1740,7 @@ contains
          call MAPL_SunGetSolarConstant (CLOCK, trim(SolCycFileName), SC, HK=HK, __RC__)
 
          HK_UV_TEMP = HK(:5)
-   
+
          do K=1,3
             HK_IR_TEMP(K,:)=HK_IR_OLD(K,:)*(HK(5+K)/sum(HK_IR_OLD(K,:)))
          end do
@@ -1791,7 +1749,7 @@ contains
        call MAPL_SunGetSolarConstant (CURRENTTIME, SC, HK, __RC__)
 
        HK_UV_TEMP = HK(:5)
- 
+
        do K=1,3
           HK_IR_TEMP(K,:)=HK_IR_OLD(K,:)*(HK(5+K)/sum(HK_IR_OLD(K,:)))
        end do
@@ -1824,7 +1782,7 @@ contains
     _ASSERT(PRS_MID_HIGH > PREF(1)     , 'mid-high pressure band boundary too high!')
     _ASSERT(PRS_LOW_MID  > PRS_MID_HIGH, 'pressure band misordering!')
     _ASSERT(PRS_LOW_MID  < PREF(LM)    , 'low-mid pressure band boundary too low!')
-    
+
     ! find mid-high interface level
     k = 1
     do while ( PREF(k) < PRS_MID_HIGH )
@@ -1855,22 +1813,22 @@ contains
     call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
 
 ! Determine calling sequence
-! This getresource is a kludge for now and needs to be fixed 
-! in the spec, because GC needs this info to 
+! This getresource is a kludge for now and needs to be fixed
+! in the spec, because GC needs this info to
 ! know when to set the alarm, last or first step of interval
 ! right now it is always the last, which is only correct for called_last=1.
 !---------------------------
 
-    call MAPL_TimerOn (MAPL,"UPDATE",__RC__) 
+    call MAPL_TimerOn (MAPL,"UPDATE",__RC__)
 
     call MAPL_GetResource (MAPL, CalledLast, 'CALLED_LAST:', default=1, __RC__)
     UPDATE_FIRST = CalledLast /= 0
 
 ! Update the Sun position and weigh the export variables
 ! --------------------------------------------------------
-   
+
     if (UPDATE_FIRST) then
-       call UPDATE_EXPORT (IM,JM,LM,__RC__) 
+       call UPDATE_EXPORT (IM,JM,LM,__RC__)
     end if
 
     call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
@@ -1879,9 +1837,9 @@ contains
 ! ---------------------------------------
 
     REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
-       
+
     REFRESH: if ( REFRESH_FLUXES ) then
-       call MAPL_TimerOn (MAPL,"REFRESH",__RC__) 
+       call MAPL_TimerOn (MAPL,"REFRESH",__RC__)
 
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)
@@ -1921,10 +1879,10 @@ contains
                allocate(AS_ARR_RH(IM,JM,LM), AS_ARR_PL(IM,JM,LM), __STAT__)
                AS_ARR_PL = 0.5*(AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
                AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-     
+
                call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
                AS_PTR_3D = AS_ARR_RH
-      
+
                deallocate(AS_ARR_RH, AS_ARR_PL, __STAT__)
            end if
 
@@ -1952,7 +1910,7 @@ contains
                call ESMF_AttributeSet(AERO, name='band_for_aerosol_optics', &
                                            value=(BANDS_SOLAR_OFFSET+band), __RC__)
 
-               ! execute the aero provider's optics method 
+               ! execute the aero provider's optics method
                call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=AS_STATUS, RC=STATUS)
                VERIFY_(AS_STATUS)
                VERIFY_(STATUS)
@@ -1979,7 +1937,7 @@ contains
                if (AS_FIELD_NAME /= '') then
                    call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
                    if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
-               end if    
+               end if
            end do SOLAR_BANDS
 
        end if RADIATIVELY_ACTIVE_AEROSOLS
@@ -2007,7 +1965,7 @@ contains
        call MAPL_GetPointer(EXPORT, SLRSFCNA,  'SLRSFCNA',  __RC__)
        call MAPL_GetPointer(EXPORT, SLRSUFNA,  'SLRSUFNA',  __RC__)
        call MAPL_GetPointer(EXPORT, SLRSUFCNA, 'SLRSUFCNA', __RC__)
-       
+
        if( associated(FSWNA)     .or. associated(FSCNA)     .or.  &
            associated(FSWDNA)    .or. associated(FSCDNA)    .or.  &
            associated(FSWUNA)    .or. associated(FSCUNA)    .or.  &
@@ -2084,7 +2042,7 @@ contains
 
 ! Update the Sun position and weigh the export variables
 ! --------------------------------------------------------
-    
+
     if (.not.UPDATE_FIRST) then
        call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)
        call UPDATE_EXPORT (IM,JM,LM,     __RC__)
@@ -2180,7 +2138,7 @@ contains
       real, pointer, dimension(:,:)   :: T, Q, OX, PLE, CL, QL, QI, QR, QS, &
                                          RL, RI, RR, RS, FSW, FSC, FSWA, FSCA
       real, pointer, dimension(:,:)   :: ALBIMP, ALBINT
-                                         
+
       real, pointer, dimension(:,:)   :: FSWU     ! Flux shortwave up all-sky
       real, pointer, dimension(:,:)   :: FSCU     ! Flux shortwave up clear-sky
       real, pointer, dimension(:,:)   :: FSWUA    ! Flux shortwave up all-sky no aerosol
@@ -2235,14 +2193,14 @@ contains
       real(wp), dimension(:,:),     allocatable         :: sfc_alb_dir, sfc_alb_dif
 
       ! per g-point toa flux (ncols_subset,ngpt) [W/m2 NORMAL to solar beam]
-      real(wp), dimension(:,:),     allocatable         :: toa_flux  
+      real(wp), dimension(:,:),     allocatable         :: toa_flux
 
       ! input arrays: dimensions (ncol,nlay[+1]) [Pa,K]
       real(wp), dimension(:,:),     allocatable         :: p_lay, t_lay, dp_wp
       real(wp), dimension(:,:),     allocatable         :: p_lev
 
       ! fluxes that we actually need
-      ! NB: fluxes_byand makes available fluxes%[bnd_]flux_[up|dn|net|dn_dir->"dir"]. 
+      ! NB: fluxes_byand makes available fluxes%[bnd_]flux_[up|dn|net|dn_dir->"dir"].
       real(wp), dimension(:),       allocatable         :: flux_dn_top
       real(wp), dimension(:,:),     allocatable, target :: flux_up_clrsky, flux_net_clrsky
       real(wp), dimension(:,:),     allocatable, target :: flux_up_allsky, flux_net_allsky
@@ -2261,7 +2219,7 @@ contains
       class(ty_optical_props_arry), allocatable :: &
         cloud_props, cloud_props_subset, &
           aer_props,   aer_props_subset
- 
+
       ! The g-point cloud optical properties used for mcICA
       class(ty_optical_props_arry), allocatable :: cloud_props_gpt
 
@@ -2417,7 +2375,7 @@ contains
 !  zero if not protected.
 !--------------------------------------------------------------------------
 
-      else 
+      else
          ZTH     = max(.0001,ZTH)
          daytime = .true.
          NumLit  = size(ZTH)
@@ -2431,7 +2389,7 @@ contains
 !  NumLit soundings, which may be zero. The local work after implementing the
 !  strategy consists of (BalLen) Num2do soundings, which is generally non-zero.
 !  The data movement to implement this strategy will occur when MAPL_BalanceWork
-!  is called to "distribute" excess work to less busy processors and later to 
+!  is called to "distribute" excess work to less busy processors and later to
 !  "retrieve" that work to its home processor. Because the data balancing will be
 !  done "in place", the in-out buffer must be large enough to accomodate the data
 !  held at each stage (pass) of the balancing. This can be larger than the max of
@@ -2526,7 +2484,7 @@ contains
 
                ! Non-aerosol input
 
-               select case(dims)               
+               select case(dims)
 
                   case(MAPL_DIMSHORZVERT)
                      ! We currently assume this case is 3D
@@ -2555,7 +2513,7 @@ contains
       allocate(BufInp(BufLen),__STAT__)
       BufInp = MAPL_UNDEF
 
-!  Loop over imports, packing into the buffer that will be 
+!  Loop over imports, packing into the buffer that will be
 !  load balanced and used in the solar calculations.
 !---------------------------------------------------------
 
@@ -2597,7 +2555,7 @@ contains
                LN = L1 + NumMax*LM*NUM_BANDS_SOLAR - 1
                ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(L1:LN)
                BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
-               
+
                ! pack asymmetry factors
                L1 = LN + 1
                BUF_AEROSOL = MAPL_UNDEF
@@ -2635,7 +2593,7 @@ contains
                      call ReOrder(BufInp(L1),SLR,     daytime,NumMax,HorzDims,1,PACKIT)
                   else if (NamesInp(k) == 'ZTH') then
                      call ReOrder(BufInp(L1),ZTH,     daytime,NumMax,HorzDims,1,PACKIT)
-                  else 
+                  else
                      ! pack 2D imports
                      call ESMFL_StateGetPointerToData(IMPORT, ptr2, NamesInp(k), __RC__)
                      call ReOrder(BufInp(L1),ptr2,    daytime,NumMax,HorzDims,1,PACKIT)
@@ -2661,47 +2619,47 @@ contains
                   CH4   => ptr2(1:Num2do,:)
                case('N2O')
                   N2O   => ptr2(1:Num2do,:)
-               case('T')     
+               case('T')
                   T     => ptr2(1:Num2do,:)
-               case('QV')    
+               case('QV')
                   Q     => ptr2(1:Num2do,:)
-               case('OX')    
+               case('OX')
                   OX    => ptr2(1:Num2do,:)
-               case('FCLD')  
+               case('FCLD')
                   CL    => ptr2(1:Num2do,:)
-               case('QL')    
+               case('QL')
                   QL    => ptr2(1:Num2do,:)
-               case('QI')    
+               case('QI')
                   QI    => ptr2(1:Num2do,:)
-               case('QR')    
+               case('QR')
                   QR    => ptr2(1:Num2do,:)
-               case('QS')    
+               case('QS')
                   QS    => ptr2(1:Num2do,:)
-               case('RL')    
+               case('RL')
                   RL    => ptr2(1:Num2do,:)
-               case('RI')    
+               case('RI')
                   RI    => ptr2(1:Num2do,:)
-               case('RR')    
+               case('RR')
                   RR    => ptr2(1:Num2do,:)
-               case('RS')    
+               case('RS')
                   RS    => ptr2(1:Num2do,:)
-               case('ALBVR') 
+               case('ALBVR')
                   ALBVR => ptr2(1:Num2do,1)
-               case('ALBVF') 
+               case('ALBVF')
                   ALBVF => ptr2(1:Num2do,1)
-               case('ALBNR') 
+               case('ALBNR')
                   ALBNR => ptr2(1:Num2do,1)
-               case('ALBNF')   
+               case('ALBNF')
                   ALBNF => ptr2(1:Num2do,1)
-               case('Ig')   
+               case('Ig')
                   Ig1D  => ptr2(1:Num2do,1)
-               case('Jg')   
+               case('Jg')
                   Jg1D  => ptr2(1:Num2do,1)
-               case('LATS')   
+               case('LATS')
                   ALAT  => ptr2(1:Num2do,1)
-               case('SLR')   
+               case('SLR')
                   SLR1D => ptr2(1:Num2do,1)
-               case('ZTH')   
+               case('ZTH')
                   ZT    => ptr2(1:Num2do,1)
                end select
 
@@ -2754,12 +2712,12 @@ contains
 
          ! Exclude unused internals
          if (       NO_AERO .and.                                                 &
-                 ( 'FSWN'       == NamesOut(k) .or.    'FSCN' == NamesOut(k) .or. &       
+                 ( 'FSWN'       == NamesOut(k) .or.    'FSCN' == NamesOut(k) .or. &
                    'FSWUN'      == NamesOut(k) .or.   'FSCUN' == NamesOut(k) .or. &
                    'FSWBANDN'   == NamesOut(k) )                                  &
             .or.                                                                  &
                .not.NO_AERO .and.                                                 &
-                 ( 'FSWNAN'     == NamesOut(k) .or.  'FSCNAN' == NamesOut(k) .or. &       
+                 ( 'FSWNAN'     == NamesOut(k) .or.  'FSCNAN' == NamesOut(k) .or. &
                    'FSWUNAN'    == NamesOut(k) .or. 'FSCUNAN' == NamesOut(k) .or. &
                    'FSWBANDNAN' == NamesOut(k) )                                  &
             ) then
@@ -2788,7 +2746,7 @@ contains
 
          else if (dims == MAPL_DIMSHORZONLY) then
 
-            SlicesOut(k) = 1            
+            SlicesOut(k) = 1
 
          else
 
@@ -2798,14 +2756,14 @@ contains
 
       enddo OUTPUT_VARS_1
 
-!  Allocate the output buffer with enough space to hold both the 
+!  Allocate the output buffer with enough space to hold both the
 !  balanced and unbalanced data associated with the local PE.
 !--------------------------------------------------------------
 
       allocate(BufOut(NumMax*sum(SlicesOut)),__STAT__)
 
 !  Handles for the working output variables.
-!  These have an inner dimension of the balanced work. 
+!  These have an inner dimension of the balanced work.
 !-----------------------------------------------------
 
       L1 = 1
@@ -2815,29 +2773,29 @@ contains
          LN = L1 + SlicesOut(k)*NumMax - 1
          ptr2(1:NumMax,1:SlicesOut(k)) => BufOut(L1:LN)
          L1 = LN + 1
-         
+
          select case(NamesOut(k))
-         case('FSWN')    
-            FSW       => ptr2(1:Num2do,:)   
-         case('FSCN')    
-            FSC       => ptr2(1:Num2do,:)               
-         case('FSWUN')   
-            FSWU      => ptr2(1:Num2do,:)           
-         case('FSCUN')   
-            FSCU      => ptr2(1:Num2do,:)               
+         case('FSWN')
+            FSW       => ptr2(1:Num2do,:)
+         case('FSCN')
+            FSC       => ptr2(1:Num2do,:)
+         case('FSWUN')
+            FSWU      => ptr2(1:Num2do,:)
+         case('FSCUN')
+            FSCU      => ptr2(1:Num2do,:)
          case('FSWBANDN')
-            FSWBAND   => ptr2(1:Num2do,:)               
-         case('DRUVRN')  
+            FSWBAND   => ptr2(1:Num2do,:)
+         case('DRUVRN')
             UVRR      => ptr2(1:Num2do,1)
-         case('DFUVRN')  
+         case('DFUVRN')
             UVRF      => ptr2(1:Num2do,1)
-         case('DRPARN')  
+         case('DRPARN')
             PARR      => ptr2(1:Num2do,1)
-         case('DFPARN')  
+         case('DFPARN')
             PARF      => ptr2(1:Num2do,1)
-         case('DRNIRN')  
+         case('DRNIRN')
             NIRR      => ptr2(1:Num2do,1)
-         case('DFNIRN')  
+         case('DFNIRN')
             NIRF      => ptr2(1:Num2do,1)
          case('DRBANDN')  
             DRBAND    => ptr2(1:Num2do,:)
@@ -2852,23 +2810,23 @@ contains
          case('FSCUNAN') 
             FSCUA     => ptr2(1:Num2do,:)                              
          case('FSWBANDNAN')
-            FSWBANDA  => ptr2(1:Num2do,:)                              
-         case('CLDTTSW')  
-            CLDTS     => ptr2(1:Num2do,1)               
-         case('CLDHISW')  
-            CLDHS     => ptr2(1:Num2do,1)               
-         case('CLDMDSW')  
-            CLDMS     => ptr2(1:Num2do,1)               
-         case('CLDLOSW')  
-            CLDLS     => ptr2(1:Num2do,1)               
-         case('TAUTTPAR')  
-            TAUTP     => ptr2(1:Num2do,1)               
-         case('TAUHIPAR')  
-            TAUHP     => ptr2(1:Num2do,1)               
-         case('TAUMDPAR')  
-            TAUMP     => ptr2(1:Num2do,1)               
-         case('TAULOPAR')  
-            TAULP     => ptr2(1:Num2do,1)               
+            FSWBANDA  => ptr2(1:Num2do,:)
+         case('CLDTTSW')
+            CLDTS     => ptr2(1:Num2do,1)
+         case('CLDHISW')
+            CLDHS     => ptr2(1:Num2do,1)
+         case('CLDMDSW')
+            CLDMS     => ptr2(1:Num2do,1)
+         case('CLDLOSW')
+            CLDLS     => ptr2(1:Num2do,1)
+         case('TAUTTPAR')
+            TAUTP     => ptr2(1:Num2do,1)
+         case('TAUHIPAR')
+            TAUHP     => ptr2(1:Num2do,1)
+         case('TAUMDPAR')
+            TAUMP     => ptr2(1:Num2do,1)
+         case('TAULOPAR')
+            TAULP     => ptr2(1:Num2do,1)
          end select
 
       enddo OUTPUT_VARS_2
@@ -2991,7 +2949,7 @@ contains
 
       ! absorbing gas names
       error_msg = gas_concs%init([character(3) :: &
-        'h2o','co2','o3','n2o','co','ch4','o2','n2']) 
+        'h2o','co2','o3','n2o','co','ch4','o2','n2'])
       TEST_(error_msg)
 
       ! load gas concentrations (volume mixing ratios)
@@ -3058,7 +3016,7 @@ contains
       ! from RRTMGP:
       ! write(*,*) 'band_lims_wvn(2,nbnd):', k_dist%get_band_lims_wavenumber()
       ! output reordered as above
-      !               820., 2680., 3250., 4000., 4650., 5150., 6150., 7700.,  8050., 12850., 16000., 22650., 29000., 38000. 
+      !               820., 2680., 3250., 4000., 4650., 5150., 6150., 7700.,  8050., 12850., 16000., 22650., 29000., 38000.
       !              2680., 3250., 4000., 4650., 5150., 6150., 7700., 8050., 12850., 16000., 22650., 29000., 38000., 50000.
       ! clearly there are some differences ... so aerosol tables were redone
       !   mainly band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
@@ -3251,7 +3209,7 @@ contains
 
       ! note: have made cloud_props for all ncol columns
       !   and will subset below into blocks ... we can also
-      !   look at option of making cloud_props for each block 
+      !   look at option of making cloud_props for each block
       !   as its needed ... same for aer_props
 
       ! read desired cloud overlap type
@@ -3275,7 +3233,7 @@ contains
       ! that remains the same for the members of an ensemble. If a different set is
       ! required for ensemble members, then the model state, such as the fractional
       ! part of the surface pressure, should be incorporated into the key.
-      !   To get a different set of random numbers for the LW, for example, either a 
+      !   To get a different set of random numbers for the LW, for example, either a
       ! key change or a counter advance will be needed.
       !
       ! Time Component of key:
@@ -3289,7 +3247,7 @@ contains
       ! 1. should be based on some globally unique index for a gridcolumn, so that
       !   each gridcolumn is independent and so it is agnostic to runs with varying
       !   decompositions among processors.
-      ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent 
+      ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent
       !   globe at over 1/180th degree resolution, so plenty for forseeable
       !   future.
       !
@@ -3771,7 +3729,7 @@ contains
       T_R   (:,1:LM  ) = T   (:,LM:1:-1)
 
       ! Specific humidity is converted to Volume Mixing Ratio
-      Q_R   (:,1:LM  ) = Q  (:,LM:1:-1) / (1.-Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW) 
+      Q_R   (:,1:LM  ) = Q  (:,LM:1:-1) / (1.-Q(:,LM:1:-1)) * (MAPL_AIRMW/MAPL_H2OMW)
 
       ! Ozone is converted Mass Mixing Ratio to Volume Mixing Ratio
       O3_R  (:,1:LM  ) = O3 (:,LM:1:-1) * (MAPL_AIRMW/MAPL_O3MW)
@@ -3814,7 +3772,7 @@ contains
 
       ! various RRTMG configuration options ...
 
-      IAER = 10    ! Per AER: 
+      IAER = 10    ! Per AER:
                    !  0: Turns off aerosols
                    ! 10: Enables aerosols
 
@@ -3834,14 +3792,14 @@ contains
                    !        scaled to scon and solar variability defined
                    !        (optional) by setting non-zero scale factors
                    !        for each band in bndsolvar
-                   !    0 = (when SCON .eq. 0.0): No solar variability 
-                   !        and no solar cycle (NRLSSI2 solar constant of 
-                   !        1360.85 Wm-2 for the 100-50000 cm-1 spectral 
-                   !        range only), with facular and sunspot effects 
+                   !    0 = (when SCON .eq. 0.0): No solar variability
+                   !        and no solar cycle (NRLSSI2 solar constant of
+                   !        1360.85 Wm-2 for the 100-50000 cm-1 spectral
+                   !        range only), with facular and sunspot effects
                    !        fixed to the mean of Solar Cycles 13-24;
-                   !        (when SCON .ne. 0.0): No solar variability 
-                   !        and no solar cycle (NRLSSI2 solar constant of 
-                   !        1360.85 Wm-2 for the 100-50000 cm-1 spectral 
+                   !        (when SCON .ne. 0.0): No solar variability
+                   !        and no solar cycle (NRLSSI2 solar constant of
+                   !        1360.85 Wm-2 for the 100-50000 cm-1 spectral
                    !        range only), is scaled to SCON
                    !    1 = Solar variability (using NRLSSI2  solar
                    !        model) with solar cycle contribution
@@ -3851,9 +3809,9 @@ contains
                    !        average of Solar Cycles 13-24;
                    !        two amplitude scale factors allow
                    !        facular and sunspot adjustments from
-                   !        mean solar cycle as defined by indsolvar 
+                   !        mean solar cycle as defined by indsolvar
                    !    2 = Solar variability (using NRLSSI2 solar
-                   !        model) over solar cycle determined by 
+                   !        model) over solar cycle determined by
                    !        direct specification of Mg (facular)
                    !        and SB (sunspot) indices provided
                    !        in indsolvar (scon = 0.0 only)
@@ -3874,7 +3832,7 @@ contains
          _ASSERT(.FALSE.,'RRTMG SW: ISOLVAR==1 currently unsupported')
       end if
 
-      ! INDSOLVAR =  Facular and sunspot amplitude 
+      ! INDSOLVAR =  Facular and sunspot amplitude
       !              scale factors (isolvar=1), or
       !              Mg and SB indices (isolvar=2)
       !                 Dimensions: (2)
@@ -3893,7 +3851,7 @@ contains
       end if
 
 
-      BNDSOLVAR = 1.0 ! Solar variability scale factors 
+      BNDSOLVAR = 1.0 ! Solar variability scale factors
                       ! for each shortwave band
                       !    Dimensions: (nbndsw=14)
 
@@ -3949,7 +3907,7 @@ contains
       CLDMS(:) = 1. - CLEARCOUNTS(:,3)/float(NGPTSW)
       CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
 
-      FSW  = SWDFLXR  - SWUFLXR 
+      FSW  = SWDFLXR  - SWUFLXR
       FSC  = SWDFLXCR - SWUFLXCR
       FSWU = SWUFLXR
       FSCU = SWUFLXCR
@@ -4139,333 +4097,23 @@ contains
 
 ! Locals
 !-------
-      
+
       integer :: IRUN, LN
 
       INTEGER :: IDX,I,J,K,IN,IB,L
       INTEGER :: STATUS
 
-#ifdef _CUDA
-      ! CUDA Fortran gridding
-      type(dim3) :: Grid, Block
-      integer :: blocksize
-#endif
-
 ! Begin
 !------
-      
+
       call MAPL_TimerOn(MAPL,"-MISC")
 
-      IRUN     = SIZE(TA,1) 
+      IRUN     = SIZE(TA,1)
       LN       = SIZE(TA,2)
 
       call MAPL_TimerOff(MAPL,"-MISC")
 
       call MAPL_TimerOn(MAPL,"-SORAD")
-
-#ifdef _CUDA
-
-      call MAPL_GetResource(MAPL,BLOCKSIZE,'BLOCKSIZE:',DEFAULT=128,RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Set up the CUDA Model variables
-      Block = dim3(blocksize,1,1)
-      Grid = dim3(ceiling(real(IRUN)/real(blocksize)),1,1)
-
-      _ASSERT(LN <= GPU_MAXLEVS,'needs informative message') ! If this is tripped, ESMA_arch.mk must
-                                 ! be edited.
-
-      call MAPL_TimerOn(MAPL,"--SORAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! ----------------------
-      ! Allocate device arrays
-      ! ----------------------
-
-      ! Inputs
-      ! ------
-
-      ALLOCATE(COSZ_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(PL_DEV(IRUN,LN+1), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TA_DEV(IRUN,LN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(WA_DEV(IRUN,LN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(OA_DEV(IRUN,LN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CWC_DEV(IRUN,LN,4), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FCLD_DEV(IRUN,LN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(REFF_DEV(IRUN,LN,4), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(RSUVBM_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(RSUVDF_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(RSIRBM_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(RSIRDF_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-
-      ! Constant Tables in Device Memory
-      ! --------------------------------
-
-      ! GPU These are in device memory because they are accessed randomly
-      !     Constant memory is best for values that are broadcast to all
-      !     threads. Plus, being in global means caching could occur.
-
-      ALLOCATE(COA(62,101), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CAH(43,37), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CAIB(11,9,11), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CAIF(9,11), STAT=STATUS)
-      VERIFY_(STATUS)
-
-      ! Aerosol Inputs
-      ! --------------
-
-      ALLOCATE(TAUA_DEV(IRUN,LN,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(SSAA_DEV(IRUN,LN,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(ASYA_DEV(IRUN,LN,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-
-      ! Outputs
-      ! -------
-
-      ALLOCATE(FLX_DEV(IRUN,LN+1), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLC_DEV(IRUN,LN+1), STAT = STATUS)
-      VERIFY_(STATUS)
-      allocate(FLXU_DEV(IRUN,LN+1), stat = STATUS)
-      VERIFY_(STATUS)
-      allocate(FLCU_DEV(IRUN,LN+1), stat = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIRUV_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIFUV_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIRPAR_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIFPAR_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIRIR_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FDIFIR_DEV(IRUN), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLX_SFC_BAND_DEV(IRUN,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Copy host inputs to device
-      ! --------------------------
-
-      call MAPL_TimerOn(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Inputs
-      ! ------
-
-      STATUS = cudaMemcpy(COSZ_DEV,COSZ,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(PL_DEV,PLTMP,IRUN*(LN+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TA_DEV,TA,IRUN*LN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(WA_DEV,WA,IRUN*LN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(OA_DEV,OA,IRUN*LN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CWC_DEV,CWC,IRUN*LN*4)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FCLD_DEV,FCLD,IRUN*LN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(REFF_DEV,REFF,IRUN*LN*4)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(RSUVBM_DEV,RGBUV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(RSUVDF_DEV,RGFUV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(RSIRBM_DEV,RGBIR,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(RSIRDF_DEV,RGFIR,IRUN)
-      VERIFY_(STATUS)
-
-      ! Aerosol Inputs
-      ! --------------
-
-      STATUS = cudaMemcpy(TAUA_DEV,TAUA,IRUN*LN*NB_CHOU)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(SSAA_DEV,SSAA,IRUN*LN*NB_CHOU)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(ASYA_DEV,ASYA,IRUN*LN*NB_CHOU)
-      VERIFY_(STATUS)
-
-      ! Constant Tables in Device Memory
-      ! --------------------------------
-
-      COA = COA_CONST
-      CAH = CAH_CONST
-      CAIB = CAIB_CONST
-      CAIF = CAIF_CONST
-
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Load constants in constant memory
-      ! ---------------------------------
-
-      HK_UV=HK_UV_TEMP
-      HK_IR=HK_IR_TEMP
-
-      ZK_UV=ZK_UV_CONST
-      WK_UV=WK_UV_CONST
-      RY_UV=RY_UV_CONST
-      AIB_UV=AIB_UV_CONST
-      AWB_UV=AWB_UV_CONST
-      ARB_UV=ARB_UV_CONST
-      AIG_UV=AIG_UV_CONST
-      AWG_UV=AWG_UV_CONST
-      ARG_UV=ARG_UV_CONST
-
-      XK_IR=XK_IR_CONST
-      RY_IR=RY_IR_CONST
-      AIB_NIR=AIB_NIR_CONST
-      AWB_NIR=AWB_NIR_CONST
-      ARB_NIR=ARB_NIR_CONST
-      AIA_NIR=AIA_NIR_CONST
-      AWA_NIR=AWA_NIR_CONST
-      ARA_NIR=ARA_NIR_CONST
-      AIG_NIR=AIG_NIR_CONST
-      AWG_NIR=AWG_NIR_CONST
-      ARG_NIR=ARG_NIR_CONST
-
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call sorad<<<Grid, Block>>>(IRUN,LN,NB_CHOU,CO2,ICT,ICB)
-      STATUS = cudaGetLastError()
-      if (STATUS /= 0) then
-         write (*,*) "Error code from SORAD kernel call: ", STATUS
-         write (*,*) "Kernel Call failed: ", cudaGetErrorString(STATUS)
-         _ASSERT(.FALSE.,'needs informative message')
-      end if
-
-      call MAPL_TimerOff(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      STATUS = cudaMemcpy(FLX,FLX_DEV,IRUN*(LN+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLC,FLC_DEV,IRUN*(LN+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLXU,FLXU_DEV,IRUN*(LN+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLCU,FLCU_DEV,IRUN*(LN+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIRUV,FDIRUV_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIFUV,FDIFUV_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIRPAR,FDIRPAR_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIFPAR,FDIFPAR_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIRIR,FDIRIR_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FDIFIR,FDIFIR_DEV,IRUN)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLXBAND,FLX_SFC_BAND_DEV,IRUN*NB_CHOU)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"---SORAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"--SORAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! ------------------------
-      ! Deallocate device arrays
-      ! ------------------------
-      
-      ! Inputs
-      ! ------
-
-      DEALLOCATE(COSZ_DEV)
-      DEALLOCATE(PL_DEV)
-      DEALLOCATE(TA_DEV)
-      DEALLOCATE(WA_DEV)
-      DEALLOCATE(OA_DEV)
-      DEALLOCATE(CWC_DEV)
-      DEALLOCATE(FCLD_DEV)
-      DEALLOCATE(REFF_DEV)
-      DEALLOCATE(RSUVBM_DEV)
-      DEALLOCATE(RSUVDF_DEV)
-      DEALLOCATE(RSIRBM_DEV)
-      DEALLOCATE(RSIRDF_DEV)
-
-      ! Aerosol inputs
-      ! --------------
-
-      DEALLOCATE(TAUA_DEV)
-      DEALLOCATE(SSAA_DEV)
-      DEALLOCATE(ASYA_DEV)
-   
-      ! Constant tables in device memory
-      ! --------------------------------
-
-      DEALLOCATE(COA)
-      DEALLOCATE(CAH)
-      DEALLOCATE(CAIB)
-      DEALLOCATE(CAIF)
-
-      ! Outputs
-      ! -------
-
-      DEALLOCATE(FLX_DEV)
-      DEALLOCATE(FLC_DEV)
-      DEALLOCATE(FLXU_DEV)
-      DEALLOCATE(FLCU_DEV)
-      DEALLOCATE(FDIRUV_DEV)
-      DEALLOCATE(FDIFUV_DEV)
-      DEALLOCATE(FDIRPAR_DEV)
-      DEALLOCATE(FDIFPAR_DEV)
-      DEALLOCATE(FDIRIR_DEV)
-      DEALLOCATE(FDIFIR_DEV)
-      DEALLOCATE(FLX_SFC_BAND_DEV)
-
-      call MAPL_TimerOff(MAPL,"--SORAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-#else
 
       call MAPL_TimerOn(MAPL,"--SORAD_RUN",RC=STATUS)
       VERIFY_(STATUS)
@@ -4478,8 +4126,6 @@ contains
            FLXBAND  )
       call MAPL_TimerOff(MAPL,"--SORAD_RUN",RC=STATUS)
       VERIFY_(STATUS)
-
-#endif
 
       call MAPL_TimerOff(MAPL,"-SORAD")
 
@@ -4532,7 +4178,7 @@ contains
       real, pointer, dimension(:,:  ) ::  DFUVR,  DRUVR
       real, pointer, dimension(:,:  ) ::  DFPAR,  DRPAR
       real, pointer, dimension(:,:  ) ::  DFNIR,  DRNIR
-      real, pointer, dimension(:,:  ) :: DRNUVR, DRNPAR, DRNNIR 
+      real, pointer, dimension(:,:  ) :: DRNUVR, DRNPAR, DRNNIR
       real, pointer, dimension(:,:  ) ::  SLRTP,    RSR,  RSC
       real, pointer, dimension(:,:  ) ::  SLRSF,   RSCS,  RSRS, SLRSFC
       real, pointer, dimension(:,:  ) ::  SLRSFNA, SLRSFCNA
@@ -4656,7 +4302,7 @@ contains
       ZTH = max(ZTH,0.0)
       SLR = SLR * SC
 
-      where(ZTH>0.0) 
+      where(ZTH>0.0)
          SLN = (SLR/ZTH)
       else where
          SLN = 0.0
@@ -4909,7 +4555,7 @@ contains
                   end do
 
                end if ! cloudy column
-               
+
                ! nothing to process yet?
                if (ncld == 0) cycle
 
@@ -5002,7 +4648,7 @@ contains
          ! Due to the generic use of this routine, it currently works on one column at a time,
          ! thus the need for the array sections below.
 
-         ! NOTE: Dummy arrays are passed into outputs 1 and 3 because these are currently only 
+         ! NOTE: Dummy arrays are passed into outputs 1 and 3 because these are currently only
          !       used in sorad.F90.
 
          DO I = 1,IM
@@ -5221,7 +4867,7 @@ contains
       end if
 
       if(associated(   SLRSUF)) SLRSUF  = ALB*(DRUVRN+DFUVRN+DRPARN+DFPARN+DRNIRN+DFNIRN)*SLR
-      
+
       if(associated(  SLRSUFC)) then
         where(ALB /= MAPL_UNDEF)
            SLRSUFC = ALB*(FSCN(:,:,LM)/(1.-ALB))*SLR
@@ -5245,7 +4891,7 @@ contains
            SLRSUFCNA = 0.0
         end where
       end if
-  
+
 
 ! Fill 3D FLuxes
 !---------------
@@ -5471,7 +5117,7 @@ end subroutine UnPackLoc
 end module GEOS_SolarGridCompMod
 
 subroutine ReOrder(Packed, UnPacked, MSK, Pdim, Udim, LM, DIR)
-  integer, intent(IN   ) :: Pdim, Udim(2), LM, DIR 
+  integer, intent(IN   ) :: Pdim, Udim(2), LM, DIR
   real,    intent(INOUT) ::   Packed(Pdim,*)
   real,    intent(INOUT) :: UnPacked(Udim(1),Udim(2),*)
   logical, intent(IN   ) :: MSK(Udim(1),Udim(2))

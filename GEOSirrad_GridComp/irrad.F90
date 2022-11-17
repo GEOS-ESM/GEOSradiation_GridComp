@@ -2,99 +2,12 @@
 
 module irradmod
 
-#ifdef _CUDA
-   use cudafor
-   use MAPL_ConstantsMod, only: MAPL_GRAV
-#else
    use gettau, only: getirtau
-#endif 
 
    implicit none
 
-#ifndef _CUDA
    private
    public :: irrad
-#else
-   ! Device inputs
-   ! -------------
-
-   real   , allocatable, dimension(:,:    ), device :: ple_dev
-   real   , allocatable, dimension(:,:    ), device :: ta_dev
-   real   , allocatable, dimension(:,:    ), device :: wa_dev
-   real   , allocatable, dimension(:,:    ), device :: oa_dev
-   real   , allocatable, dimension(:      ), device :: tb_dev
-   real   , allocatable, dimension(:,:    ), device :: n2o_dev
-   real   , allocatable, dimension(:,:    ), device :: ch4_dev
-   real   , allocatable, dimension(:,:    ), device :: cfc11_dev
-   real   , allocatable, dimension(:,:    ), device :: cfc12_dev
-   real   , allocatable, dimension(:,:    ), device :: cfc22_dev
-   real   , allocatable, dimension(:,:    ), device :: fs_dev
-   real   , allocatable, dimension(:,:    ), device :: tg_dev
-   real   , allocatable, dimension(:,:,:  ), device :: eg_dev
-   real   , allocatable, dimension(:,:    ), device :: tv_dev
-   real   , allocatable, dimension(:,:,:  ), device :: ev_dev
-   real   , allocatable, dimension(:,:,:  ), device :: rv_dev
-   real   , allocatable, dimension(:,:,:  ), device :: cwc_dev
-   real   , allocatable, dimension(:,:    ), device :: fcld_dev
-   real   , allocatable, dimension(:,:,:  ), device :: reff_dev
-   real   , allocatable, dimension(:,:,:  ), device :: taua_dev
-   real   , allocatable, dimension(:,:,:  ), device :: ssaa_dev
-   real   , allocatable, dimension(:,:,:  ), device :: asya_dev
-
-   ! Constant arrays in device memory
-   ! --------------------------------
-
-   real   , allocatable, dimension(:,:    ), device ::  c1,  c2,  c3
-   real   , allocatable, dimension(:,:    ), device :: oo1, oo2, oo3
-   real   , allocatable, dimension(:,:    ), device :: h11, h12, h13
-   real   , allocatable, dimension(:,:    ), device :: h21, h22, h23
-   real   , allocatable, dimension(:,:    ), device :: h81, h82, h83
-
-   ! Device outputs
-   ! --------------
-
-   real   , allocatable, dimension(:,:    ), device :: flxu_dev
-   real   , allocatable, dimension(:,:    ), device :: flxau_dev
-   real   , allocatable, dimension(:,:    ), device :: flcu_dev
-   real   , allocatable, dimension(:,:    ), device :: flau_dev
-
-   real   , allocatable, dimension(:,:    ), device :: flxd_dev
-   real   , allocatable, dimension(:,:    ), device :: flxad_dev
-   real   , allocatable, dimension(:,:    ), device :: flcd_dev
-   real   , allocatable, dimension(:,:    ), device :: flad_dev
-
-   real   , allocatable, dimension(:,:    ), device :: dfdts_dev
-   real   , allocatable, dimension(:      ), device :: sfcem_dev
-   real   , allocatable, dimension(:,:,:  ), device :: taudiag_dev
-
-   ! Constant memory
-   ! ---------------
-
-   real   , dimension(9   ), constant :: xkw
-   real   , dimension(9   ), constant :: xke
-   integer, dimension(9   ), constant :: mw
-   real   , dimension(9   ), constant :: aw
-   real   , dimension(9   ), constant :: bw
-   real   , dimension(9   ), constant :: pm
-   real   , dimension(6, 9), constant :: fkw
-   real   , dimension(6, 3), constant :: gkw
-   real   , dimension(3,10), constant :: aib_ir
-   real   , dimension(4,10), constant :: awb_ir
-   real   , dimension(4,10), constant :: aiw_ir
-   real   , dimension(4,10), constant :: aww_ir
-   real   , dimension(4,10), constant :: aig_ir
-   real   , dimension(4,10), constant :: awg_ir
-   real   , dimension(6,10), constant :: cb
-   real   , dimension(5,10), constant :: dcb
-   real                    , constant :: w11
-   real                    , constant :: w12
-   real                    , constant :: w13
-   real                    , constant :: p11
-   real                    , constant :: p12
-   real                    , constant :: p13
-   real                    , constant :: dwe
-   real                    , constant :: dpe
-#endif
 
    ! Parameters
    ! ----------
@@ -111,31 +24,27 @@ contains
 
 !  $Id$
 
-#ifdef _CUDA
-   attributes(global) subroutine irrad (m,np,co2,trace,ns,na,nb,ict,icb)
-#else
-   subroutine irrad (m,np,ple_dev,ta_dev,wa_dev,oa_dev,tb_dev,co2,&
-                     trace,n2o_dev,ch4_dev,cfc11_dev,cfc12_dev,cfc22_dev,&
-                     cwc_dev,fcld_dev,ict,icb,reff_dev,&
-                     ns,fs_dev,tg_dev,eg_dev,tv_dev,ev_dev,rv_dev,&
-                     na,nb,taua_dev,ssaa_dev,asya_dev,&
-                     flxu_dev,flcu_dev,flau_dev,flxau_dev,&
-                     flxd_dev,flcd_dev,flad_dev,flxad_dev,&
-                     dfdts_dev,sfcem_dev,taudiag_dev)
-#endif
+   subroutine irrad (m,np,ple,ta,wa,oa,tb,co2,&
+                     trace,n2o,ch4,cfc11,cfc12,cfc22,&
+                     cwc,fcld,ict,icb,reff,&
+                     ns,fs,tg,eg,tv,ev,rv,&
+                     na,nb,taua,ssaa,asya,&
+                     flxu,flcu,flau,flxau,&
+                     flxd,flcd,flad,flxad,&
+                     dfdts,sfcem,taudiag)
 
 
 !*********************************************************************
 !
 !
-!   THE EQUATION NUMBERS noted in this code follows the latest  
-!    version (May 2003) of the NASA Tech. Memo. (2001), which can 
+!   THE EQUATION NUMBERS noted in this code follows the latest
+!    version (May 2003) of the NASA Tech. Memo. (2001), which can
 !    be accessed at ftp://climate.gsfc.nasa.gov/pub/chou/clirad_lw/
 !
 !
 !*********************************************************************
 !  CHANGE IN NOVEMBER 2011
-!    
+!
 !    Code rewritten to pass in the full taua, ssaa, and asya arrays
 !    in echo of the old, original irrad.f. This is done to allow for
 !    RRTMG aerosol work to be done similarly in the GC.
@@ -143,7 +52,7 @@ contains
 !    Move to use the new getirtau routine in gettau
 !
 !  CHANGE IN SEPTEMBER 2010
-!   
+!
 !   (1) Code relooped to have one, main loop over the soundings, many
 !       arrays reduced in dimensionality, some to scalars.
 !   (2) Instead of calling to external aerosol Mie code, efficiency and
@@ -154,7 +63,7 @@ contains
 !
 !  CHANGE IN AUGUST 2004
 !
-!   (1) A layer was added above ple(1) to account for the downward  
+!   (1) A layer was added above ple(1) to account for the downward
 !       radiation from above.
 !
 !  CHANGE IN SEPTEMBER 2003
@@ -167,14 +76,14 @@ contains
 !
 !  CHANGE IN MAY 2003
 !
-!    The effective size of ice particles was changed to the  
-!    effective radius of cloud particles, and the definition of the 
-!    effective radius followed that given in Chou, Lee and Yang 
+!    The effective size of ice particles was changed to the
+!    effective radius of cloud particles, and the definition of the
+!    effective radius followed that given in Chou, Lee and Yang
 !    (JGR, 2002). The reff is no longer an input parameter.
 !
 !  CHANGE IN DECEMBER 2002
 !
-!    Do-loop 1500 was created inside the do-loop 1000 to compute 
+!    Do-loop 1500 was created inside the do-loop 1000 to compute
 !    the upward and downward emission of a layer
 !
 !   CHANGE IN JULY 2002
@@ -195,26 +104,26 @@ contains
 !    The number of aerosol types is allowed to be more than one.
 !    Include sub-grid surface variability and vegetation canopy.
 !    Include the CKD continuum absorption coefficient as an option.
-!    
+!
 !********************************************************************
 !
 !
 ! Ice and liquid cloud particles are allowed to co-exist in each of the
-!  np layers. 
+!  np layers.
 !
-! The maximum-random assumption is applied for cloud overlapping. 
-!  Clouds are grouped into high, middle, and low clouds separated 
+! The maximum-random assumption is applied for cloud overlapping.
+!  Clouds are grouped into high, middle, and low clouds separated
 !  by the level indices ict and icb.  Within each of the three groups,
-!  clouds are assumed maximally overlapped.  Clouds among the three 
-!  groups are assumed randomly overlapped. The indices ict and icb 
+!  clouds are assumed maximally overlapped.  Clouds among the three
+!  groups are assumed randomly overlapped. The indices ict and icb
 !  correspond approximately to the 400 mb and 700 mb levels.
 !
-! Various types of aerosols are allowed to be in any of the np layers. 
-!  Aerosol optical properties can be specified as functions of height  
+! Various types of aerosols are allowed to be in any of the np layers.
+!  Aerosol optical properties can be specified as functions of height
 !  and spectral band.
 !
-! The surface can be divided into a number of sub-regions either with or 
-!  without vegetation cover. Reflectivity and emissivity can be 
+! The surface can be divided into a number of sub-regions either with or
+!  without vegetation cover. Reflectivity and emissivity can be
 !  specified for each sub-region.
 !
 ! There are options for computing fluxes:
@@ -224,22 +133,22 @@ contains
 !   table look-up.  cooling rates are computed accurately from the
 !   surface up to 0.01 mb.
 !
-!   If trace = .true., absorption due to n2o, ch4, cfcs, and the 
+!   If trace = .true., absorption due to n2o, ch4, cfcs, and the
 !   two minor co2 bands in the window region is included.
 !   Otherwise, absorption in those minor bands is neglected.
 !
-!   If overcast=.true. (i.e., compiled with -DOVERCAST), the layer cloud 
+!   If overcast=.true. (i.e., compiled with -DOVERCAST), the layer cloud
 !   cover is either 0 or 1.
-!   If overcast=.false. (not compiled with -DOVERCAST), the cloud cover 
+!   If overcast=.false. (not compiled with -DOVERCAST), the cloud cover
 !   can be anywhere between 0 and 1.
 !   Computation is faster for the .true. option than the .false. option.
 !
 !   If aerosol = .true., aerosols are included in calculating transmission
 !   functions. Otherwise, aerosols are not included.
-!   
+!
 !
 ! The IR spectrum is divided into nine bands:
-!   
+!
 !   band     wavenumber (/cm)   absorber
 !
 !    1           0 - 340           h2o
@@ -270,9 +179,6 @@ contains
 !    3c        720 - 800
 !
 !---- Input parameters                               units    size
-!   (NOTE: _dev suffix is left off of arrays here
-!          for clarity's sake. _dev is needed to prevent
-!          GPU nameclash)
 !
 !   number of soundings (m)                            --      1
 !   number of atmospheric layers (np)                  --      1
@@ -325,7 +231,7 @@ contains
 !   downwelling flux, all-sky no aerosol (flxad)  fraction   m*(np+1)
 !   downwelling flux, clear-sky (flcd)            fraction   m*(np+1)
 !   downwelling flux, clear-sky no aerosol (flad) fraction   m*(np+1)
-!   sensitivity of net downward flux  
+!   sensitivity of net downward flux
 !       to surface temperature (dfdts)           fraction/k  m*(np+1)
 !   emission by the surface (sfcem)               fraction     m
 !
@@ -337,8 +243,8 @@ contains
 !   h11,h12,h13: for h2o (band 1)
 !   h21,h22,h23: for h2o (band 2)
 !   h81,h82,h83: for h2o (band 8)
-! 
-! Notes: 
+!
+! Notes:
 !
 !   (1) Scattering is parameterized for clouds and aerosols.
 !   (2) Diffuse cloud and aerosol transmissions are computed
@@ -355,7 +261,6 @@ contains
 !
 !***************************************************************************
 
-#ifndef _CUDA
    use rad_constants, only: &
          aib_ir, awb_ir, &
          aiw_ir, aww_ir, &
@@ -370,90 +275,72 @@ contains
          h11, h12, h13, &
          h21, h22, h23, &
          h81, h82, h83
-#endif
 
    implicit none
 
 !---- input parameters ------
 
-#ifdef _CUDA
-   integer, value :: m,np,na,ns,ict,icb,nb
-   logical, value :: trace
-   real, value    :: co2
-#else
    integer :: m,np,na,ns,ict,icb,nb
    logical :: trace
    real    :: co2
 
-   real    :: ple_dev(m,np+1),ta_dev(m,np),wa_dev(m,np),oa_dev(m,np),tb_dev(m)
-   real    :: n2o_dev(m,np),ch4_dev(m,np),cfc11_dev(m,np),cfc12_dev(m,np),cfc22_dev(m,np)
-   real    :: fs_dev(m,ns),tg_dev(m,ns),eg_dev(m,ns,10)
-   real    :: tv_dev(m,ns),ev_dev(m,ns,10),rv_dev(m,ns,10)
-   real    :: cwc_dev(m,np,4),fcld_dev(m,np)
-   real    :: reff_dev(m,np,4)
+   real    :: ple(m,np+1),ta(m,np),wa(m,np),oa(m,np),tb(m)
+   real    :: n2o(m,np),ch4(m,np),cfc11(m,np),cfc12(m,np),cfc22(m,np)
+   real    :: fs(m,ns),tg(m,ns),eg(m,ns,10)
+   real    :: tv(m,ns),ev(m,ns,10),rv(m,ns,10)
+   real    :: cwc(m,np,4),fcld(m,np)
+   real    :: reff(m,np,4)
 
-   real    :: taua_dev(m,np,nb)
-   real    :: ssaa_dev(m,np,nb)
-   real    :: asya_dev(m,np,nb)
+   real    :: taua(m,np,nb)
+   real    :: ssaa(m,np,nb)
+   real    :: asya(m,np,nb)
 
 !---- output parameters ------
 
-   real :: flxu_dev(m,np+1),flxau_dev(m,np+1),flcu_dev(m,np+1),flau_dev(m,np+1)
-   real :: flxd_dev(m,np+1),flxad_dev(m,np+1),flcd_dev(m,np+1),flad_dev(m,np+1)
-   real :: dfdts_dev(m,np+1),sfcem_dev(m)
-   real :: taudiag_dev(m,np,10)
-#endif
-
-!GPU These are needed to allocate space for temporary local arrays on the GPU.
-!GPU On the CPU this ifndef converts them to np and ns, respectively.
-
-#ifndef GPU_MAXLEVS
-#define GPU_MAXLEVS np
-#endif
-
-#ifndef MAXNS
-#define MAXNS ns
-#endif
+   real :: flxu(m,np+1),flxau(m,np+1),flcu(m,np+1),flau(m,np+1)
+   real :: flxd(m,np+1),flxad(m,np+1),flcd(m,np+1),flad(m,np+1)
+   real :: dfdts(m,np+1),sfcem(m)
+   real :: taudiag(m,np,10)
 
 !---- temporary arrays -----
 
-   real :: pa(0:GPU_MAXLEVS),dt(0:GPU_MAXLEVS)
+   real :: pa(0:np),dt(0:np)
    real :: x1,x2,x3
-   real :: dh2o(0:GPU_MAXLEVS),dcont(0:GPU_MAXLEVS),dco2(0:GPU_MAXLEVS),do3(0:GPU_MAXLEVS)
-   real :: dn2o(0:GPU_MAXLEVS),dch4(0:GPU_MAXLEVS)
-   real :: df11(0:GPU_MAXLEVS),df12(0:GPU_MAXLEVS),df22(0:GPU_MAXLEVS)
+   real :: dh2o(0:np),dcont(0:np),dco2(0:np),do3(0:np)
+   real :: dn2o(0:np),dch4(0:np)
+   real :: df11(0:np),df12(0:np),df22(0:np)
    real :: th2o(6),tcon(3),tco2(6)
    real :: tn2o(4),tch4(4),tcom(6)
    real :: tf11,tf12,tf22
-   real :: blayer(0:GPU_MAXLEVS+1),blevel(0:GPU_MAXLEVS+1)
+   real :: blayer(0:np+1),blevel(0:np+1)
 !+++PRC
-   real :: dd(0:GPU_MAXLEVS+1),du(0:GPU_MAXLEVS+1)
+   real :: dd(0:np+1),du(0:np+1)
 !---PRC
-   real :: cd(0:GPU_MAXLEVS+1),cu(0:GPU_MAXLEVS+1)
-   real :: bd(0:GPU_MAXLEVS+1),bu(0:GPU_MAXLEVS+1)
-   real :: ad(0:GPU_MAXLEVS+1),au(0:GPU_MAXLEVS+1)
+   real :: cd(0:np+1),cu(0:np+1)
+   real :: bd(0:np+1),bu(0:np+1)
+   real :: ad(0:np+1),au(0:np+1)
    real :: bs,dbs,rflxs
-   real :: dp(0:GPU_MAXLEVS)
+   real :: dp(0:np)
    real :: taant
    real :: trant,tranal
-   real :: transfc(0:GPU_MAXLEVS+1),transfca(0:GPU_MAXLEVS+1),trantcr(0:GPU_MAXLEVS+1),trantca(0:GPU_MAXLEVS+1)
-   real :: flau(0:GPU_MAXLEVS+1),flad(0:GPU_MAXLEVS+1)
-   real :: flcu(0:GPU_MAXLEVS+1),flcd(0:GPU_MAXLEVS+1)
-   real :: flxu(0:GPU_MAXLEVS+1),flxd(0:GPU_MAXLEVS+1)
-   real :: flxau(0:GPU_MAXLEVS+1),flxad(0:GPU_MAXLEVS+1)
-   real :: taerlyr(0:GPU_MAXLEVS)
+   real :: transfc(0:np+1),transfca(0:np+1),trantcr(0:np+1),trantca(0:np+1)
+   real :: flau_col(0:np+1),flad_col(0:np+1)
+   real :: flcu_col(0:np+1),flcd_col(0:np+1)
+   real :: flxu_col(0:np+1),flxd_col(0:np+1)
+   real :: flxau_col(0:np+1),flxad_col(0:np+1)
+   real :: taerlyr(0:np)
 
 !mjs
 #ifndef OVERCAST
    integer :: ncld(3)
-   integer :: icx(0:GPU_MAXLEVS)
+   integer :: icx(0:np)
 #endif
-   real :: enn(0:GPU_MAXLEVS)
+   real :: enn(0:np)
 !mjs
 
    integer :: idx, rc
 
-   real :: cldhi,cldmd,cldlw,tcldlyr(0:GPU_MAXLEVS),fclr,fclr_above
+   real :: cldhi,cldmd,cldlw,tcldlyr(0:np),fclr,fclr_above
 
    integer :: i,j,k,l,ip,iw,ibn,ik,iq,isb,k1,k2,ne
    real :: x,xx,yy,p1,a1,b1,fk1,a2,b2,fk2
@@ -461,11 +348,11 @@ contains
 
    logical :: oznbnd,co2bnd,h2otable,conbnd,n2obnd
    logical :: ch4bnd,combnd,f11bnd,f12bnd,f22bnd,b10bnd
-   logical :: do_aerosol 
+   logical :: do_aerosol
 
 !---- Temp arrays and variables for consolidation of tables
    integer, parameter :: max_num_tables = 17
-   real :: exptbl(0:GPU_MAXLEVS,max_num_tables)
+   real :: exptbl(0:np,max_num_tables)
    type :: band_table
       integer :: start
       integer :: end
@@ -481,26 +368,20 @@ contains
    type(band_table) :: f22exp
 
 !---- Variables for new getirtau routine
-   real :: dp_pa(GPU_MAXLEVS)
-   real :: taudiaglyr(GPU_MAXLEVS,4)
-   real :: fcld_col(GPU_MAXLEVS)
-   real :: reff_col(GPU_MAXLEVS,4)
-   real :: cwc_col(GPU_MAXLEVS,4)
+   real :: dp_pa(np)
+   real :: taudiaglyr(np,4)
+   real :: fcld_col(np)
+   real :: reff_col(np,4)
+   real :: cwc_col(np,4)
 
 !-----compute layer pressure (pa) and layer temperature minus 250K (dt)
 
-#ifdef _CUDA
-   i = (blockidx%x - 1) * blockdim%x + threadidx%x
-
-   RUN_LOOP: if (i <= m) then
-#else
    RUN_LOOP: do i=1,m
-#endif
       do k=1,np
-         pa(k) = 0.5*(ple_dev(i,k+1)+ple_dev(i,k))*0.01
-         dp(k) =     (ple_dev(i,k+1)-ple_dev(i,k))*0.01
-         dp_pa(k) =     (ple_dev(i,k+1)-ple_dev(i,k)) ! dp in Pascals for getirtau
-         dt(k) = ta_dev(i,k)-250.0
+         pa(k) = 0.5*(ple(i,k+1)+ple(i,k))*0.01
+         dp(k) =     (ple(i,k+1)-ple(i,k))*0.01
+         dp_pa(k) =     (ple(i,k+1)-ple(i,k)) ! dp in Pascals for getirtau
+         dt(k) = ta(i,k)-250.0
 
 !-----compute layer absorber amount
 
@@ -516,17 +397,17 @@ contains
 !     df22 : cfc22 amount (cm-atm)stp
 !     the factor 1.02 is equal to 1000/980
 !     factors 789 and 476 are for unit conversion
-!     the factor 0.001618 is equal to 1.02/(.622*1013.25) 
+!     the factor 0.001618 is equal to 1.02/(.622*1013.25)
 !     the factor 6.081 is equal to 1800/296
 
-         dh2o(k) = 1.02*wa_dev   (i,k)*dp(k)
-         do3 (k) = 476.*oa_dev   (i,k)*dp(k)
+         dh2o(k) = 1.02*wa   (i,k)*dp(k)
+         do3 (k) = 476.*oa   (i,k)*dp(k)
          dco2(k) = 789.*co2           *dp(k)
-         dch4(k) = 789.*ch4_dev  (i,k)*dp(k)
-         dn2o(k) = 789.*n2o_dev  (i,k)*dp(k)
-         df11(k) = 789.*cfc11_dev(i,k)*dp(k)
-         df12(k) = 789.*cfc12_dev(i,k)*dp(k)
-         df22(k) = 789.*cfc22_dev(i,k)*dp(k)
+         dch4(k) = 789.*ch4  (i,k)*dp(k)
+         dn2o(k) = 789.*n2o  (i,k)*dp(k)
+         df11(k) = 789.*cfc11(i,k)*dp(k)
+         df12(k) = 789.*cfc12(i,k)*dp(k)
+         df22(k) = 789.*cfc22(i,k)*dp(k)
 
          dh2o(k) = max(dh2o(k),1.e-10)
          do3 (k) = max(do3 (k),1.e-6)
@@ -535,15 +416,15 @@ contains
 !-----compute scaled water vapor amount for h2o continuum absorption
 !     following eq. (4.21).
 
-         xx=pa(k)*0.001618*wa_dev(i,k)*wa_dev(i,k)*dp(k)
-         dcont(k) = xx*exp(1800./ta_dev(i,k)-6.081)
+         xx=pa(k)*0.001618*wa(i,k)*wa(i,k)*dp(k)
+         dcont(k) = xx*exp(1800./ta(i,k)-6.081)
 
 !-----Fill the reff, cwc, and fcld for the column
-         
-         fcld_col(k) = fcld_dev(i,k)
+
+         fcld_col(k) = fcld(i,k)
          do l = 1, 4
-            reff_col(k,l) = reff_dev(i,k,l)
-            cwc_col(k,l) = cwc_dev(i,k,l)
+            reff_col(k,l) = reff(i,k,l)
+            cwc_col(k,l) = cwc(i,k,l)
          end do
 
       end do
@@ -551,25 +432,25 @@ contains
 !-----A layer is added above the top of the model atmosphere.
 !     Index "0" is the layer above the top of the atmosphere.
 
-      dp  (0) = max(ple_dev(i,1)*0.01,0.005)
+      dp  (0) = max(ple(i,1)*0.01,0.005)
       pa  (0) = 0.5*dp(0)
-      dt  (0) = ta_dev(i,1)-250.0
+      dt  (0) = ta(i,1)-250.0
 
-      dh2o(0) = 1.02*wa_dev   (i,1)*dp(0)
-      do3 (0) = 476.*oa_dev   (i,1)*dp(0)
+      dh2o(0) = 1.02*wa   (i,1)*dp(0)
+      do3 (0) = 476.*oa   (i,1)*dp(0)
       dco2(0) = 789.*co2           *dp(0)
-      dch4(0) = 789.*ch4_dev  (i,1)*dp(0)
-      dn2o(0) = 789.*n2o_dev  (i,1)*dp(0)
-      df11(0) = 789.*cfc11_dev(i,1)*dp(0)
-      df12(0) = 789.*cfc12_dev(i,1)*dp(0)
-      df22(0) = 789.*cfc22_dev(i,1)*dp(0)
+      dch4(0) = 789.*ch4  (i,1)*dp(0)
+      dn2o(0) = 789.*n2o  (i,1)*dp(0)
+      df11(0) = 789.*cfc11(i,1)*dp(0)
+      df12(0) = 789.*cfc12(i,1)*dp(0)
+      df22(0) = 789.*cfc22(i,1)*dp(0)
 
       dh2o(0) = max(dh2o(0),1.e-10)
       do3 (0) = max(do3(0),1.e-6)
       dco2(0) = max(dco2(0),1.e-4)
 
-      xx=pa(0)*0.001618*wa_dev(i,1)*wa_dev(i,1)*dp(0)
-      dcont(0) = xx*exp(1800./ta_dev(i,1)-6.081)
+      xx=pa(0)*0.001618*wa(i,1)*wa(i,1)*dp(0)
+      dcont(0) = xx*exp(1800./ta(i,1)-6.081)
 
 !-----the surface (np+1) is treated as a layer filled with black clouds.
 !     transfc is the transmittance between the surface and a pressure
@@ -577,7 +458,7 @@ contains
 !     trantcr is the clear-sky transmittance between the surface and a
 !     pressure level.
 
-      sfcem_dev(i) =0.0
+      sfcem(i) =0.0
       transfc(np+1)=1.0
       transfca(np+1)=1.0
       trantcr(np+1)=1.0
@@ -586,22 +467,22 @@ contains
 !-----initialize fluxes
 
       do k=1,np+1
-         flxu_dev(i,k)  = 0.0
-         flxau_dev(i,k) = 0.0
-         flcu_dev(i,k)  = 0.0
-         flau_dev(i,k)  = 0.0
+         flxu(i,k)  = 0.0
+         flxau(i,k) = 0.0
+         flcu(i,k)  = 0.0
+         flau(i,k)  = 0.0
 
-         flxd_dev(i,k)  = 0.0
-         flxad_dev(i,k) = 0.0
-         flcd_dev(i,k)  = 0.0
-         flad_dev(i,k)  = 0.0
+         flxd(i,k)  = 0.0
+         flxad(i,k) = 0.0
+         flcd(i,k)  = 0.0
+         flad(i,k)  = 0.0
 
-         dfdts_dev(i,k) = 0.0
+         dfdts(i,k) = 0.0
       end do
 
       do k=1,np
          do l=1,10
-            taudiag_dev(i,k,l) = 0.0
+            taudiag(i,k,l) = 0.0
          end do
       end do
 
@@ -713,7 +594,7 @@ contains
 !     The fitting for the planck flux is valid for the range 160-345 K.
 
          do k=1,np
-            call planck(ibn,cb,ta_dev(i,k),blayer(k))
+            call planck(ibn,cb,ta(i,k),blayer(k))
          end do
 
 !-----Index "0" is the layer above the top of the atmosphere.
@@ -724,8 +605,8 @@ contains
 !-----Surface emission and reflectivity. See Section 9.
 !     bs and dbs include the effect of surface emissivity.
 
-         call sfcflux (ibn,m,i,cb,dcb,ns,fs_dev,tg_dev,eg_dev,tv_dev,ev_dev,rv_dev,&
-               bs,dbs,rflxs) 
+         call sfcflux (ibn,m,i,cb,dcb,ns,fs,tg,eg,tv,ev,rv,&
+               bs,dbs,rflxs)
 
          blayer(np+1)=bs
 
@@ -744,7 +625,7 @@ contains
 
 !-----If the surface air temperature tb is known, compute blevel(np+1)
 
-         call planck(ibn,cb,tb_dev(i),blevel(np+1))
+         call planck(ibn,cb,tb(i),blevel(np+1))
 
 !-----if not, extrapolate blevel(np+1) from blayer(np-1) and blayer(np)
 
@@ -768,8 +649,8 @@ contains
 !     we need to transfer the taudiag for that band/column to the overall array.
 
          do k=1,np
-            taudiag_dev(i,k,ibn) = taudiag_dev(i,k,ibn) + &
-                  taudiaglyr(k,1) + taudiaglyr(k,2) + taudiaglyr(k,3) + taudiaglyr(k,4) 
+            taudiag(i,k,ibn) = taudiag(i,k,ibn) + &
+                  taudiaglyr(k,1) + taudiaglyr(k,2) + taudiaglyr(k,3) + taudiaglyr(k,4)
          end do
 
 !MAT-- icx and ncld only used when overcast=.false.
@@ -794,18 +675,18 @@ contains
 !-----taerlyr is the aerosol diffuse transmittance
 
                taerlyr(k)=1.0
-               if (taua_dev(i,k,ibn) > 0.001) then 
-                  if (ssaa_dev(i,k,ibn) > 0.001) then
-                     asya_dev(i,k,ibn)=asya_dev(i,k,ibn)/ssaa_dev(i,k,ibn)
-                     ssaa_dev(i,k,ibn)=ssaa_dev(i,k,ibn)/taua_dev(i,k,ibn)
+               if (taua(i,k,ibn) > 0.001) then
+                  if (ssaa(i,k,ibn) > 0.001) then
+                     asya(i,k,ibn)=asya(i,k,ibn)/ssaa(i,k,ibn)
+                     ssaa(i,k,ibn)=ssaa(i,k,ibn)/taua(i,k,ibn)
 
 !-----Parameterization of aerosol scattering following Eqs. (6.11)
-!     and (6.12). 
+!     and (6.12).
 
-                     ff=.5+(.3739+(0.0076+0.1185*asya_dev(i,k,ibn))*asya_dev(i,k,ibn))*asya_dev(i,k,ibn)
-                     taua_dev(i,k,ibn)=taua_dev(i,k,ibn)*(1.-ssaa_dev(i,k,ibn)*ff)
+                     ff=.5+(.3739+(0.0076+0.1185*asya(i,k,ibn))*asya(i,k,ibn))*asya(i,k,ibn)
+                     taua(i,k,ibn)=taua(i,k,ibn)*(1.-ssaa(i,k,ibn)*ff)
                   end if
-                  taerlyr(k)=exp(-1.66*taua_dev(i,k,ibn))
+                  taerlyr(k)=exp(-1.66*taua(i,k,ibn))
                end if
             end do
          end if AERO_IF
@@ -819,7 +700,7 @@ contains
 
 !-----compute the exponential terms (Eq. 4.24) at each layer due to
 !     water vapor continuum absorption.
-!     ne is the number of terms used in each band to compute water 
+!     ne is the number of terms used in each band to compute water
 !     vapor continuum transmittance (Table 9).
 
          ne=0
@@ -884,7 +765,7 @@ contains
                a1  = 9.65130e-4
                b1  = 1.31280e-5
                fk1 = 6.18536e+0
-               a2  =-3.00010e-5 
+               a2  =-3.00010e-5
                b2  = 5.25010e-7
                fk2 = 3.27912e+1
                call cfcexps(ibn,np,a1,b1,fk1,a2,b2,fk2,df22,dt,&
@@ -1065,14 +946,14 @@ contains
 
 !-----initialize fluxes
 
-         flxu  = 0.0
-         flxd  = 0.0
-         flxau = 0.0
-         flxad = 0.0
-         flcu  = 0.0
-         flcd  = 0.0
-         flau  = 0.0
-         flad  = 0.0
+         flxu_col  = 0.0
+         flxd_col  = 0.0
+         flxau_col = 0.0
+         flxad_col = 0.0
+         flcu_col  = 0.0
+         flcd_col  = 0.0
+         flau_col  = 0.0
+         flad_col  = 0.0
 
 !-----Compute upward and downward fluxes for each spectral band, ibn.
 
@@ -1277,7 +1158,7 @@ contains
                   end if
 
 !-----Compute transmittance in band 10 using k-distribution method.
-!     For band 10, trant is the change in transmittance due to n2o 
+!     For band 10, trant is the change in transmittance due to n2o
 !     absorption.
 
                   if (b10bnd) then
@@ -1329,41 +1210,41 @@ contains
 !-----The first terms on the rhs of Eqs. (8.15) and (8.16)
 
                if (k2 == k1+1 .and. ibn /= 10) then
-                  flau (k1) = flau (k1) - au(k1)
-                  flad (k2) = flad (k2) + ad(k1)
-                  flcu (k1) = flcu (k1) - cu(k1)
-                  flcd (k2) = flcd (k2) + cd(k1)
-                  flxu (k1) = flxu (k1) - bu(k1)
-                  flxd (k2) = flxd (k2) + bd(k1)
-                  flxau(k1) = flxau(k1) - du(k1)
-                  flxad(k2) = flxad(k2) + dd(k1)
+                  flau_col (k1) = flau_col (k1) - au(k1)
+                  flad_col (k2) = flad_col (k2) + ad(k1)
+                  flcu_col (k1) = flcu_col (k1) - cu(k1)
+                  flcd_col (k2) = flcd_col (k2) + cd(k1)
+                  flxu_col (k1) = flxu_col (k1) - bu(k1)
+                  flxd_col (k2) = flxd_col (k2) + bd(k1)
+                  flxau_col(k1) = flxau_col(k1) - du(k1)
+                  flxad_col(k2) = flxad_col(k2) + dd(k1)
                end if
 
 !-----The summation terms on the rhs of Eqs. (8.15) and (8.16).
 !     Also see Eqs. (5.4) and (5.5) for Band 10.
 
                xx=trant*(bu(k2-1)-bu(k2))
-               flxu(k1)=flxu(k1)+xx*fclr
+               flxu_col(k1)=flxu_col(k1)+xx*fclr
 
                if(do_aerosol) then
                   xx = taant*(du(k2-1)-du(k2))
                end if
-               flxau(k1)=flxau(k1)+xx*fclr
+               flxau_col(k1)=flxau_col(k1)+xx*fclr
 
                xx=trant*(cu(k2-1)-cu(k2))
-               flcu(k1)=flcu(k1)+xx
+               flcu_col(k1)=flcu_col(k1)+xx
 
                if(do_aerosol) then
                   xx = taant*(au(k2-1)-au(k2))
                end if
-               flau(k1)=flau(k1)+xx
+               flau_col(k1)=flau_col(k1)+xx
 
                if (k1 == 0) then !mjs  bd(-1) is not defined
                   xx=-trant*bd(k1)
                else
                   xx= trant*(bd(k1-1)-bd(k1))
                end if
-               flxd(k2)=flxd(k2)+xx*fclr
+               flxd_col(k2)=flxd_col(k2)+xx*fclr
 
                if(do_aerosol) then
                   if (k1 == 0) then  !mjs  bd(-1) is not defined
@@ -1372,14 +1253,14 @@ contains
                      xx= taant*(dd(k1-1)-dd(k1))
                   end if
                end if
-               flxad(k2)=flxad(k2)+xx*fclr
+               flxad_col(k2)=flxad_col(k2)+xx*fclr
 
                if (k1 == 0) then !mjs  bd(-1) is not defined
                   xx=-trant*cd(k1)
                else
                   xx= trant*(cd(k1-1)-cd(k1))
                end if
-               flcd(k2)=flcd(k2)+xx
+               flcd_col(k2)=flcd_col(k2)+xx
 
                if(do_aerosol) then
                   if (k1 == 0) then  !mjs  bd(-1) is not defined
@@ -1388,14 +1269,14 @@ contains
                      xx= taant*(ad(k1-1)-ad(k1))
                   end if
                end if
-               flad(k2)=flad(k2)+xx
+               flad_col(k2)=flad_col(k2)+xx
 !MAT--End of original 4000 loop
 
                fclr_above = fclr
 
             end do LOOP_3000_4000
 
-!-----Here, fclr and trant are, respectively, the clear line-of-sight 
+!-----Here, fclr and trant are, respectively, the clear line-of-sight
 !     and the transmittance between k1 and the surface.
 
             trantca (k1) = taant
@@ -1404,11 +1285,11 @@ contains
             transfca(k1) = taant*fclr
 
 !-----compute the partial derivative of fluxes with respect to
-!     surface temperature (Eq. 3.12). 
+!     surface temperature (Eq. 3.12).
 !     Note: upward flux is negative, and so is dfdts.
 
             if (k1 > 0)then
-               dfdts_dev(i,k1) =dfdts_dev(i,k1)-dbs*transfc(k1)
+               dfdts(i,k1) =dfdts(i,k1)-dbs*transfc(k1)
             end if
          end do LOOP_2000
 
@@ -1416,56 +1297,48 @@ contains
 
          if (.not. b10bnd) then
 
-!-----Note: blayer(np+1) and dbs include the surface emissivity 
+!-----Note: blayer(np+1) and dbs include the surface emissivity
 !     effect. Both dfdts and sfcem are negative quantities.
 
-            flau(np+1)       =             -blayer(np+1)
-            flcu(np+1)       =             -blayer(np+1)
-            flxu(np+1)       =             -blayer(np+1)
-            flxau(np+1)      =             -blayer(np+1)
-            sfcem_dev(i)     = sfcem_dev(i)-blayer(np+1)
-            dfdts_dev(i,np+1)= dfdts_dev(i,np+1)-dbs
+            flau_col(np+1)       =             -blayer(np+1)
+            flcu_col(np+1)       =             -blayer(np+1)
+            flxu_col(np+1)       =             -blayer(np+1)
+            flxau_col(np+1)      =             -blayer(np+1)
+            sfcem(i)     = sfcem(i)-blayer(np+1)
+            dfdts(i,np+1)= dfdts(i,np+1)-dbs
 
 !-----Add the flux reflected by the surface. (Second term on the
 !     rhs of Eq. 8.16). rflxs is the surface reflectivity.
 
             do k=1,np+1
-               flau (k) = flau (k)-flad (np+1)*trantca (k)*rflxs
-               flcu (k) = flcu (k)-flcd (np+1)*trantcr (k)*rflxs
-               flxu (k) = flxu (k)-flxd (np+1)*transfc (k)*rflxs
-               flxau(k) = flxau(k)-flxad(np+1)*transfca(k)*rflxs
+               flau_col (k) = flau_col (k)-flad_col (np+1)*trantca (k)*rflxs
+               flcu_col (k) = flcu_col (k)-flcd_col (np+1)*trantcr (k)*rflxs
+               flxu_col (k) = flxu_col (k)-flxd_col (np+1)*transfc (k)*rflxs
+               flxau_col(k) = flxau_col(k)-flxad_col(np+1)*transfca(k)*rflxs
             end do
          end if
 
 !-----Summation of fluxes over spectral bands
 
          do k=1,np+1
-            flau_dev (i,k) = flau_dev (i,k) + flau (k)
-            flcu_dev (i,k) = flcu_dev (i,k) + flcu (k)
-            flxu_dev (i,k) = flxu_dev (i,k) + flxu (k)
-            flxau_dev(i,k) = flxau_dev(i,k) + flxau(k)
+            flau (i,k) = flau (i,k) + flau_col (k)
+            flcu (i,k) = flcu (i,k) + flcu_col (k)
+            flxu (i,k) = flxu (i,k) + flxu_col (k)
+            flxau(i,k) = flxau(i,k) + flxau_col(k)
 
-            flad_dev (i,k) = flad_dev (i,k) + flad (k)
-            flcd_dev (i,k) = flcd_dev (i,k) + flcd (k)
-            flxd_dev (i,k) = flxd_dev (i,k) + flxd (k)
-            flxad_dev(i,k) = flxad_dev(i,k) + flxad(k)
+            flad (i,k) = flad (i,k) + flad_col (k)
+            flcd (i,k) = flcd (i,k) + flcd_col (k)
+            flxd (i,k) = flxd (i,k) + flxd_col (k)
+            flxad(i,k) = flxad(i,k) + flxad_col(k)
          end do
 
       end do BAND_LOOP
-#ifndef _CUDA
    end do RUN_LOOP
-#else
-   end if RUN_LOOP
-#endif
 
    end subroutine irrad
 
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine planck(ibn,cb,t,xlayer)
-#else
    subroutine planck(ibn,cb,t,xlayer)
-#endif
 !***********************************************************************
 !
 !-----Compute spectrally integrated Planck flux
@@ -1482,13 +1355,9 @@ contains
 
    end subroutine planck
 
-   
+
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine plancd(ibn,dcb,t,dbdt) 
-#else
-   subroutine plancd(ibn,dcb,t,dbdt) 
-#endif
+   subroutine plancd(ibn,dcb,t,dbdt)
 !***********************************************************************
 !
 !-----Compute the derivative of Planck flux wrt temperature
@@ -1507,11 +1376,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine h2oexps(ib,np,dh2o,pa,dt,xkw,aw,bw,pm,mw,h2oexp)
-#else
    subroutine h2oexps(ib,np,dh2o,pa,dt,xkw,aw,bw,pm,mw,h2oexp)
-#endif
 !**********************************************************************
 !   Compute exponentials for water vapor line absorption
 !   in individual layers using Eqs. (8.21) and (8.22).
@@ -1519,7 +1384,7 @@ contains
 !---- input parameters
 !  spectral band (ib)
 !  number of layers (np)
-!  layer water vapor amount for line absorption (dh2o) 
+!  layer water vapor amount for line absorption (dh2o)
 !  layer pressure (pa)
 !  layer temperature minus 250K (dt)
 !  absorption coefficients for the first k-distribution
@@ -1596,18 +1461,14 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine conexps(ib,np,dcont,xke,conexp)
-#else
    subroutine conexps(ib,np,dcont,xke,conexp)
-#endif
 !**********************************************************************
 !   compute exponentials for continuum absorption in individual layers.
 !
 !---- input parameters
 !  spectral band (ib)
 !  number of layers (np)
-!  layer scaled water vapor amount for continuum absorption (dcont) 
+!  layer scaled water vapor amount for continuum absorption (dcont)
 !  absorption coefficients for the first k-distribution function
 !     due to water vapor continuum absorption (xke)
 !
@@ -1638,7 +1499,7 @@ contains
 
 !-----The absorption coefficients for sub-bands 3b and 3a are, respectively,
 !     two and four times the absorption coefficient for sub-band 3c (Table 9).
-!     Note that conexp(3) is for sub-band 3a. 
+!     Note that conexp(3) is for sub-band 3a.
 
       if (ib  ==  3) then
          conexp(k,2) = conexp(k,1) *conexp(k,1)
@@ -1651,13 +1512,9 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine n2oexps(ib,np,dn2o,pa,dt,n2oexp)
-#else
    subroutine n2oexps(ib,np,dn2o,pa,dt,n2oexp)
-#endif
 !**********************************************************************
-!   Compute n2o exponentials for individual layers 
+!   Compute n2o exponentials for individual layers
 !
 !---- input parameters
 !  spectral band (ib)
@@ -1727,11 +1584,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine ch4exps(ib,np,dch4,pa,dt,ch4exp)
-#else
    subroutine ch4exps(ib,np,dch4,pa,dt,ch4exp)
-#endif
 !**********************************************************************
 !   Compute ch4 exponentials for individual layers
 !
@@ -1800,13 +1653,9 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine comexps(ib,np,dcom,dt,comexp)
-#else
    subroutine comexps(ib,np,dcom,dt,comexp)
-#endif
 !**********************************************************************
-!   Compute co2-minor exponentials for individual layers using 
+!   Compute co2-minor exponentials for individual layers using
 !   Eqs. (8.21) and (8.22).
 !
 !---- input parameters
@@ -1860,11 +1709,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine cfcexps(ib,np,a1,b1,fk1,a2,b2,fk2,dcfc,dt,cfcexp)
-#else
    subroutine cfcexps(ib,np,a1,b1,fk1,a2,b2,fk2,dcfc,dt,cfcexp)
-#endif
 !**********************************************************************
 !   compute cfc(-11, -12, -22) exponentials for individual layers.
 !
@@ -1921,13 +1766,8 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine b10exps(np,dh2o,dcont,dco2,dn2o,pa,dt, &
-      h2oexp,conexp,co2exp,n2oexp)
-#else
    subroutine b10exps(np,dh2o,dcont,dco2,dn2o,pa,dt, &
       h2oexp,conexp,co2exp,n2oexp)
-#endif
 !**********************************************************************
 !   Compute band3a exponentials for individual layers
 !
@@ -2044,13 +1884,8 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine tablup(nx,nh,dw,p,dt,s1,s2,s3,w1,p1, &
-      dwe,dpe,coef1,coef2,coef3,tran)
-#else
    subroutine tablup(nx,nh,dw,p,dt,s1,s2,s3,w1,p1, &
       dwe,dpe,coef1,coef2,coef3,tran)
-#endif
 !**********************************************************************
 !   Compute water vapor, co2 and o3 transmittances between level
 !   k1 and and level k2 for m soundings, using table look-up.
@@ -2064,8 +1899,8 @@ contains
 !  layer absorber amount (dw)
 !  layer pressure in mb (p)
 !  deviation of layer temperature from 250K (dt)
-!  first value of absorber amount (log10) in the table (w1) 
-!  first value of pressure (log10) in the table (p1) 
+!  first value of absorber amount (log10) in the table (w1)
+!  first value of pressure (log10) in the table (p1)
 !  size of the interval of absorber amount (log10) in the table (dwe)
 !  size of the interval of pressure (log10) in the table (dpe)
 !  pre-computed coefficients (coef1, coef2, and coef3)
@@ -2079,7 +1914,7 @@ contains
 !
 !  Note: Units of s1 are g/cm**2 for water vapor and
 !       (cm-atm)stp for co2 and o3.
-!   
+!
 !**********************************************************************
    implicit none
 
@@ -2101,7 +1936,7 @@ contains
    real :: x1,x2,x3,xx, x1c
    integer :: iw,ip
 
-!-----Compute effective pressure (x2) and temperature (x3) following 
+!-----Compute effective pressure (x2) and temperature (x3) following
 !     Eqs. (8.28) and (8.29)
 
    s1=s1+dw
@@ -2125,7 +1960,7 @@ contains
    we=min(we,float(nh-1))
    pe=min(pe,float(nx-1))
 
-!-----assign iw and ip and compute the distance of we and pe 
+!-----assign iw and ip and compute the distance of we and pe
 !     from iw and ip.
 
    iw=int(we+1.0)
@@ -2179,13 +2014,8 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine h2okdis(ib,np,k,fkw,gkw,ne,h2oexp,conexp, &
-      th2o,tcon,tran)
-#else
    subroutine h2okdis(ib,np,k,fkw,gkw,ne,h2oexp,conexp, &
       th2o,tcon,tran)
-#endif
 !**********************************************************************
 !   compute water vapor transmittance between levels k1 and k2 for
 !   m soundings, using the k-distribution method.
@@ -2200,8 +2030,8 @@ contains
 !    h2o continuum absorption (gkw)
 !  number of terms used in each band to compute water vapor
 !     continuum transmittance (ne)
-!  exponentials for line absorption (h2oexp) 
-!  exponentials for continuum absorption (conexp) 
+!  exponentials for line absorption (h2oexp)
+!  exponentials for continuum absorption (conexp)
 !
 !---- updated parameters
 !  transmittance between levels k1 and k2 due to
@@ -2228,11 +2058,11 @@ contains
    real :: trnth2o
    integer :: i
 
-!-----tco2 are the six exp factors between levels k1 and k2 
+!-----tco2 are the six exp factors between levels k1 and k2
 !     tran is the updated total transmittance between levels k1 and k2
 
 !-----th2o is the 6 exp factors between levels k1 and k2 due to
-!     h2o line absorption. 
+!     h2o line absorption.
 
 !-----tcon is the 3 exp factors between levels k1 and k2 due to
 !     h2o continuum absorption.
@@ -2315,11 +2145,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine n2okdis(ib,np,k,n2oexp,tn2o,tran)
-#else
    subroutine n2okdis(ib,np,k,n2oexp,tn2o,tran)
-#endif
 !**********************************************************************
 !   compute n2o transmittances between levels k1 and k2 for
 !    m soundings, using the k-distribution method with linear
@@ -2352,7 +2178,7 @@ contains
 
    real :: xc
 
-!-----tn2o is computed from Eq. (8.23). 
+!-----tn2o is computed from Eq. (8.23).
 !     xc is the total n2o transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 5.
 
@@ -2390,11 +2216,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine ch4kdis(ib,np,k,ch4exp,tch4,tran)
-#else
    subroutine ch4kdis(ib,np,k,ch4exp,tch4,tran)
-#endif
 !**********************************************************************
 !   compute ch4 transmittances between levels k1 and k2 for
 !    m soundings, using the k-distribution method with
@@ -2427,7 +2249,7 @@ contains
 
    real :: xc
 
-!-----tch4 is computed from Eq. (8.23). 
+!-----tch4 is computed from Eq. (8.23).
 !     xc is the total ch4 transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 5.
 
@@ -2462,11 +2284,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine comkdis(ib,np,k,comexp,tcom,tran)
-#else
    subroutine comkdis(ib,np,k,comexp,tcom,tran)
-#endif
 !**********************************************************************
 !  compute co2-minor transmittances between levels k1 and k2
 !   for m soundings, using the k-distribution method
@@ -2499,7 +2317,7 @@ contains
 
    real :: xc
 
-!-----tcom is computed from Eq. (8.23). 
+!-----tcom is computed from Eq. (8.23).
 !     xc is the total co2 transmittance computed from (8.25)
 !     The k-distribution functions are given in Table 6.
 
@@ -2545,11 +2363,7 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine cfckdis(np,k,cfcexp,tcfc,tran)
-#else
    subroutine cfckdis(np,k,cfcexp,tcfc,tran)
-#endif
 !**********************************************************************
 !  compute cfc-(11,12,22) transmittances between levels k1 and k2
 !   for m soundings, using the k-distribution method with
@@ -2577,7 +2391,7 @@ contains
 
    real :: tcfc,tran
 
-!-----tcfc is the exp factors between levels k1 and k2. 
+!-----tcfc is the exp factors between levels k1 and k2.
 
    tcfc=tcfc*cfcexp(k)
    tran=tran*tcfc
@@ -2586,13 +2400,8 @@ contains
 
 
 !**********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine b10kdis(np,k,h2oexp,conexp,co2exp,n2oexp, &
-      th2o,tcon,tco2,tn2o,tran)
-#else
    subroutine b10kdis(np,k,h2oexp,conexp,co2exp,n2oexp, &
       th2o,tcon,tco2,tn2o,tran)
-#endif
 !**********************************************************************
 !
 !   compute h2o (line and continuum),co2,n2o transmittances between
@@ -2701,13 +2510,8 @@ contains
 
 #ifndef OVERCAST
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine cldovlp (np,k1,k2,ict,icb,icx,ncld,enn,ett, &
-      cldhi,cldmd,cldlw)
-#else
    subroutine cldovlp (np,k1,k2,ict,icb,icx,ncld,enn,ett, &
       cldhi,cldmd,cldlw)
-#endif
 !***********************************************************************
 !
 !     update the effective superlayer cloud fractions between  levels k1
@@ -2801,13 +2605,9 @@ contains
 !mjs
 
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine sfcflux (ibn,m,i,cb,dcb,ns,fs,tg,eg,tv,ev,rv,bs,dbs,rflxs)
-#else
    subroutine sfcflux (ibn,m,i,cb,dcb,ns,fs,tg,eg,tv,ev,rv,bs,dbs,rflxs)
-#endif
 !***********************************************************************
-! Compute emission and reflection by an homogeneous/inhomogeneous 
+! Compute emission and reflection by an homogeneous/inhomogeneous
 !  surface with vegetation cover.
 !
 !-----Input parameters
@@ -2821,7 +2621,7 @@ contains
 !  sub-grid vegetation temperature (tv)
 !  sub-grid vegetation emissivity (ev)
 !  sub-grid vegetation reflectivity (rv)
-!                      
+!
 !-----Output parameters                                Unit
 !  Emission by the surface (ground+vegetation) (bs)    W/m^2
 !  Derivative of bs rwt to temperature (dbs)           W/m^2
@@ -2842,7 +2642,7 @@ contains
 
 !---- temporary arrays -----
    integer :: j
-   real :: bg(MAXNS),bv(MAXNS),dbg(MAXNS),dbv(MAXNS)
+   real :: bg(ns),bv(ns),dbg(ns),dbv(ns)
    real :: xx,yy,zz
 
 !***************************************************************
@@ -2926,11 +2726,7 @@ contains
 #ifndef OVERCAST
 
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine mkicx(np,ict,icb,enn,icx,ncld)
-#else
    subroutine mkicx(np,ict,icb,enn,icx,ncld)
-#endif
 !***********************************************************************
 
    implicit none
@@ -2947,15 +2743,11 @@ contains
    end subroutine mkicx
 
 !***********************************************************************
-#ifdef _CUDA
-   attributes(device) subroutine SORTIT(ENN,LST,NC,ibg,iend)
-#else
    subroutine SORTIT(ENN,LST,NC,ibg,iend)
-#endif
 !***********************************************************************
 
    implicit none
-   
+
    integer, intent(  OUT) :: NC
    integer, intent(IN   ) :: IBG, IEND
    real,    intent(IN   ) :: ENN(IBG:IEND)
@@ -2988,64 +2780,5 @@ contains
    end subroutine SORTIT
 #endif
 !mjs
-
-! GPU Due to limitations of CUDA Fortran, we cannot call device subroutines
-!     external to the file containing the global subroutine. So we replicate
-!     the interface for the tau routine here.
-
-#ifdef _CUDA
-!------------------------------------------------------------------------------
-!BOP
-! !ROUTINE: getirtau
-!
-! !INTERFACE:
-   attributes(device) subroutine getirtau(ib,nlevs,dp,fcld,reff,hydromets,&
-                       taudiag,tcldlyr,enn)
-
-      implicit none
-
-! !INPUT PARAMETERS:
-      integer, intent(IN ) :: ib             !  Band number
-      integer, intent(IN ) :: nlevs          !  Number of levels
-      real,    intent(IN ) :: dp(:)          !  Delta pressure in Pa
-      real,    intent(IN ) :: fcld(:)        !  Cloud fraction (used sometimes)
-      real,    intent(IN ) :: reff(:,:)      !  Effective radius (microns)
-      real,    intent(IN ) :: hydromets(:,:) !  Hydrometeors (kg/kg)
-
-! !OUTPUT PARAMETERS:
-      real,    intent(OUT) :: taudiag(  :,:) !  Optical depth for beam radiation
-      real,    intent(OUT) :: tcldlyr(0:   ) !  Flux transmissivity?
-      real,    intent(OUT) ::     enn(0:   ) !  Flux transmissivity of a cloud layer?
-
-! !DESCRIPTION:
-!  Compute in-cloud or grid mean optical depths for infrared wavelengths
-!  Slots for reff, hydrometeors and tauall are as follows:
-!                 1         Cloud Ice
-!                 2         Cloud Liquid
-!                 3         Falling Liquid (Rain)
-!                 4         Falling Ice (Snow)
-!
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
-!  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
-!
-! !REVISION HISTORY: 
-!    2011.11.18   MAT moved to Radiation_Shared and revised arg list, units
-!
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-      integer            :: k
-      real               :: taucld1,taucld2,taucld3,taucld4
-      real               :: g1,g2,g3,g4,gg
-      real               :: w1,w2,w3,w4,ww
-      real               :: ff,tauc
-
-      real               :: reff_snow
-
-#include "getirtau.code"
-
-   end subroutine getirtau
-#endif
 
 end module irradmod
