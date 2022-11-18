@@ -271,7 +271,7 @@ contains
     logical      :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     real         :: RFLAG
     integer      :: NUM_BANDS_SOLAR
-    logical      :: RRTMG_TO_OBIO
+    logical      :: SOLAR_TO_OBIO
 
     type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
     type (ty_RRTMGP_wrap)           :: wrap
@@ -343,12 +343,8 @@ contains
     end if
 
     ! Decide if should make OBIO exports
-    if (USE_RRTMG) then
-       call ESMF_ConfigGetAttribute(CF, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', &
-          DEFAULT=.FALSE., __RC__)
-    else
-       RRTMG_TO_OBIO = .FALSE.
-    end if
+    call ESMF_ConfigGetAttribute(CF, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', &
+       DEFAULT=.FALSE., __RC__)
 
 ! Set the state variable specs.
 ! -----------------------------
@@ -631,7 +627,7 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
-    if (RRTMG_TO_OBIO) then
+    if (SOLAR_TO_OBIO) then
 
        call MAPL_AddInternalSpec(GC,                                         &
           LONG_NAME      = 'normalized_surface_downwelling_shortwave_beam_flux_per_band',&
@@ -895,7 +891,7 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
-    if (RRTMG_TO_OBIO) then
+    if (SOLAR_TO_OBIO) then
 
        call MAPL_AddExportSpec(GC,                                           &
           LONG_NAME      = 'surface_downwelling_shortwave_beam_flux_per_OBIO_band',&
@@ -1511,7 +1507,7 @@ contains
     logical            :: USE_CHOU  , USE_CHOU_IRRAD
     real               :: RFLAG
     integer            :: NUM_BANDS_SOLAR, NUM_BANDS, TOTAL_RAD_BANDS
-    logical            :: RRTMG_TO_OBIO
+    logical            :: SOLAR_TO_OBIO
 
     integer, parameter :: BANDS_SOLAR_OFFSET = 0
 
@@ -1673,12 +1669,8 @@ contains
     end if
 
     ! Decide if should make OBIO exports
-    if (USE_RRTMG) then
-       call MAPL_GetResource( MAPL, RRTMG_TO_OBIO, LABEL='RRTMG_TO_OBIO:', & 
-          DEFAULT=.FALSE., __RC__)
-    else
-       RRTMG_TO_OBIO = .FALSE.
-    end if
+    call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', & 
+       DEFAULT=.FALSE., __RC__)
 
 ! Test to see if AGCM.rc is set up correctly for the Radiation selected
 !----------------------------------------------------------------------
@@ -2936,6 +2928,8 @@ contains
                      NIRR,NIRF,PARR,PARF,UVRR,UVRF,           &
                      FSWU,FSCU,                               &
                      FSWBAND,                                 &
+                     SOLAR_TO_OBIO .and. .not. NO_AERO,       &     
+                     DRBAND, DFBAND,                          &
                      __RC__                                   )
 
    else if (USE_RRTMGP) then
@@ -3550,6 +3544,11 @@ contains
       do ib = 1, nbnd
         FSWBAND(:,ib) = real(bnd_flux_net_allsky(:,LM+1,ib))
       end do
+      ! surface downwelling direct and diffuse fluxes in bands
+      if (SOLAR_TO_OBIO .and. .not. NO_AERO) then
+        DRBAND(:,ib) = real(bnd_flux_dir_allsky(:,LM+1,ib))
+        DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+      endif
       ! surface direct and diffuse downward in super-bands
       ! for *diffuse* downward must subtract direct (downward) from total downward
       ! NIR bands (1-9: 820-12850 cm-1, 0.778-12.195 microns)
@@ -3882,7 +3881,7 @@ contains
          CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
          NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
          TAUTP, TAUHP, TAUMP, TAULP, &
-         RRTMG_TO_OBIO .and. .not. NO_AERO, DRBAND, DFBAND, &
+         SOLAR_TO_OBIO .and. .not. NO_AERO, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC)
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
@@ -4071,6 +4070,8 @@ contains
                           FDIRUV, FDIFUV  , &
                           FLXU,   FLCU    , &
                           FLXBAND,          &
+                          do_drfband,       &
+                          drband, dfband,   &
 
                           RC                )
 
@@ -4084,7 +4085,7 @@ contains
       integer,                  intent(IN ) :: ICT, ICB
       real, dimension(:      ), intent(IN ) :: COSZ, RGBUV, RGFUV, RGBIR, RGFIR
       real, dimension(:,:,:  ), intent(IN ) :: TAUA, SSAA, ASYA
-
+      logical,                  intent(in ) :: do_drfband  ! Compute drband, dfband?
 
       real, dimension(:,:    ), intent(OUT) :: FLX,    FLC
       real, dimension(:,:    ), intent(OUT) :: FLXU,   FLCU
@@ -4093,14 +4094,17 @@ contains
       real, dimension(:      ), intent(OUT) :: FDIRUV, FDIFUV
       real, dimension(:,:    ), intent(OUT) :: FLXBAND
 
+      ! Surface downwelling direct and diffuse (W/m2) in each solar band:
+      ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
+      ! if (do_drfband), must point to an (#cols,#bands) space.
+      real, intent(inout), dimension (:,:), pointer :: drband, dfband
+
       integer, optional,        intent(OUT) :: RC
 
 ! Locals
 !-------
 
       integer :: IRUN, LN
-
-      INTEGER :: IDX,I,J,K,IN,IB,L
       INTEGER :: STATUS
 
 ! Begin
@@ -4115,17 +4119,16 @@ contains
 
       call MAPL_TimerOn(MAPL,"-SORAD")
 
-      call MAPL_TimerOn(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_TimerOn(MAPL,"--SORAD_RUN",__RC__)
       call SORAD (IRUN,LN,NB_CHOU,COSZ,PLTMP,TA,WA,OA,CO2,      &
-           CWC,FCLD,ICT,ICB,REFF,HK_UV_TEMP,  HK_IR_TEMP,       &
+           CWC,FCLD,ICT,ICB,REFF,HK_UV_TEMP,HK_IR_TEMP,         &
            TAUA,SSAA,ASYA,                                      &
            RGBUV,RGFUV, RGBIR, RGFIR,                           &
            FLX,FLC,FDIRUV,FDIFUV,FDIRPAR,FDIFPAR,FDIRIR,FDIFIR, &
            FLXU,FLCU,                                           &
-           FLXBAND  )
-      call MAPL_TimerOff(MAPL,"--SORAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+           FLXBAND,                                             &
+           do_drfband, drband, dfband)
+      call MAPL_TimerOff(MAPL,"--SORAD_RUN",__RC__)
 
       call MAPL_TimerOff(MAPL,"-SORAD")
 
@@ -4137,10 +4140,10 @@ contains
 
     subroutine UPDATE_EXPORT(IM,JM,LM, RC)
 
-      ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
-      ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
-      use parrrsw,  only: nbndsw, jpb1, jpb2
+      use parrrsw, only: nbndsw, jpb1, jpb2
       use rrsw_wvn, only: wavenum1, wavenum2
+      use mo_gas_concentrations, only: ty_gas_concs
+      use mo_load_coefficients,  only: load_and_init
 
       integer,           intent(IN ) :: IM, JM, LM
       integer, optional, intent(OUT) :: RC
@@ -4239,9 +4242,16 @@ contains
       real    :: TAUCRIT
       real    :: FAC
       integer :: idx
-      integer,external:: GetAeroIndex
+      integer, external :: GetAeroIndex
 
-      ! OBIO bands (start, finish) in [nm]
+      type (ty_RRTMGP_state), pointer      :: rrtmgp_state => null()
+      type (ty_RRTMGP_wrap)                :: wrap
+      character (len=ESMF_MAXPATHLEN)      :: k_dist_file
+      character (len=ESMF_MAXSTR)          :: error_msg
+      type (ty_gas_optics_rrtmgp), pointer :: k_dist
+      type (ty_gas_concs)                  :: gas_concs
+
+      ! OBIO bands (start,finish) in [nm]
       real, parameter :: OBIO_bands_nm (2,NB_OBIO) = reshape([ &
           200.0,  300.0, &  ! 01
           300.0,  350.0, &  ! 02
@@ -4278,14 +4288,38 @@ contains
          3400.0, 4000.0  &  ! 33
       ], shape(OBIO_bands_nm))
 
-      ! We will do the conversion from RRTMG to OBIO bands in wavenumber [cm^-1],
-      ! since RRTMG bands are defined so, and since photon energy \propto wavenumber,
-      ! where wavenumber \def 1 / wavelength.
+      ! We will do the conversion from SOLAR to OBIO bands in wavenumber [cm^-1],
+      ! since photon energy \propto wavenumber, where wavenumber \def 1 / wavelength.
       real, parameter :: OBIO_bands_wavenum (2,NB_OBIO) = 1.e7 / OBIO_bands_nm
 
-      real :: rwvn1, rwvn2, owvn1, owvn2, rfrac
+      ! CHOU bands (start,finish) in [nm]
+      real, parameter :: CHOU_bands_nm (2,NB_CHOU) = reshape([ &
+          225.0,  285.0, &  ! 01
+          285.0,  300.0, &  ! sub-band 2b (see note below)
+          300.0,  325.0, &  ! 03
+          325.0,  400.0, &  ! 04
+          400.0,  690.0, &  ! 05
+          690.0, 1220.0, &  ! 06
+         1220.0, 2270.0, &  ! 07
+         2270.0, 3850.0  &  ! 08
+      ], shape(CHOU_bands_nm))
+
+      ! Note: Chou-Suarez "Band 2" also includes sub-band 2a=(175,225) [nm].
+      ! But almost no radiation in this extreme UV sub-band reaches the surface,
+      ! so we treat all the band "2" as actually all sub-band 2b=(285,300) [nm],
+      ! as in the CHOU_bands_nm array above.
+
+      ! loaded later
+      real :: SOLAR_bands_wavenum (2,NUM_BANDS_SOLAR)  ! [cm^-1]
+      integer :: SOLAR_bands_order (NUM_BANDS_SOLAR)
+
+      real :: swvn1, swvn2, owvn1, owvn2, sfrac
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
-      logical :: rfirst, ofirst
+      logical :: sfirst, ofirst
+
+! helper for testing RRTMGP error status on return;
+! allows line number reporting cf. original call method
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _ASSERT(.false.,"RRTMGP Error: "//trim(error_msg)); endif
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -4410,7 +4444,7 @@ contains
       call MAPL_GetPointer(EXPORT  , CLDHISWHB,  'CLDHISWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTTSWHB,  'CLDTTSWHB',  __RC__)
 
-      if (RRTMG_TO_OBIO) then
+      if (SOLAR_TO_OBIO) then
          call MAPL_GetPointer(INTERNAL, DRBANDN, 'DRBANDN',    __RC__)
          call MAPL_GetPointer(INTERNAL, DFBANDN, 'DFBANDN',    __RC__)
          call MAPL_GetPointer(EXPORT  , DROBIO,  'DROBIO',     __RC__)
@@ -4943,95 +4977,147 @@ contains
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
       
-! RRTMG TO OBIO conversion ...
+! SOLAR TO OBIO conversion ...
 ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
 ! ---------------------------------------------------------------------------------------
 
-      if (RRTMG_TO_OBIO) then
+      if (SOLAR_TO_OBIO) then
          if (associated(DROBIO) .or. associated(DFOBIO)) then
 
-            _ASSERT(jpb2-jpb1+1 == NUM_BANDS_SOLAR, 'RRTMG band inconsistency!')
-            _ASSERT(NUM_BANDS_SOLAR == 14, 'wrong number of RRTMG bands!')
+            ! first load SOLAR_bands_wavenum and specify ordering
+            !    that makes it monotonically increasing ...
+ 
+            if (USE_RRTMGP) then
+
+               ! access RRTMGP internal state from the GC
+               call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+               VERIFY_(status)
+               rrtmgp_state => wrap%ptr
+
+               ! initialize k-distribution if not already done
+               ! remember: its possible to have UPDATE_FIRST
+               if (.not. rrtmgp_state%initialized) then
+                  call MAPL_GetResource( &
+                     MAPL, k_dist_file, "RRTMGP_DATA_SW:", &
+                     DEFAULT='rrtmgp-data-sw.nc', __RC__)
+                  ! gas_concs needed only to access required gas names
+                  error_msg = gas_concs%init([character(3) :: &
+                     'h2o','co2','o3','n2o','co','ch4','o2','n2'])
+                  TEST_(error_msg)
+                  call load_and_init( &
+                     rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
+                  if (.not. rrtmgp_state%k_dist%source_is_external()) then
+                     TEST_('RRTMGP-SW: does not seem to be SW')
+                  endif
+                  rrtmgp_state%initialized = .true.
+               endif
+
+               ! access by shorter name
+               k_dist => rrtmgp_state%k_dist
+
+               ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
+               SOLAR_bands_wavenum = k_dist%get_band_lims_wavenumber()
+
+               ! RRTMGP bands are already ordered in increasing wavenumber
+               SOLAR_bands_order = [(i, i=1,NUM_BANDS_SOLAR)]
+
+            elseif (USE_RRTMG) then 
+
+               ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
+               ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+
+               _ASSERT(jpb2-jpb1+1     == 14, 'RRTMG band inconsistency!')
+               _ASSERT(NUM_BANDS_SOLAR == 14, 'wrong number of RRTMG bands!')
+
+               ! load RRTMG bands (2,NB_RRTMG) [cm^-1]
+               SOLAR_bands_wavenum (1,:) = wavenum1(jpb1:jpb2)
+               SOLAR_bands_wavenum (2,:) = wavenum2(jpb1:jpb2)
+
+               ! RRTMG band 14 comes before band 1 in increasing wavenumber
+               SOLAR_bands_order(1) = 14
+               SOLAR_bands_order(2:14) = [(i, i=1,13)]
+
+            else if (USE_CHOU) then
+
+               ! Source CHOU_bands_nm (2,NB_CHOU) is, ordered in increasing waveLENGTH.
+               ! See CHOU_bands_nm declaration for note about band 2a/b.
+
+               ! load Chou-Suarez bands (2,NB_CHOU) [cm^-1] in increasing waveNUMBER
+               SOLAR_bands_wavenum (1,:) = 1.e7 / CHOU_bands_nm(2,NUM_BANDS_SOLAR:1:-1)
+               SOLAR_bands_wavenum (2,:) = 1.e7 / CHOU_bands_nm(1,NUM_BANDS_SOLAR:1:-1)
+
+               ! Chou-Suarez bands are now ordered in increasing wavenumber
+               SOLAR_bands_order = [(i, i=1,NUM_BANDS_SOLAR)]
+
+            endif
 
             ! zero accumulators
             if (associated(DROBIO)) DROBIO = 0.
             if (associated(DFOBIO)) DFOBIO = 0.
 
-            ! We attempt to do the conversion efficiently by taking into account the RRTMG
-            ! band 14 mis-ordering and knowing there are no gaps or overlaps in either RRTMG
-            ! or OBIO bands. We loop over the two segments of RRTMG bands that render the
-            ! RRTMG bands monotonically increasing in wavenumber.
-            rfirst = .true.
+            ! We attempt to do the conversion efficiently by taking into account the band
+            ! ordering in increasing wavenumber and knowing there are no gaps or overlaps
+            ! in either SOLAR or OBIO bands.
+            sfirst = .true.
             ofirst = .true.
             kb_start = NB_OBIO
-            do iseg = 1,2
-               if (iseg == 1) then
-                  ibbeg = 14; ibend = 14
-               else
-                  ibbeg =  1; ibend = 13
+            do jb = 1,NUM_BANDS_SOLAR
+               ib = SOLAR_bands_order(jb)
+
+               ! SOLAR band (swvn1,swvn2)
+               swvn1 = SOLAR_bands_wavenum(1,ib)
+               if (.not.sfirst) then
+                  _ASSERT(swvn1 == swvn2, 'SOLAR bands not complete and unique!')
                end if
+               swvn2 = SOLAR_bands_wavenum(2,ib)
+               sfirst = .false.
 
-               ! loop in increasing wavenumber RRTMG bands
-               do ib = ibbeg,ibend
+               ! Now find which OBIO bands the SOLAR band contributes to. OBIO bands
+               ! are in increasing wavelength, decreasing wavenumber, so this loop is
+               ! in increasing wavenumber.
+               do kb = kb_start,1,-1
 
-                  ! convert to wavenum1&2 index
-                  jb = ib + jpb1 - 1
+                  ! OBIO band lower wavenumber limit
+                  ! (1&2 indicies on RHS were defined for wavelength ordering)
+                  owvn1 = OBIO_bands_wavenum(2,kb)
 
-                  ! RRTMG band (rwvn1,rwvn2)
-                  rwvn1 = wavenum1(jb)
-                  if (.not.rfirst) then
-                     _ASSERT(rwvn1 == rwvn2, 'RRTMG bands not complete and unique!')
-                  end if
-                  rwvn2 = wavenum2(jb)
-                  rfirst = .false.
-
-                  ! Now find which OBIO bands the RRTMG band contributes to. OBIO bands
-                  ! are in increasing wavelength, decreasing wavenumber, so this loop is
-                  ! in increasing wavenumber.
-                  do kb = kb_start,1,-1
-
-                     ! OBIO band lower wavenumber limit
-                     ! (1&2 indicies on RHS were defined for wavelength ordering)
-                     owvn1 = OBIO_bands_wavenum(2,kb)
-
-                     ! check OBIO band continuity before updating owvn2
-                     if (.not. ofirst) then
-                        if (kb .ne. kb_used_last) then
-                           _ASSERT(owvn1 == owvn2, 'OBIO bands not complete and unique!')
-                        end if
+                  ! check OBIO band continuity before updating owvn2
+                  if (.not. ofirst) then
+                     if (kb .ne. kb_used_last) then
+                        _ASSERT(owvn1 == owvn2, 'OBIO bands not complete and unique!')
                      end if
+                  end if
 
-                     ! OBIO band upper wavenumber limit
-                     owvn2 = OBIO_bands_wavenum(1,kb)
-                     kb_used_last = kb
-                     ofirst = .false.
+                  ! OBIO band upper wavenumber limit
+                  owvn2 = OBIO_bands_wavenum(1,kb)
+                  kb_used_last = kb
+                  ofirst = .false.
 
-                     ! if we exit the OBIO band loop for any reason, begin
-                     ! processing the next RRTMG band into the same OBIO band
-                     kb_start = kb
+                  ! if we exit the OBIO band loop for any reason, begin
+                  ! processing the next SOLAR band into the same OBIO band
+                  kb_start = kb
 
-                     ! OBIO band has wavenumbers all higher than current RRTMG
-                     ! band, so immediately move on to the next RRTMG band
-                     if (owvn1 >= rwvn2) exit
+                  ! OBIO band has wavenumbers all higher than current SOLAR
+                  ! band, so immediately move on to the next SOLAR band
+                  if (owvn1 >= swvn2) exit
 
-                     ! OBIO band has wavenumbers all lower than current RRTMG
-                     ! band, so skip it and move on to the next OBIO band
-                     if (owvn2 <= rwvn1) cycle
+                  ! OBIO band has wavenumbers all lower than current SOLAR
+                  ! band, so skip it and move on to the next OBIO band
+                  if (owvn2 <= swvn1) cycle
 
-                     ! now there is some overlap between the RRTMG and OBIO bands ...
+                  ! now there is some overlap between the SOLAR and OBIO bands ...
 
-                     ! accumulate assuming constant energy spread across each RRTMG band, rfrac in (0,1]
-                     rfrac = (min(rwvn2,owvn2)-max(rwvn1,owvn1)) / (rwvn2 - rwvn1)
-                     if (associated(DROBIO)) DROBIO (:,:,kb) = DROBIO (:,:,kb) + DRBANDN (:,:,ib) * rfrac
-                     if (associated(DFOBIO)) DFOBIO (:,:,kb) = DFOBIO (:,:,kb) + DFBANDN (:,:,ib) * rfrac
+                  ! accumulate assuming constant energy spread across each SOLAR band, sfrac in (0,1]
+                  sfrac = (min(swvn2,owvn2)-max(swvn1,owvn1)) / (swvn2 - swvn1)
+                  if (associated(DROBIO)) DROBIO (:,:,kb) = DROBIO (:,:,kb) + DRBANDN (:,:,ib) * sfrac
+                  if (associated(DFOBIO)) DFOBIO (:,:,kb) = DFOBIO (:,:,kb) + DFBANDN (:,:,ib) * sfrac
 
-                     ! OBIO band has some wavenumbers higher than current
-                     ! RRTMG band, so move on to the next RRTMG band
-                     if (owvn2 > rwvn2) exit
+                  ! OBIO band has some wavenumbers higher than current
+                  ! SOLAR band, so move on to the next SOLAR band
+                  if (owvn2 > swvn2) exit
 
-                  end do  ! kb (OBIO band)
-               end do  ! ib (RRTMG band)
-            end do  ! iseg
+               end do  ! kb (OBIO band)
+            end do  ! jb (SOLAR band)
 
             ! unnormalise to W/m2
             do kb = 1,NB_OBIO
