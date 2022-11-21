@@ -3546,8 +3546,10 @@ contains
       end do
       ! surface downwelling direct and diffuse fluxes in bands
       if (SOLAR_TO_OBIO .and. .not. NO_AERO) then
-        DRBAND(:,ib) = real(bnd_flux_dir_allsky(:,LM+1,ib))
-        DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+         do ib = 1, nbnd
+            DRBAND(:,ib) = real(bnd_flux_dir_allsky(:,LM+1,ib))
+            DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+         end do
       endif
       ! surface direct and diffuse downward in super-bands
       ! for *diffuse* downward must subtract direct (downward) from total downward
