@@ -4313,7 +4313,7 @@ contains
 
       ! loaded later
       real :: SOLAR_bands_wavenum (2,NUM_BANDS_SOLAR)  ! [cm^-1]
-      integer :: SOLAR_bands_order (NUM_BANDS_SOLAR)
+      integer :: SOLAR_band_number_in_wvn_order (NUM_BANDS_SOLAR)
 
       real :: swvn1, swvn2, owvn1, owvn2, sfrac
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
@@ -5021,7 +5021,7 @@ contains
                SOLAR_bands_wavenum = k_dist%get_band_lims_wavenumber()
 
                ! RRTMGP bands are already ordered in increasing wavenumber
-               SOLAR_bands_order = [(i, i=1,NUM_BANDS_SOLAR)]
+               SOLAR_band_number_in_wvn_order = [(i, i=1,NUM_BANDS_SOLAR)]
 
             elseif (USE_RRTMG) then 
 
@@ -5036,20 +5036,21 @@ contains
                SOLAR_bands_wavenum (2,:) = wavenum2(jpb1:jpb2)
 
                ! RRTMG band 14 comes before band 1 in increasing wavenumber
-               SOLAR_bands_order(1) = 14
-               SOLAR_bands_order(2:14) = [(i, i=1,13)]
+               SOLAR_band_number_in_wvn_order(1) = 14
+               SOLAR_band_number_in_wvn_order(2:14) = [(i, i=1,13)]
 
             else if (USE_CHOU) then
 
-               ! Source CHOU_bands_nm (2,NB_CHOU) is, ordered in increasing waveLENGTH.
+               ! Source CHOU_bands_nm (2,NB_CHOU) is ordered in increasing waveLENGTH.
                ! See CHOU_bands_nm declaration for note about band 2a/b.
 
-               ! load Chou-Suarez bands (2,NB_CHOU) [cm^-1] in increasing waveNUMBER
-               SOLAR_bands_wavenum (1,:) = 1.e7 / CHOU_bands_nm(2,NUM_BANDS_SOLAR:1:-1)
-               SOLAR_bands_wavenum (2,:) = 1.e7 / CHOU_bands_nm(1,NUM_BANDS_SOLAR:1:-1)
+               ! load Chou-Suarez bands (2,NB_CHOU) [cm^-1]
+               ! flip waveLENGTH bounds to waveNUMBER bounds
+               SOLAR_bands_wavenum (1,:) = 1.e7 / CHOU_bands_nm(2,:)
+               SOLAR_bands_wavenum (2,:) = 1.e7 / CHOU_bands_nm(1,:)
 
-               ! Chou-Suarez bands are now ordered in increasing wavenumber
-               SOLAR_bands_order = [(i, i=1,NUM_BANDS_SOLAR)]
+               ! Specify sorting of Chou-Suarez bands in increasing waveNUMBER
+               SOLAR_band_number_in_wvn_order = [(i, i=NUM_BANDS_SOLAR,1,-1)]
 
             endif
 
@@ -5064,7 +5065,7 @@ contains
             ofirst = .true.
             kb_start = NB_OBIO
             do jb = 1,NUM_BANDS_SOLAR
-               ib = SOLAR_bands_order(jb)
+               ib = SOLAR_band_number_in_wvn_order(jb)
 
                ! SOLAR band (swvn1,swvn2)
                swvn1 = SOLAR_bands_wavenum(1,ib)
