@@ -4292,7 +4292,9 @@ contains
 
       ! We will do the conversion from SOLAR to OBIO bands in wavenumber [cm^-1],
       ! since photon energy \propto wavenumber, where wavenumber \def 1 / wavelength.
-      real, parameter :: OBIO_bands_wavenum (2,NB_OBIO) = 1.e7 / OBIO_bands_nm
+      ! The wavenumber bounds must clearly be swapped from the wavelength bounds
+      ! because wavenumber is the inverse of wavelength.
+      real, parameter :: OBIO_bands_wavenum (2,NB_OBIO) = 1.e7 / OBIO_bands_nm(2:1:-1,:)
 
       ! CHOU bands (start,finish) in [nm]
       real, parameter :: CHOU_bands_nm (2,NB_CHOU) = reshape([ &
@@ -5044,8 +5046,8 @@ contains
                ! Source CHOU_bands_nm (2,NB_CHOU) is ordered in increasing waveLENGTH.
                ! See CHOU_bands_nm declaration for note about band 2a/b.
 
-               ! load Chou-Suarez bands (2,NB_CHOU) [cm^-1]
-               ! flip waveLENGTH bounds to waveNUMBER bounds
+               ! Load Chou-Suarez bands (2,NB_CHOU) [cm^-1].
+               ! Flip waveLENGTH bounds to waveNUMBER bounds.
                SOLAR_bands_wavenum (1,:) = 1.e7 / CHOU_bands_nm(2,:)
                SOLAR_bands_wavenum (2,:) = 1.e7 / CHOU_bands_nm(1,:)
 
@@ -5068,6 +5070,7 @@ contains
                ib = SOLAR_band_number_in_wvn_order(jb)
 
                ! SOLAR band (swvn1,swvn2)
+               ! Note: check SOLAR band continuity before updating swvn2
                swvn1 = SOLAR_bands_wavenum(1,ib)
                if (.not.sfirst) then
                   _ASSERT(swvn1 == swvn2, 'SOLAR bands not complete and unique!')
@@ -5080,19 +5083,15 @@ contains
                ! in increasing wavenumber.
                do kb = kb_start,1,-1
 
-                  ! OBIO band lower wavenumber limit
-                  ! (1&2 indicies on RHS were defined for wavelength ordering)
-                  owvn1 = OBIO_bands_wavenum(2,kb)
-
-                  ! check OBIO band continuity before updating owvn2
-                  if (.not. ofirst) then
+                  ! OBIO band (owvn1,owvn2)
+                  ! Note: check OBIO band continuity before updating owvn2
+                  owvn1 = OBIO_bands_wavenum(1,kb)
+                  if (.not.ofirst) then
                      if (kb .ne. kb_used_last) then
                         _ASSERT(owvn1 == owvn2, 'OBIO bands not complete and unique!')
                      end if
                   end if
-
-                  ! OBIO band upper wavenumber limit
-                  owvn2 = OBIO_bands_wavenum(1,kb)
+                  owvn2 = OBIO_bands_wavenum(2,kb)
                   kb_used_last = kb
                   ofirst = .false.
 
