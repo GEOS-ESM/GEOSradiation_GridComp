@@ -47,8 +47,8 @@ contains
          flx,flc,fdiruv,fdifuv,&
          fdirpar,fdifpar,fdirir,fdifir,&
          flxu,flcu,&
-         flx_sfc_band&
-)
+         flx_sfc_band,&
+         do_drfband,drband,dfband)
 
 !**********************************************************************
 ! Changes in November 2011:
@@ -164,6 +164,10 @@ contains
 !   all-sky flux (downward minus upward)           fraction   m*nb
 !                per band at the surface
 !                (flx_sfc_band)
+!   all-sky direct downward per band flux          fraction   m*nb
+!                at surface (drband)
+!   all-sky diffuse downward per band flux         fraction   m*nb
+!                at surface (dfband)
 !
 !----- Notes:
 !
@@ -188,12 +192,14 @@ contains
 
       integer m,np,ict,icb,nb
       real cosz(m),pl(m,np+1),ta(m,np),wa(m,np),oa(m,np),co2
-      real cwc(m,np,4),fcld(m,np),reff(m,np,4), hk_uv(5),hk_ir(3,10)
+      real cwc(m,np,4),fcld(m,np),reff(m,np,4),hk_uv(5),hk_ir(3,10)
       real rsuvbm(m),rsuvdf(m),rsirbm(m),rsirdf(m)
 
       real taua(m,np,nb)
       real ssaa(m,np,nb)
       real asya(m,np,nb)
+
+      logical, intent(in) :: do_drfband  ! Compute drband, dfband?
 
 !-----output parameters
 
@@ -203,6 +209,11 @@ contains
       real fdirpar(m),fdifpar(m)
       real fdirir (m),fdifir (m)
       real flx_sfc_band(m,nband)
+
+      ! Surface downwelling direct and diffuse (W/m2) in each solar band:
+      ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
+      ! if (do_drfband), must point to an (m,nband) space.
+      real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
 !-----temporary arrays
 
@@ -348,6 +359,13 @@ contains
          do ib = 1, nband
             flx_sfc_band(i,ib) = 0.
          end do
+
+         if (do_drfband) then
+            do ib = 1, nband
+               drband(i,ib) = 0.
+               dfband(i,ib) = 0.
+            end do
+         endif
 
 !-----Begin inline of SOLUV
 
@@ -865,6 +883,11 @@ contains
 
 !-----get surface flux for each band
             flx_sfc_band(i,ib)=flx_sfc_band(i,ib)+fall(np+1)*hk_uv(ib)
+
+            if (do_drfband) then
+               drband(i,ib)=drband(i,ib)+fsdir*hk_uv(ib)
+               dfband(i,ib)=dfband(i,ib)+fsdif*hk_uv(ib)
+            end if
 
 !-----compute direct and diffuse downward surface fluxes in the UV
 !     and par regions
@@ -1391,6 +1414,11 @@ contains
 !-----tabulate surface flux at ir bands
                flx_sfc_band(i,iv)=flx_sfc_band(i,iv)+fall(np+1)*hk_ir(ib,ik)
 
+               if (do_drfband) then
+                  drband(i,iv)=drband(i,iv)+fsdir*hk_ir(ib,ik)
+                  dfband(i,iv)=dfband(i,iv)+fsdif*hk_ir(ib,ik)
+               end if
+
             end do ! ik loop
          end do
 
@@ -1547,6 +1575,13 @@ contains
          do ib = 1, nband
             flx_sfc_band(i,ib) = xx4*flx_sfc_band(i,ib)
          end do
+
+         if (do_drfband) then
+            do ib = 1, nband
+               drband(i,ib) = xx4*drband(i,ib)
+               dfband(i,ib) = xx4*dfband(i,ib)
+            end do
+         endif
 
       end do RUN_LOOP
 
