@@ -13,7 +13,7 @@ save
 
 !-----xkw is the absorption coefficient for the first k-distribution
 !     interval due to water vapor line absorption (Table 4)
-!     Units are cm**2/g    
+!     Units are cm**2/g
 
    real, dimension(9) :: xkw = &
       [29.55,4.167e-1,1.328e-2,5.250e-4,5.25e-4, 9.369e-3, 4.719e-2, 1.320e-0, 5.250e-4]
@@ -54,7 +54,7 @@ save
 
 !-----fkw is the planck-weighted k-distribution function due to h2o
 !     line absorption (Table 4).
-!     The k-distribution function for Band 3, fkw(*,3), 
+!     The k-distribution function for Band 3, fkw(*,3),
 !     is not used (see the parameter gkw below).
 
    real, dimension(6,9) :: fkw = reshape([ &
@@ -91,7 +91,7 @@ save
 
 !MATMAT Move the planck (cb) and plancd (dcb) data arrays into here.
 
-!-----the following coefficients are given in Table 2 for computing  
+!-----the following coefficients are given in Table 2 for computing
 !     spectrally integrated planck fluxes using Eq. (3.11)
 
    real, dimension(6,10) :: cb = reshape([ &
@@ -132,7 +132,7 @@ save
        3.8213E-01,-1.0453E-02, 1.0324E-04,-4.4300E-07, 7.0460E-10, &
        6.5397E-02,-3.6250E-03, 3.8736E-05,-1.0686E-07, 9.8960E-11],[5,10])
 
-!-----include tables used in the table look-up for co2 (band 3), 
+!-----include tables used in the table look-up for co2 (band 3),
 !     o3 (band 5), and h2o (bands 1, 2, and 8) transmission functions.
 !     "co2.tran4" is the co2 transmission table applicable to a large
 !     range of co2 amount (up to 100 times of the present-time value).
@@ -302,7 +302,7 @@ save
        0.32190001, 0.29079998, 0.26169997, 0.23479998, 0.20959997, &
        0.18580002, 0.16280001, 0.14080000, 0.11989999, 0.10020000, &
        0.08200002, 0.06540000, 0.05049998, 0.03740001, 0.02640003],[26,30])
-      
+
    real, dimension(26,30) :: c2 = reshape([ &
       -0.1841E-06, -0.1831E-06, -0.1831E-06, -0.1808E-06, -0.1827E-06, &
       -0.1798E-06, -0.1784E-06, -0.1760E-06, -0.1717E-06, -0.1607E-06, &
@@ -729,7 +729,7 @@ save
        0.75380003, 0.73019999, 0.70070004, 0.66520000, 0.62380004, &
        0.57780004, 0.52869999, 0.47930002, 0.43199998, 0.38880002, &
        0.35140002, 0.32080001, 0.29699999, 0.27980000, 0.26789999, &
-       0.25999999],[26,21]) 
+       0.25999999],[26,21])
 
    real, dimension(26,21) :: oo2 = reshape([ &
        0.6531E-10,  0.6193E-10,  0.5658E-10,  0.4814E-10,  0.3482E-10, &
@@ -1281,7 +1281,7 @@ save
       -0.7133E-03, -0.6486E-03, -0.5447E-03, -0.4089E-03, -0.2625E-03, &
       -0.1363E-03, -0.5345E-04, -0.1432E-04, -0.2173E-05, -0.1347E-06, &
        0.0000E+00,  0.0000E+00,  0.0000E+00,  0.0000E+00,  0.0000E+00, &
-       0.0000E+00],[26,31]) 
+       0.0000E+00],[26,31])
 
    real, dimension(26,31) :: h13 = reshape([ &
        0.5907E-09,  0.5894E-09,  0.5872E-09,  0.5838E-09,  0.5785E-09, &
@@ -1445,7 +1445,7 @@ save
        0.3748E-05,  0.3780E-05,  0.3591E-05,  0.3125E-05,  0.2384E-05, &
        0.1487E-05,  0.6977E-06,  0.2216E-06,  0.3843E-07,  0.2459E-08, &
        0.0000E+00,  0.0000E+00,  0.0000E+00,  0.0000E+00,  0.0000E+00, &
-       0.0000E+00],[26,31]) 
+       0.0000E+00],[26,31])
 
    real, dimension(26,31) :: h21 = reshape([ &
        0.99999607, 0.99999607, 0.99999607, 0.99999607, 0.99999607, &
@@ -1773,7 +1773,7 @@ save
       -0.1590E-02, -0.1755E-02, -0.1914E-02, -0.2054E-02, -0.2159E-02, &
       -0.2290E-02, -0.2265E-02, -0.2152E-02, -0.1952E-02, -0.1679E-02, &
       -0.1365E-02, -0.1044E-02, -0.7506E-03, -0.5050E-03, -0.3174E-03, &
-      -0.1850E-03],[26,31]) 
+      -0.1850E-03],[26,31])
 
    real, dimension(26,31) :: h23 = reshape([ &
       -0.2195E-09, -0.2195E-09, -0.2196E-09, -0.2196E-09, -0.2197E-09, &

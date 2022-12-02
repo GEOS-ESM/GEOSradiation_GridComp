@@ -2,9 +2,6 @@
 
 module soradmod
 
-#ifdef _CUDA
-   use cudafor
-#else
    use sorad_constants, only: &
          wk_uv, zk_uv, ry_uv, &
          xk_ir, ry_ir,        &
@@ -17,87 +14,14 @@ module soradmod
          aig_nir, awg_nir, arg_nir, &
          caib, caif
    use gettau
-#endif
 
    use MAPL_ConstantsMod, only: MAPL_R4, MAPL_R8, MAPL_GRAV
 
    implicit none
 
-#ifndef _CUDA
    private
 
    public sorad
-#endif
-
-#ifdef _CUDA   
-
-   ! Device inputs
-   ! -------------
-
-   real, allocatable, device :: cosz_dev(:)
-   real, allocatable, device :: pl_dev(:,:)
-   real, allocatable, device :: ta_dev(:,:)
-   real, allocatable, device :: wa_dev(:,:)
-   real, allocatable, device :: oa_dev(:,:)
-   real, allocatable, device :: cwc_dev(:,:,:)
-   real, allocatable, device :: fcld_dev(:,:)
-   real, allocatable, device :: reff_dev(:,:,:)
-   real, allocatable, device :: rsuvbm_dev(:)
-   real, allocatable, device :: rsuvdf_dev(:)
-   real, allocatable, device :: rsirbm_dev(:)
-   real, allocatable, device :: rsirdf_dev(:)
-   real, allocatable, device :: taua_dev(:,:,:)
-   real, allocatable, device :: ssaa_dev(:,:,:)
-   real, allocatable, device :: asya_dev(:,:,:)
-
-   real, allocatable, device :: coa(:,:)
-   real, allocatable, device :: cah(:,:)
-   real, allocatable, device :: caib(:,:,:)
-   real, allocatable, device :: caif(:,:)
-
-   ! Device outputs 
-   ! ---------------
-
-   real, allocatable, device :: flx_dev(:,:)
-   real, allocatable, device :: flc_dev(:,:)
-   real, allocatable, device :: flxu_dev(:,:)
-   real, allocatable, device :: flcu_dev(:,:)
-   real, allocatable, device :: fdiruv_dev(:)
-   real, allocatable, device :: fdifuv_dev(:)
-   real, allocatable, device :: fdirpar_dev(:)
-   real, allocatable, device :: fdifpar_dev(:)
-   real, allocatable, device :: fdirir_dev(:)
-   real, allocatable, device :: fdifir_dev(:)
-
-   real, allocatable, device :: flx_sfc_band_dev(:,:)
-
-   ! Constant Memory
-   ! ---------------
-
-   real, dimension(5), constant :: hk_uv
-   real, dimension(5), constant :: wk_uv
-   real, dimension(5), constant :: zk_uv
-   real, dimension(5), constant :: ry_uv
-   real, dimension(3), constant :: aig_uv
-   real, dimension(3), constant :: awg_uv
-   real, dimension(3), constant :: arg_uv
-   real, constant :: aib_uv
-   real, dimension(2), constant :: awb_uv
-   real, dimension(2), constant :: arb_uv
-
-   real, dimension(3,10), constant :: hk_ir
-   real, dimension(10), constant :: xk_ir
-   real, dimension(3), constant :: ry_ir
-   real, constant :: aib_nir
-   real, dimension(3,2), constant :: awb_nir
-   real, dimension(3,2), constant :: arb_nir
-   real, dimension(3,3), constant :: aia_nir
-   real, dimension(3,3), constant :: awa_nir
-   real, dimension(3,3), constant :: ara_nir
-   real, dimension(3,3), constant :: aig_nir
-   real, dimension(3,3), constant :: awg_nir
-   real, dimension(3,3), constant :: arg_nir
-#endif
 
    ! Parameters
    ! ----------
@@ -116,20 +40,15 @@ module soradmod
 
 contains
 
-#ifdef _CUDA
-   attributes(global) subroutine sorad (m,np,nb,co2,ict,icb)
-#else
-   subroutine sorad (m,np,nb,cosz_dev,pl_dev,ta_dev,wa_dev,oa_dev,co2,&
-         cwc_dev,fcld_dev,ict,icb,reff_dev,hk_uv,hk_ir,&
-         taua_dev,ssaa_dev,asya_dev,&
-         rsuvbm_dev,rsuvdf_dev,rsirbm_dev,rsirdf_dev,&
-         flx_dev,flc_dev,fdiruv_dev,fdifuv_dev,&
-         fdirpar_dev,fdifpar_dev,fdirir_dev,fdifir_dev,&
-         flxu_dev,flcu_dev,&
-         flx_sfc_band_dev&
-)
-#endif
-
+   subroutine sorad (m,np,nb,cosz,pl,ta,wa,oa,co2,&
+         cwc,fcld,ict,icb,reff,hk_uv,hk_ir,&
+         taua,ssaa,asya,&
+         rsuvbm,rsuvdf,rsirbm,rsirdf,&
+         flx,flc,fdiruv,fdifuv,&
+         fdirpar,fdifpar,fdirir,fdifir,&
+         flxu,flcu,&
+         flx_sfc_band,&
+         do_drfband,drband,dfband)
 
 !**********************************************************************
 ! Changes in November 2011:
@@ -138,43 +57,41 @@ contains
 !    RRTMG aerosol work to be done similarly in the GC.
 
 ! Changes in July 2010:
-!   
+!
 !   (1) Code relooped to have one, main loop over the soundings, many
 !       arrays reduced in dimensionality, some to scalars.
 !   (2) Instead of calling to external aerosol Mie code, efficiency and
 !       asymmetry tables are now passed in.
-! 
+!
 ! Changes in August 2004:
 !
-!   (1) A layer was added above pl(1) to account for the absorption 
+!   (1) A layer was added above pl(1) to account for the absorption
 !       in the region 0-pl(1) hPa. pl(1) can be either 0 or >0 hPa.
 !   (2) All parameters in the subroutine deledd were assigned to real*8
 !   (3) The minimun values of water vapor and ozone, as well as tausto,
-!       were changed to avoid computer precision problem. 
+!       were changed to avoid computer precision problem.
 !
 !***********************************************************************
 !
 !
 ! The maximum-random assumption is applied for treating cloud
 !  overlapping. Clouds are grouped into high, middle, and low clouds
-!  separated by the level indices ict and icb.  Note: ict must be 
+!  separated by the level indices ict and icb.  Note: ict must be
 ! less than icb, and icb must be less than np+1.
 !
 ! In a high spatial-resolution atmospheric model, fractional cloud cover
 !  might be computed to be either 0 or 1.  In such a case, scaling of the
 !  cloud optical thickness is not necessary, and the computation can be
 !  made faster by compiling with -DOVERCAST.  Otherwise, do not compile
-!  with the -DOVERCAST flag. (note: for the case that fractional cloud 
+!  with the -DOVERCAST flag. (note: for the case that fractional cloud
 !  cover in a layer is either 0 or 1, the results of using either option
 !  are identical).
 !
-!----- Input parameters (NOTE: _dev suffix is left off of input arrays
-!                        for clarity's sake. _dev is needed to prevent
-!                        GPU nameclash):                           
+!----- Input parameters
 !                                                   units      size
 !  number of soundings (m)                          n/d         1
 !  number of atmospheric layers (np)                n/d         1
-!  number of bands (nb)                             n/d         1   
+!  number of bands (nb)                             n/d         1
 !  cosine of solar zenith angle (cosz)              n/d         m
 !  level pressure (pl)                              mb        m*(np+1)
 !        pl(np+1) is the surface pressure
@@ -204,12 +121,12 @@ contains
 !  aerosol optical thickness (taua)                 n/d      m*np*nb
 !  aerosol single scattering albedo (ssaa)          n/d      m*np*nb
 !  aerosol asymmetry factor (asya)                  n/d      m*np*nb
-!  surface reflectivity     
+!  surface reflectivity
 !        in the UV+par region:
-!           for beam insolation    (rsuvbm)        fraction     m 
-!           for diffuse insolation (rsuvdf)        fraction     m 
+!           for beam insolation    (rsuvbm)        fraction     m
+!           for diffuse insolation (rsuvdf)        fraction     m
 !        in the near-ir region:
-!           for beam insolation    (rsirbm)        fraction     m  
+!           for beam insolation    (rsirbm)        fraction     m
 !           for diffuse insolation (rsirdf)        fraction     m
 !
 !  The 8 bands are:
@@ -247,6 +164,10 @@ contains
 !   all-sky flux (downward minus upward)           fraction   m*nb
 !                per band at the surface
 !                (flx_sfc_band)
+!   all-sky direct downward per band flux          fraction   m*nb
+!                at surface (drband)
+!   all-sky diffuse downward per band flux         fraction   m*nb
+!                at surface (dfband)
 !
 !----- Notes:
 !
@@ -260,94 +181,89 @@ contains
 !      to 400 and 700 mb.
 !
 !-----Please notify Ming-Dah Chou for coding errors.
-!        
+!
 !*************************************************************************
       implicit none
 
 
 !-----input values
 
-#ifdef _CUDA
-      integer, value :: m,np,ict,icb,nb
-      real, value :: co2
-#else
 !-----input parameters
 
       integer m,np,ict,icb,nb
-      real cosz_dev(m),pl_dev(m,np+1),ta_dev(m,np),wa_dev(m,np),oa_dev(m,np),co2
-      real cwc_dev(m,np,4),fcld_dev(m,np),reff_dev(m,np,4), hk_uv(5),hk_ir(3,10)
-      real rsuvbm_dev(m),rsuvdf_dev(m),rsirbm_dev(m),rsirdf_dev(m)
+      real cosz(m),pl(m,np+1),ta(m,np),wa(m,np),oa(m,np),co2
+      real cwc(m,np,4),fcld(m,np),reff(m,np,4),hk_uv(5),hk_ir(3,10)
+      real rsuvbm(m),rsuvdf(m),rsirbm(m),rsirdf(m)
 
-      real taua_dev(m,np,nb)
-      real ssaa_dev(m,np,nb)
-      real asya_dev(m,np,nb)
+      real taua(m,np,nb)
+      real ssaa(m,np,nb)
+      real asya(m,np,nb)
+
+      logical, intent(in) :: do_drfband  ! Compute drband, dfband?
 
 !-----output parameters
 
-      real flx_dev(m,np+1),flc_dev(m,np+1)
-      real flxu_dev(m,np+1),flcu_dev(m,np+1)
-      real fdiruv_dev (m),fdifuv_dev (m)
-      real fdirpar_dev(m),fdifpar_dev(m)
-      real fdirir_dev (m),fdifir_dev (m)
-      real flx_sfc_band_dev(m,nband)
-#endif
+      real flx(m,np+1),flc(m,np+1)
+      real flxu(m,np+1),flcu(m,np+1)
+      real fdiruv (m),fdifuv (m)
+      real fdirpar(m),fdifpar(m)
+      real fdirir (m),fdifir (m)
+      real flx_sfc_band(m,nband)
+
+      ! Surface downwelling direct and diffuse (W/m2) in each solar band:
+      ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
+      ! if (do_drfband), must point to an (m,nband) space.
+      real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
 !-----temporary arrays
 
-!GPU This is needed to allocate space for temporary local arrays on the GPU.
-!GPU On the CPU this ifndef converts it back to np.
-
-#ifndef GPU_MAXLEVS
-#define GPU_MAXLEVS np
-#endif
-
       integer :: i,k,l,ntop
 
-      real :: dp(GPU_MAXLEVS),wh(GPU_MAXLEVS),oh(GPU_MAXLEVS)
-      real :: scal(GPU_MAXLEVS)
-      real :: swh(GPU_MAXLEVS+1),so2(GPU_MAXLEVS+1),df(0:GPU_MAXLEVS+1)
+      real :: dp(np),wh(np),oh(np)
+      real :: scal(np)
+      real :: swh(np+1),so2(np+1),df(0:np+1)
       real :: scal0, wvtoa, o3toa, pa
       real :: snt,cnt,xx4,xtoa
-      real :: dp_pa(GPU_MAXLEVS)
+      real :: dp_pa(np)
 
 !-----parameters for co2 transmission tables
 
       real :: w1,dw,u1,du
 
       integer :: ib
-      real :: tauclb(GPU_MAXLEVS),tauclf(GPU_MAXLEVS),asycl(GPU_MAXLEVS)
-      real :: taubeam(GPU_MAXLEVS,4),taudiff(GPU_MAXLEVS,4)
-      real :: fcld_col(GPU_MAXLEVS)
-      real :: cwc_col(GPU_MAXLEVS,4)
-      real :: reff_col(GPU_MAXLEVS,4)
+      real :: tauclb(np),tauclf(np),asycl(np)
+      real :: taubeam(np,4),taudiff(np,4)
+      real :: fcld_col(np)
+      real :: cwc_col(np,4)
+      real :: reff_col(np,4)
       real :: taurs,tauoz,tauwv
       real :: tausto,ssatau,asysto
       real :: tautob,ssatob,asytob
       real :: tautof,ssatof,asytof
-      real :: rr(0:GPU_MAXLEVS+1,2),tt(0:GPU_MAXLEVS+1,2),td(0:GPU_MAXLEVS+1,2)
-      real :: rs(0:GPU_MAXLEVS+1,2),ts(0:GPU_MAXLEVS+1,2)
-      real :: fall(GPU_MAXLEVS+1),fclr(GPU_MAXLEVS+1),fsdir,fsdif
-      real :: fupa(GPU_MAXLEVS+1),fupc(GPU_MAXLEVS+1)
+      real :: rr(0:np+1,2),tt(0:np+1,2),td(0:np+1,2)
+      real :: rs(0:np+1,2),ts(0:np+1,2)
+      real :: fall(np+1),fclr(np+1),fsdir,fsdif
+      real :: fupa(np+1),fupc(np+1)
       real :: cc1,cc2,cc3
       real :: rrt,ttt,tdt,rst,tst
 
       integer :: iv,ik
-      real :: ssacl(GPU_MAXLEVS)
+      real :: ssacl(np)
 
       integer :: im
 
-      integer :: ic,iw 
+      integer :: ic,iw
       real :: ulog,wlog,dc,dd,x0,x1,x2,y0,y1,y2,du2,dw2
 
       integer :: ih
 #ifdef OVERCAST
-      real :: rra(0:GPU_MAXLEVS+1),rxa(0:GPU_MAXLEVS+1)
+      real :: rra(0:np+1),rxa(0:np+1)
       real :: ttaold,tdaold,rsaold
       real :: ttanew,tdanew,rsanew
 #else
-      real :: rra(0:GPU_MAXLEVS+1,2,2),tta(0:GPU_MAXLEVS,2,2)
-      real :: tda(0:GPU_MAXLEVS,2,2)
-      real :: rsa(0:GPU_MAXLEVS,2,2),rxa(0:GPU_MAXLEVS+1,2,2)
+      real :: rra(0:np+1,2,2),tta(0:np,2,2)
+      real :: tda(0:np,2,2)
+      real :: rsa(0:np,2,2),rxa(0:np+1,2,2)
 #endif
       real :: flxdn
       real :: fdndir,fdndif,fupdif
@@ -361,16 +277,7 @@ contains
 
       real :: dum
 
-#ifdef _CUDA
-!GPU--Initialize i for thread indexing
-      i = (blockidx%x - 1) * blockdim%x + threadidx%x
-
-      RUN_LOOP: if (i <= m) then
-#else
       RUN_LOOP: do i=1,m
-#endif
-
-!GPU--GPU needs these variables initiated
 
          ntop = 0
          fdndir = 0.0
@@ -378,15 +285,15 @@ contains
 
 !-----Beginning of sorad code
 
-!-----wvtoa and o3toa are the water vapor and o3 amounts of the region 
+!-----wvtoa and o3toa are the water vapor and o3 amounts of the region
 !     above the pl(1) level.
 !     snt is the secant of the solar zenith angle
 
-         snt    = 1.0/cosz_dev(i)
-         xtoa   = max(pl_dev(i,1),1.e-3)
+         snt    = 1.0/cosz(i)
+         xtoa   = max(pl(i,1),1.e-3)
          scal0  = xtoa*(0.5*xtoa/300.)**.8
-         o3toa  = 1.02*oa_dev(i,1)*xtoa*466.7 + 1.0e-8
-         wvtoa  = 1.02*wa_dev(i,1)*scal0 * (1.0+0.00135*(ta_dev(i,1)-240.)) + 1.0e-9
+         o3toa  = 1.02*oa(i,1)*xtoa*466.7 + 1.0e-8
+         wvtoa  = 1.02*wa(i,1)*scal0 * (1.0+0.00135*(ta(i,1)-240.)) + 1.0e-9
          swh(1)  = wvtoa
 
          do k=1,np
@@ -394,29 +301,29 @@ contains
 !-----compute layer thickness. indices for the surface level and
 !     surface layer are np+1 and np, respectively.
 
-            dp(k) = pl_dev(i,k+1)-pl_dev(i,k)
+            dp(k) = pl(i,k+1)-pl(i,k)
             dp_pa(k) = dp(k) * 100. ! dp in pascals
- 
-!-----compute scaled water vapor amount following Eqs. (3.3) and (3.5) 
+
+!-----compute scaled water vapor amount following Eqs. (3.3) and (3.5)
 !     unit is g/cm**2
 !
-            pa   = 0.5*(pl_dev(i,k)+pl_dev(i,k+1))
+            pa   = 0.5*(pl(i,k)+pl(i,k+1))
             scal(k) = dp(k)*(pa/300.)**.8
-            wh(k)   = 1.02*wa_dev(i,k)*scal(k) * (1.+0.00135*(ta_dev(i,k)-240.)) + 1.e-9
+            wh(k)   = 1.02*wa(i,k)*scal(k) * (1.+0.00135*(ta(i,k)-240.)) + 1.e-9
             swh(k+1)= swh(k)+wh(k)
 
 !-----compute ozone amount, unit is (cm-atm)stp
 !     the number 466.7 is the unit conversion factor
 !     from g/cm**2 to (cm-atm)stp
 
-            oh(k)   = 1.02*oa_dev(i,k)*dp(k)*466.7 + 1.e-8
+            oh(k)   = 1.02*oa(i,k)*dp(k)*466.7 + 1.e-8
 
 !-----Fill the reff, cwc, and fcld for the column
 
-            fcld_col(k) = fcld_dev(i,k)
+            fcld_col(k) = fcld(i,k)
             do l = 1, 4
-               reff_col(k,l) = reff_dev(i,k,l)
-               cwc_col(k,l) = cwc_dev(i,k,l)
+               reff_col(k,l) = reff(i,k,l)
+               cwc_col(k,l) = cwc(i,k,l)
             end do
 
          end do
@@ -441,17 +348,24 @@ contains
 !     flux reduction (df)
 !
          do k=1,np+1
-            flx_dev(i,k)=0.
-            flc_dev(i,k)=0.
-            flxu_dev(i,k)=0.
-            flcu_dev(i,k)=0.
+            flx(i,k)=0.
+            flc(i,k)=0.
+            flxu(i,k)=0.
+            flcu(i,k)=0.
          end do
 
 !-----Initialize new per-band surface fluxes
 
          do ib = 1, nband
-            flx_sfc_band_dev(i,ib) = 0.
+            flx_sfc_band(i,ib) = 0.
          end do
+
+         if (do_drfband) then
+            do ib = 1, nband
+               drband(i,ib) = 0.
+               dfband(i,ib) = 0.
+            end do
+         endif
 
 !-----Begin inline of SOLUV
 
@@ -464,12 +378,12 @@ contains
 !     cloud groups.
 !     1/dsm=1/cos(53) = 1.66
 
-         fdiruv_dev(i)=0.0
-         fdifuv_dev(i)=0.0
-         rr(np+1,1)=rsuvbm_dev(i)
-         rr(np+1,2)=rsuvbm_dev(i)
-         rs(np+1,1)=rsuvdf_dev(i)
-         rs(np+1,2)=rsuvdf_dev(i)
+         fdiruv(i)=0.0
+         fdifuv(i)=0.0
+         rr(np+1,1)=rsuvbm(i)
+         rr(np+1,2)=rsuvbm(i)
+         rs(np+1,1)=rsuvdf(i)
+         rs(np+1,2)=rsuvdf(i)
          td(np+1,1)=0.0
          td(np+1,2)=0.0
          tt(np+1,1)=0.0
@@ -504,7 +418,7 @@ contains
 !     The indices 1, 2, 3, 4 are for ice, water, rain, snow particles,
 !     respectively.
 
-         call getvistau(np,cosz_dev(i),dp_pa,fcld_col,reff_col,cwc_col,0,0,&
+         call getvistau(np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,0,0,&
                         taubeam,taudiff,asycl)
 
 #else
@@ -519,12 +433,12 @@ contains
 !     The indices 1, 2, 3, 4 are for ice, water, rain, snow particles,
 !     respectively.
 
-         call getvistau(np,cosz_dev(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
+         call getvistau(np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
                         taubeam,taudiff,asycl)
 
-!-----clouds within each of the high, middle, and low clouds are 
-!     assumed to be maximally overlapped, and the cloud cover (cc) 
-!     for a group (high, middle, or low) is the maximum cloud cover 
+!-----clouds within each of the high, middle, and low clouds are
+!     assumed to be maximally overlapped, and the cloud cover (cc)
+!     for a group (high, middle, or low) is the maximum cloud cover
 !     of all the layers within a group
 !     The cc1,2,3 are still needed in the flux calculations below
 
@@ -532,11 +446,11 @@ contains
 !MAT---Loop must run to completion so that cc[1,2,3] are correct.
          do k=1,np
             if (k.lt.ict) then
-               cc1=max(cc1,fcld_dev(i,k))
+               cc1=max(cc1,fcld(i,k))
             elseif (k.lt.icb) then
-               cc2=max(cc2,fcld_dev(i,k))
+               cc2=max(cc2,fcld(i,k))
             else
-               cc3=max(cc3,fcld_dev(i,k))
+               cc3=max(cc3,fcld(i,k))
             end if
          end do
 !MAT---DO NOT FUSE THIS LOOP
@@ -557,7 +471,7 @@ contains
 
 !-----compute direct beam transmittances of the layer above pl(1)
 
-            td(0,1)=exp(-(wvtoa*wk_uv(ib)+o3toa*zk_uv(ib))/cosz_dev(i))
+            td(0,1)=exp(-(wvtoa*wk_uv(ib)+o3toa*zk_uv(ib))/cosz(i))
             td(0,2)=td(0,1)
 
             do k=1,np
@@ -569,9 +483,9 @@ contains
                tauoz=zk_uv(ib)*oh(k)
                tauwv=wk_uv(ib)*wh(k)
 
-               tausto=taurs+tauoz+tauwv+taua_dev(i,k,ib)+1.0e-7
-               ssatau=ssaa_dev(i,k,ib)+taurs
-               asysto=asya_dev(i,k,ib)
+               tausto=taurs+tauoz+tauwv+taua(i,k,ib)+1.0e-7
+               ssatau=ssaa(i,k,ib)+taurs
+               asysto=asya(i,k,ib)
 
                tautob=tausto
                asytob=asysto/ssatau
@@ -580,7 +494,7 @@ contains
 
 !-----for direct incident radiation
 
-               call deledd(tautob,ssatob,asytob,cosz_dev(i),rrt,ttt,tdt)
+               call deledd(tautob,ssatob,asytob,cosz(i),rrt,ttt,tdt)
 
 !-----diffuse incident radiation is approximated by beam radiation with
 !     an incident angle of 53 degrees, Eqs. (6.5) and (6.6)
@@ -593,7 +507,7 @@ contains
                rs(k,1)=rst
                ts(k,1)=tst
 
-!-----compute reflectance and transmittance of the cloudy portion 
+!-----compute reflectance and transmittance of the cloudy portion
 !     of a layer
 
 !-----for direct incident radiation
@@ -612,12 +526,12 @@ contains
                asytof=(asysto+asycl(k)*tauclf(k))/(ssatof*tautof)
 
 !-----for direct incident radiation
-!     note that the cloud optical thickness is scaled differently 
+!     note that the cloud optical thickness is scaled differently
 !     for direct and diffuse insolation, Eqs. (7.3) and (7.4).
 
-               call deledd(tautob,ssatob,asytob,cosz_dev(i),rrt,ttt,tdt)
+               call deledd(tautob,ssatob,asytob,cosz(i),rrt,ttt,tdt)
 
-!-----diffuse incident radiation is approximated by beam radiation 
+!-----diffuse incident radiation is approximated by beam radiation
 !     with an incident angle of 53 degrees, Eqs. (6.5) and (6.6)
 
                call deledd(tautof,ssatof,asytof,dsm,rst,tst,dum)
@@ -630,7 +544,7 @@ contains
             end do
 
 !-----flux calculations
-!     initialize clear-sky flux (fclr), all-sky flux (fall), 
+!     initialize clear-sky flux (fclr), all-sky flux (fall),
 !     and surface downward fluxes (fsdir and fsdif)
 
             do k=1,np+1
@@ -647,7 +561,7 @@ contains
 
 !-----Inline CLDFLXY
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is either 0 or 1.
 
 !-----layers are added one at a time, going up from the surface.
@@ -658,7 +572,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated by 
+!     tda is the composite direct transmittance illuminated by
 !         beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -708,7 +622,7 @@ contains
                fdndif=(xx4*rsaold+yy)*denm
                fupdif=(xx4+yy*rxa(k))*denm
                flxdn=fdndir+fdndif-fupdif
-               fupc(k)=fupdif 
+               fupc(k)=fupdif
                fclr(k)=flxdn
 
                tdaold = tdanew
@@ -774,7 +688,7 @@ contains
 
 #else
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is allowed to be between 0 and 1.
 !     the all-sky flux, fall is the summation inside the brackets
 !     of Eq. (7.11)
@@ -783,7 +697,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated 
+!     tda is the composite direct transmittance illuminated
 !         by beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -791,9 +705,9 @@ contains
 !         by diffuse radiation
 !     tta and rsa are computed from Eqs. (6.10) and (6.12)
 
-!-----To save memory space, tda, tta, and rsa are pre-computed 
-!     for k<icb. The dimension of these parameters is (m,np,2,2). 
-!     It would have been (m,np,2,2,2) if these parameters were 
+!-----To save memory space, tda, tta, and rsa are pre-computed
+!     for k<icb. The dimension of these parameters is (m,np,2,2).
+!     It would have been (m,np,2,2,2) if these parameters were
 !     computed for all k's.
 
 !-----for high clouds
@@ -877,7 +791,7 @@ contains
 
             do ih=1,2
 
-!-----clear portion 
+!-----clear portion
                if(ih.eq.1) then
                   ch=1.0-cc1
 !-----cloudy portion
@@ -886,18 +800,18 @@ contains
                end if
 
                do im=1,2
-!-----clear portion 
+!-----clear portion
                   if(im.eq.1) then
                      cm=ch*(1.0-cc2)
 !-----cloudy portion
                   else
-                     cm=ch*cc2 
+                     cm=ch*cc2
                   end if
 
                   do is=1,2
-!-----clear portion 
+!-----clear portion
                      if(is.eq.1) then
-                        ct=cm*(1.0-cc3) 
+                        ct=cm*(1.0-cc3)
 !-----cloudy portion
                      else
                         ct=cm*cc3
@@ -961,24 +875,29 @@ contains
 !-----flux integration, Eq. (6.1)
 
             do k=1,np+1
-               flx_dev(i,k)=flx_dev(i,k)+fall(k)*hk_uv(ib)
-               flc_dev(i,k)=flc_dev(i,k)+fclr(k)*hk_uv(ib)
-               flxu_dev(i,k)=flxu_dev(i,k)+fupa(k)*hk_uv(ib)
-               flcu_dev(i,k)=flcu_dev(i,k)+fupc(k)*hk_uv(ib)
+               flx(i,k)=flx(i,k)+fall(k)*hk_uv(ib)
+               flc(i,k)=flc(i,k)+fclr(k)*hk_uv(ib)
+               flxu(i,k)=flxu(i,k)+fupa(k)*hk_uv(ib)
+               flcu(i,k)=flcu(i,k)+fupc(k)*hk_uv(ib)
             end do
 
 !-----get surface flux for each band
-            flx_sfc_band_dev(i,ib)=flx_sfc_band_dev(i,ib)+fall(np+1)*hk_uv(ib)
+            flx_sfc_band(i,ib)=flx_sfc_band(i,ib)+fall(np+1)*hk_uv(ib)
+
+            if (do_drfband) then
+               drband(i,ib)=drband(i,ib)+fsdir*hk_uv(ib)
+               dfband(i,ib)=dfband(i,ib)+fsdif*hk_uv(ib)
+            end if
 
 !-----compute direct and diffuse downward surface fluxes in the UV
 !     and par regions
 
             if(ib.lt.5) then
-               fdiruv_dev(i)=fdiruv_dev(i)+fsdir*hk_uv(ib)
-               fdifuv_dev(i)=fdifuv_dev(i)+fsdif*hk_uv(ib)
+               fdiruv(i)=fdiruv(i)+fsdir*hk_uv(ib)
+               fdifuv(i)=fdifuv(i)+fsdif*hk_uv(ib)
             else
-               fdirpar_dev(i)=fsdir*hk_uv(ib)
-               fdifpar_dev(i)=fsdif*hk_uv(ib)
+               fdirpar(i)=fsdir*hk_uv(ib)
+               fdifpar(i)=fsdif*hk_uv(ib)
             end if
          end do
 
@@ -986,12 +905,12 @@ contains
 
 !-----compute and update solar ir fluxes
 
-         fdirir_dev(i)=0.0
-         fdifir_dev(i)=0.0
-         rr(np+1,1)=rsirbm_dev(i)
-         rr(np+1,2)=rsirbm_dev(i)
-         rs(np+1,1)=rsirdf_dev(i)
-         rs(np+1,2)=rsirdf_dev(i)
+         fdirir(i)=0.0
+         fdifir(i)=0.0
+         rr(np+1,1)=rsirbm(i)
+         rr(np+1,2)=rsirbm(i)
+         rs(np+1,1)=rsirdf(i)
+         rs(np+1,2)=rsirdf(i)
          td(np+1,1)=0.0
          td(np+1,2)=0.0
          tt(np+1,1)=0.0
@@ -1033,7 +952,7 @@ contains
 !     The indices 1, 2, 3, 4 are for ice, water, rain, snow particles,
 !     respectively.
 
-            call getnirtau(ib,np,cosz_dev(i),dp_pa,fcld_col,reff_col,cwc_col,0,0,&
+            call getnirtau(ib,np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,0,0,&
                            taubeam,taudiff,asycl,ssacl)
 
 #else
@@ -1046,23 +965,23 @@ contains
 !     The indices 1, 2, 3, 4 are for ice, water, rain, snow particles,
 !     respectively.
 
-            call getnirtau(ib,np,cosz_dev(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
+            call getnirtau(ib,np,cosz(i),dp_pa,fcld_col,reff_col,cwc_col,ict,icb,&
                            taubeam,taudiff,asycl,ssacl)
 
-!-----clouds within each of the high, middle, and low clouds are 
-!     assumed to be maximally overlapped, and the cloud cover (cc) 
-!     for a group (high, middle, or low) is the maximum cloud cover 
+!-----clouds within each of the high, middle, and low clouds are
+!     assumed to be maximally overlapped, and the cloud cover (cc)
+!     for a group (high, middle, or low) is the maximum cloud cover
 !     of all the layers within a group
 
 !MAT--DO NOT FUSE THIS LOOP
 !MAT  Loop must run to completion so that cc[1,2,3] are correct.
             do k=1,np
                if (k.lt.ict) then
-                  cc1=max(cc1,fcld_dev(i,k))
+                  cc1=max(cc1,fcld(i,k))
                elseif (k.lt.icb) then
-                  cc2=max(cc2,fcld_dev(i,k))
+                  cc2=max(cc2,fcld(i,k))
                else
-                  cc3=max(cc3,fcld_dev(i,k))
+                  cc3=max(cc3,fcld(i,k))
                end if
             end do
 !MAT--DO NOT FUSE THIS LOOP
@@ -1081,7 +1000,7 @@ contains
 
 !-----compute direct beam transmittances of the layer above pl(1)
 
-               td(0,1)=exp(-wvtoa*xk_ir(ik)/cosz_dev(i))
+               td(0,1)=exp(-wvtoa*xk_ir(ik)/cosz(i))
                td(0,2)=td(0,1)
 
                do k=1,np
@@ -1091,20 +1010,20 @@ contains
 !-----compute clear-sky optical thickness, single scattering albedo,
 !     and asymmetry factor. Eqs.(6.2)-(6.4)
 
-                  tausto=taurs+tauwv+taua_dev(i,k,iv)+1.0e-7
-                  ssatau=ssaa_dev(i,k,iv)+taurs+1.0e-8
-                  asysto=asya_dev(i,k,iv)
+                  tausto=taurs+tauwv+taua(i,k,iv)+1.0e-7
+                  ssatau=ssaa(i,k,iv)+taurs+1.0e-8
+                  asysto=asya(i,k,iv)
                   tautob=tausto
                   asytob=asysto/ssatau
                   ssatob=ssatau/tautob+1.0e-8
                   ssatob=min(ssatob,0.999999)
 
-!-----Compute reflectance and transmittance of the clear portion 
+!-----Compute reflectance and transmittance of the clear portion
 !     of a layer
 
 !-----for direct incident radiation
 
-                  call deledd(tautob,ssatob,asytob,cosz_dev(i),rrt,ttt,tdt)
+                  call deledd(tautob,ssatob,asytob,cosz(i),rrt,ttt,tdt)
 
 !-----diffuse incident radiation is approximated by beam radiation with
 !     an incident angle of 53 degrees, Eqs. (6.5) and (6.6)
@@ -1117,7 +1036,7 @@ contains
                   rs(k,1)=rst
                   ts(k,1)=tst
 
-!-----compute reflectance and transmittance of the cloudy portion 
+!-----compute reflectance and transmittance of the cloudy portion
 !     of a layer
 
 !-----for direct incident radiation. Eqs.(6.2)-(6.4)
@@ -1136,7 +1055,7 @@ contains
 
 !-----for direct incident radiation
 
-                  call deledd(tautob,ssatob,asytob,cosz_dev(i),rrt,ttt,tdt)
+                  call deledd(tautob,ssatob,asytob,cosz(i),rrt,ttt,tdt)
 
 !-----diffuse incident radiation is approximated by beam radiation with
 !     an incident angle of 53 degrees, Eqs.(6.5) and (6.6)
@@ -1152,7 +1071,7 @@ contains
 
 !-----FLUX CALCULATIONS
 
-!     initialize clear-sky flux (fclr), all-sky flux (fall), 
+!     initialize clear-sky flux (fclr), all-sky flux (fall),
 !     and surface downward fluxes (fsdir and fsdif)
 
                do k=1,np+1
@@ -1165,7 +1084,7 @@ contains
                fsdir=0.0
                fsdif=0.0
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is either 0 or 1.
 
 #ifdef OVERCAST
@@ -1180,7 +1099,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated by 
+!     tda is the composite direct transmittance illuminated by
 !         beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -1297,7 +1216,7 @@ contains
 
 #else
 
-!-----for clear- and all-sky flux calculations when fractional 
+!-----for clear- and all-sky flux calculations when fractional
 !     cloud cover is allowed to be between 0 and 1.
 !     the all-sky flux, fall is the summation inside the brackets
 !     of Eq. (7.11)
@@ -1306,7 +1225,7 @@ contains
 
 !-----compute transmittances and reflectances for a composite of
 !     layers. layers are added one at a time, going down from the top.
-!     tda is the composite direct transmittance illuminated 
+!     tda is the composite direct transmittance illuminated
 !         by beam radiation
 !     tta is the composite total transmittance illuminated by
 !         beam radiation
@@ -1314,9 +1233,9 @@ contains
 !         by diffuse radiation
 !     tta and rsa are computed from Eqs. (6.10) and (6.12)
 
-!-----To save memory space, tda, tta, and rsa are pre-computed 
-!     for k<icb. The dimension of these parameters is (m,np,2,2). 
-!     It would have been (m,np,2,2,2) if these parameters were 
+!-----To save memory space, tda, tta, and rsa are pre-computed
+!     for k<icb. The dimension of these parameters is (m,np,2,2).
+!     It would have been (m,np,2,2,2) if these parameters were
 !     computed for all k's.
 
 !-----for high clouds
@@ -1399,7 +1318,7 @@ contains
 !     ih, im, is denote high, middle and low cloud groups.
 
                do ih=1,2
-!-----clear portion 
+!-----clear portion
                   if(ih.eq.1) then
                      ch=1.0-cc1
 !-----cloudy portion
@@ -1408,18 +1327,18 @@ contains
                   end if
 
                   do im=1,2
-!-----clear portion 
+!-----clear portion
                      if(im.eq.1) then
                         cm=ch*(1.0-cc2)
 !-----cloudy portion
                      else
-                        cm=ch*cc2 
+                        cm=ch*cc2
                      end if
 
                      do is=1,2
-!-----clear portion 
+!-----clear portion
                         if(is.eq.1) then
-                           ct=cm*(1.0-cc3) 
+                           ct=cm*(1.0-cc3)
 !-----cloudy portion
                         else
                            ct=cm*cc3
@@ -1481,19 +1400,24 @@ contains
 !-----flux integration following Eq. (6.1)
 
                do k=1,np+1
-                  flx_dev(i,k)=flx_dev(i,k)+fall(k)*hk_ir(ib,ik)
-                  flc_dev(i,k)=flc_dev(i,k)+fclr(k)*hk_ir(ib,ik)
-                  flxu_dev(i,k)=flxu_dev(i,k)+fupa(k)*hk_ir(ib,ik)
-                  flcu_dev(i,k)=flcu_dev(i,k)+fupc(k)*hk_ir(ib,ik)
+                  flx(i,k)=flx(i,k)+fall(k)*hk_ir(ib,ik)
+                  flc(i,k)=flc(i,k)+fclr(k)*hk_ir(ib,ik)
+                  flxu(i,k)=flxu(i,k)+fupa(k)*hk_ir(ib,ik)
+                  flcu(i,k)=flcu(i,k)+fupc(k)*hk_ir(ib,ik)
                end do
 
 !-----compute downward surface fluxes in the ir region
 
-               fdirir_dev(i)=fdirir_dev(i)+fsdir*hk_ir(ib,ik)
-               fdifir_dev(i)=fdifir_dev(i)+fsdif*hk_ir(ib,ik)
+               fdirir(i)=fdirir(i)+fsdir*hk_ir(ib,ik)
+               fdifir(i)=fdifir(i)+fsdif*hk_ir(ib,ik)
 
 !-----tabulate surface flux at ir bands
-               flx_sfc_band_dev(i,iv)=flx_sfc_band_dev(i,iv)+fall(np+1)*hk_ir(ib,ik)
+               flx_sfc_band(i,iv)=flx_sfc_band(i,iv)+fall(np+1)*hk_ir(ib,ik)
+
+               if (do_drfband) then
+                  drband(i,iv)=drband(i,iv)+fsdir*hk_ir(ib,ik)
+                  dfband(i,iv)=dfband(i,iv)+fsdif*hk_ir(ib,ik)
+               end if
 
             end do ! ik loop
          end do
@@ -1512,7 +1436,7 @@ contains
          do k=1,np
             so2(k+1) = so2(k) + scal(k)*cnt
 ! LLT increased parameter 145 to 155 to enhance effect
-            df(k+1) = 0.0633*(1.0 - exp(-0.000155*sqrt(so2(k+1)))) 
+            df(k+1) = 0.0633*(1.0 - exp(-0.000155*sqrt(so2(k+1))))
          end do
 
 !-----for solar heating due to co2 scaling follows Eq(3.5) with f=1.
@@ -1553,7 +1477,7 @@ contains
             if(ic.gt.nu) ic=nu
             if(iw.gt.nw) iw=nw
             dc=ulog-real(ic-2)*du-u1
-            dd=wlog-real(iw-2)*dw-w1   
+            dd=wlog-real(iw-2)*dw-w1
             x2=cah(ic-1,iw-1)+(cah(ic-1,iw)-cah(ic-1,iw-1))/dw*dd
             y2=x2+(cah(ic,iw-1)-cah(ic-1,iw-1))/du*dc
             y2=max(y2,0.0)
@@ -1581,7 +1505,7 @@ contains
 
          do k= 1, np+1
             ulog=min(co2*snt,x0)
-            wlog=min(log10(pl_dev(i,k)),y0)
+            wlog=min(log10(pl(i,k)),y0)
             ic=int((ulog-x1)/du+1.)
             iw=int((wlog-y1)/dw+1.)
             if(ic.lt.2)  ic=2
@@ -1589,7 +1513,7 @@ contains
             if(ic.gt.nx) ic=nx
             if(iw.gt.ny) iw=ny
             dc=ulog-real(ic-2)*du-u1
-            dd=wlog-real(iw-2)*dw-w1   
+            dd=wlog-real(iw-2)*dw-w1
             x2=coa(ic-1,iw-1)+(coa(ic-1,iw)-coa(ic-1,iw-1))/dw*dd
             y2=x2+(coa(ic,iw-1)-coa(ic-1,iw-1))/du*dc
             y2=max(y2,0.0)
@@ -1598,14 +1522,10 @@ contains
 
 !-----adjust the o2-co2 reduction below cloud top following Eq. (6.18)
 
-!GPU--A new routine for finding ntop and using it
-!GPU  is provided. This helps shield the GPUs from the
-!GPU  exit statement which causes divergent warps.
-
          foundtop = 0
 
          do k=1,np
-            if (fcld_dev(i,k) > 0.02.and.foundtop.eq.0) then
+            if (fcld(i,k) > 0.02.and.foundtop.eq.0) then
                foundtop = 1
                ntop = k
             end if
@@ -1617,7 +1537,7 @@ contains
 
          do k=1,np+1
             if (k .gt. ntop) then
-               xx4   = (flx_dev(i,k)/flx_dev(i,ntop))
+               xx4   = (flx(i,k)/flx(i,ntop))
                df(k) = dftop + xx4 * (df(k)-dftop)
             end if
          end do
@@ -1625,19 +1545,19 @@ contains
 !-----update the net fluxes
 
          do k=1,np+1
-            df(k) = min(df(k),flx_dev(i,k)-1.0e-8)
+            df(k) = min(df(k),flx(i,k)-1.0e-8)
 !           df(k) = 0.0
-            flx_dev(i,k) = flx_dev(i,k) - df(k)
-            flc_dev(i,k) = flc_dev(i,k) - df(k)
+            flx(i,k) = flx(i,k) - df(k)
+            flc(i,k) = flc(i,k) - df(k)
          end do
 
-!-----update the downward surface fluxes 
+!-----update the downward surface fluxes
 
 !        xx4 = fdirir (i) + fdifir (i) +&
 !              fdiruv (i) + fdifuv (i) +&
 !              fdirpar(i) + fdifpar(i)
 
-         xx4 = flx_dev(i,np+1) + df(np+1)
+         xx4 = flx(i,np+1) + df(np+1)
 
          if ( abs(xx4) > epsilon(1.0) ) then
             xx4 = max(min(1.0 - df(np+1)/xx4,1.),0.)
@@ -1645,32 +1565,31 @@ contains
             xx4 = 0.0
          end if
 
-         fdirir_dev(i)  = xx4*fdirir_dev(i) 
-         fdifir_dev(i)  = xx4*fdifir_dev(i) 
-         fdiruv_dev(i)  = xx4*fdiruv_dev(i) 
-         fdifuv_dev(i)  = xx4*fdifuv_dev(i) 
-         fdirpar_dev(i) = xx4*fdirpar_dev(i)
-         fdifpar_dev(i) = xx4*fdifpar_dev(i)
+         fdirir(i)  = xx4*fdirir(i)
+         fdifir(i)  = xx4*fdifir(i)
+         fdiruv(i)  = xx4*fdiruv(i)
+         fdifuv(i)  = xx4*fdifuv(i)
+         fdirpar(i) = xx4*fdirpar(i)
+         fdifpar(i) = xx4*fdifpar(i)
 
          do ib = 1, nband
-            flx_sfc_band_dev(i,ib) = xx4*flx_sfc_band_dev(i,ib)
+            flx_sfc_band(i,ib) = xx4*flx_sfc_band(i,ib)
          end do
 
-#ifndef _CUDA
+         if (do_drfband) then
+            do ib = 1, nband
+               drband(i,ib) = xx4*drband(i,ib)
+               dfband(i,ib) = xx4*dfband(i,ib)
+            end do
+         endif
+
       end do RUN_LOOP
-#else
-      end if RUN_LOOP
-#endif
 
    end subroutine sorad
 
 !*********************************************************************
 
-#ifdef _CUDA
-   attributes(device) subroutine deledd(tau1,ssc1,g01,cza1,rr1,tt1,td1)
-#else
    subroutine deledd(tau1,ssc1,g01,cza1,rr1,tt1,td1)
-#endif
 
 !*********************************************************************
 !
@@ -1713,7 +1632,7 @@ contains
       real(kind=MAPL_R8), parameter :: seven = 7.0_MAPL_R8
       real(kind=MAPL_R8), parameter :: thresh = 1.e-8_MAPL_R8
 
-      real(kind=MAPL_R8) ::  tau,ssc,g0,rr,tt,td 
+      real(kind=MAPL_R8) ::  tau,ssc,g0,rr,tt,td
       real(kind=MAPL_R8) ::  zth,ff,xx,taup,sscp,gp,gm1,gm2,gm3,akk,alf1,alf2
       real(kind=MAPL_R8) ::  all,bll,st7,st8,cll,dll,fll,ell,st1,st2,st3,st4
 
@@ -1728,7 +1647,7 @@ contains
       sscp= ssc*(one-ff)/xx
       gp  = g0/(one+g0)
 
-      xx  = three*gp 
+      xx  = three*gp
       gm1 = (seven-sscp*(four+xx))*fourth
       gm2 =-(one  -sscp*(four-xx))*fourth
 
@@ -1741,7 +1660,7 @@ contains
 
       if (abs(st3) .lt. thresh) then
          zth = zth+0.0010
-         if(zth > 1.0) zth = zth-0.0020 
+         if(zth > 1.0) zth = zth-0.0020
          xx  = akk*zth
          st7 = one-xx
          st8 = one+xx
@@ -1785,143 +1704,5 @@ contains
       tt1 = real(tt,kind=MAPL_R4)
 
    end subroutine deledd
-
-! GPU Due to limitations of CUDA Fortran, we cannot call device subroutines
-!     external to the file containing the global subroutine. So we replicate
-!     the interface for the tau routine here.
-
-#ifdef _CUDA
-!------------------------------------------------------------------------------
-!BOP
-! !ROUTINE: getvistau
-!
-! !INTERFACE:
-   attributes(device) subroutine getvistau(nlevs,cosz,dp,fcld,reff,hydromets,ict,icb,&
-                                           taubeam,taudiff,asycl)
-
-      implicit none
-
-! !INPUT PARAMETERS:
-      integer, intent(IN ) :: nlevs          !  Number of levels
-      real,    intent(IN ) :: cosz           !  Cosine of solar zenith angle
-      real,    intent(IN ) :: dp(:)          !  Delta pressure (Pa)
-      real,    intent(IN ) :: fcld(:)        !  Cloud fraction (used sometimes)
-      real,    intent(IN ) :: reff(:,:)      !  Effective radius (microns)
-      real,    intent(IN ) :: hydromets(:,:) !  Hydrometeors (kg/kg)
-      integer, intent(IN ) :: ict, icb       !  Flags for various uses 
-!                 ict  = 0   Indicates that in-cloud values have been given
-!                            and are expected
-!                 ict != 0   Indicates that overlap computation is needed, and:
-!                               ict is the level of the mid-high boundary
-!                               icb is the level of the low-mid  boundary
-!                
-! !OUTPUT PARAMETERS:
-      real,    intent(OUT) :: taubeam(:,:)   !  Optical Depth for Beam Radiation
-      real,    intent(OUT) :: taudiff(:,:)   !  Optical Depth for Diffuse Radiation
-      real,    intent(OUT) ::   asycl(:  )   !  Cloud Asymmetry Factor
-! !DESCRIPTION:
-!  Compute in-cloud or grid mean optical depths for visible wavelengths
-!  In general will compute in-cloud - will do grid mean when called
-!  for diagnostic use only. ict flag will indicate which to do.
-!  Slots for reff, hydrometeors, taubeam, taudiff, and asycl are as follows:
-!                 1         Cloud Ice
-!                 2         Cloud Liquid
-!                 3         Falling Liquid (Rain)
-!                 4         Falling Ice (Snow)
-!
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
-!  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
-!
-! !REVISION HISTORY: 
-!    2011.10.27   Molod moved to Radiation_Shared and revised arg list, units
-!    2011.11.16   MAT: Generalized to a call that is per-column
-!
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-
-      integer            :: k,in,im,it,ia,kk
-      real               :: fm,ft,fa,xai,tauc,asyclt
-      real               :: cc(3)
-      real               :: taucld1,taucld2,taucld3,taucld4
-      real               :: g1,g2,g3,g4
-
-      real               :: reff_snow
-
-#include "getvistau.code"
-
-      return
-
-!EOC
-   end subroutine getvistau
-!------------------------------------------------------------------------------
-!BOP
-! !ROUTINE: getnirtau
-!
-! !INTERFACE:
-   attributes(device) subroutine getnirtau(ib,nlevs,cosz,dp,fcld,reff,hydromets,ict,icb,&
-                                           taubeam,taudiff,asycl,ssacl)
-
-      implicit none
-
-! !INPUT PARAMETERS:
-      integer, intent(IN ) :: ib             !  Band number
-      integer, intent(IN ) :: nlevs          !  Number of levels
-      real,    intent(IN ) :: cosz           !  Cosine of solar zenith angle
-      real,    intent(IN ) :: dp(:)          !  Delta pressure in Pa
-      real,    intent(IN ) :: fcld(:)        !  Cloud fraction (used sometimes)
-      real,    intent(IN ) :: reff(:,:)      !  Effective radius (microns)
-      real,    intent(IN ) :: hydromets(:,:) !  Hydrometeors (kg/kg)
-      integer, intent(IN ) :: ict, icb       !  Flags for various uses 
-!                 ict  = 0   Indicates that in-cloud values have been given
-!                            and are expected
-!                 ict != 0   Indicates that overlap computation is needed, and:
-!                               ict is the level of the mid-high boundary
-!                               icb is the level of the low-mid  boundary
-!                
-! !OUTPUT PARAMETERS:
-      real,    intent(OUT) :: taubeam(:,:)   !  Optical depth for beam radiation
-      real,    intent(OUT) :: taudiff(:,:)   !  Optical depth for diffuse radiation
-      real,    intent(OUT) ::   ssacl(:  )   !  Cloud single scattering albedo
-      real,    intent(OUT) ::   asycl(:  )   !  Cloud asymmetry factor
-! !DESCRIPTION:
-!  Compute in-cloud or grid mean optical depths for near-infrared wavelengths
-!  In general will compute in-cloud - will do grid mean when called
-!  for diagnostic use only. ict flag will indicate which to do.
-!  Slots for reff, hydrometeors and tauall are as follows:
-!                 1         Cloud Ice
-!                 2         Cloud Liquid
-!                 3         Falling Liquid (Rain)
-!                 4         Falling Ice (Snow)
-!
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
-!  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
-!
-! !REVISION HISTORY: 
-!    2011.10.27   Molod moved to Radiation_Shared and revised arg list, units
-!    2011.11.16   MAT: Generalized to a call that is per-column
-!
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-      integer            :: k,in,im,it,ia,kk
-      real               :: fm,ft,fa,xai,tauc,asyclt,ssaclt
-      real               :: cc(3)
-      real               :: taucld1,taucld2,taucld3,taucld4
-      real               :: g1,g2,g3,g4
-      real               :: w1,w2,w3,w4
-
-      real               :: reff_snow
-
-#include "getnirtau.code"
-
-      return
-
-!EOC
-   end subroutine getnirtau
-
-#endif
 
 end module

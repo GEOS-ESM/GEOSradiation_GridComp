@@ -9,8 +9,8 @@ module GEOS_IrradGridCompMod
 ! !MODULE: GEOS_Irrad -- A Module to compute longwaves radiative transfer through a cloudy atmosphere
 
 ! !DESCRIPTION:
-! 
-!   {\tt Irrad} is a light-weight gridded component to compute longwave 
+!
+!   {\tt Irrad} is a light-weight gridded component to compute longwave
 ! radiative fluxes. It operates on the ESMF grid that appears in the
 ! gridded component passed to its {\tt Initialize} method. Unlike
 ! heavier gridded components, it does not enforce its own grid.
@@ -24,27 +24,27 @@ module GEOS_IrradGridCompMod
 ! M.-D. Chou et al., NASA/TM-2001-104606, Vol. 19, 55 pp, 2003.
 ! Based on the 1996-version of the Air Force Geophysical Laboratory HITRAN data
 ! base (Rothman et al., 1998), the parameterization includes the absorption due
-! to major gaseous absorption (water vapor, CO2 , O3 ) and most of the minor 
+! to major gaseous absorption (water vapor, CO2 , O3 ) and most of the minor
 ! trace gases (N2O, CH4 , CFC's), as well as clouds and aerosols. The thermal
 ! infrared spectrum is divided into nine bands and a subband. To achieve a high
 ! degree of accuracy and speed, various approaches of computing the transmission
-! function are applied to different spectral bands and gases. The gaseous 
-! transmission function is computed either using the k-distribution method or 
-! the table look-up method. To include the effect of scattering due to clouds 
+! function are applied to different spectral bands and gases. The gaseous
+! transmission function is computed either using the k-distribution method or
+! the table look-up method. To include the effect of scattering due to clouds
 ! and aerosols, the optical thickness is scaled by the single-scattering albedo
-! and asymmetry factor. The optical thickness, the single-scattering albedo, 
+! and asymmetry factor. The optical thickness, the single-scattering albedo,
 ! and the asymmetry factor of clouds are parameterized as functions of the ice
 ! and water content and the particle size.
 
 !   All outputs are optional and are filled only if they have been
-! initialized by a coupler. 
+! initialized by a coupler.
 !
 !   The net (+ve downward) fluxes are returned at the layer
 ! interfaces, which are indexed from the top of the atmosphere (L=0)
-! to the surface. It also computes the sensitivity of net downward flux to 
+! to the surface. It also computes the sensitivity of net downward flux to
 ! surface temperature and emission by the surface.
 ! The full transfer calculation, including the linearization w.r.t. the surface temperature,
-! is done intermitently, on the component's main time step and its results are 
+! is done intermitently, on the component's main time step and its results are
 ! kept in the internal state. Exports are refreshed each heartbeat based on the
 ! latest surface temperature.
 !
@@ -55,8 +55,8 @@ module GEOS_IrradGridCompMod
 !    is called after, it should occur during the last step. The behavior
 !    of the component needs to be somewhat different in these two cases
 !    and so a means is provided, through the logical attribute \texttt{CALL\_LAST} in
-!    configuration, of telling the component how it is being used. The 
-!    default is \texttt{CALL\_LAST = "TRUE"}. 
+!    configuration, of telling the component how it is being used. The
+!    default is \texttt{CALL\_LAST = "TRUE"}.
 !
 !
 ! !USES:
@@ -73,58 +73,8 @@ module GEOS_IrradGridCompMod
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
 
-#ifdef _CUDA
-  use cudafor
-  ! NOTE: USE renames are used below to prevent name clashes with
-  !       CUDA copies to the GPU.
-  use rad_constants, only: &
-        AIB_IR_CONST=>AIB_IR, AWB_IR_CONST=>AWB_IR, &
-        AIW_IR_CONST=>AIW_IR, AWW_IR_CONST=>AWW_IR, &
-        AIG_IR_CONST=>AIG_IR, AWG_IR_CONST=>AWG_IR
-  use irrad_constants, only: &
-        XKW_CONST=>XKW, XKE_CONST=>XKE,  MW_CONST=>MW,  &
-         AW_CONST=>AW,   BW_CONST=>BW,                  &
-         PM_CONST=>PM,  FKW_CONST=>FKW, GKW_CONST=>GKW, &
-         CB_CONST=>CB,  DCB_CONST=>DCB,                 &
-        W11_CONST=>W11, W12_CONST=>W12, W13_CONST=>W13, &
-        P11_CONST=>P11, P12_CONST=>P12, P13_CONST=>P13, &
-        DWE_CONST=>DWE, DPE_CONST=>DPE,                 &
-         C1_CONST=>C1,   C2_CONST=>C2,   C3_CONST=>C3,  &
-        OO1_CONST=>OO1, OO2_CONST=>OO2, OO3_CONST=>OO3, &
-        H11_CONST=>H11, H12_CONST=>H12, H13_CONST=>H13, &
-        H21_CONST=>H21, H22_CONST=>H22, H23_CONST=>H23, &
-        H81_CONST=>H81, H82_CONST=>H82, H83_CONST=>H83
-  use irradmod, only: &
-        ! Subroutines
-        IRRAD, &
-        ! Parameters
-        NX, NO, NC, NH, &
-        ! Inputs
-        PLE_DEV, TA_DEV, WA_DEV, OA_DEV, TB_DEV, &
-        N2O_DEV, CH4_DEV, CFC11_DEV, CFC12_DEV, CFC22_DEV, &
-        FS_DEV, TG_DEV, EG_DEV, TV_DEV, EV_DEV, &
-        RV_DEV, CWC_DEV, FCLD_DEV, REFF_DEV, &
-        ! Aerosol inputs
-        TAUA_DEV, SSAA_DEV, ASYA_DEV, &
-        ! Constant arrays in global memory
-         C1,  C2,  C3, &
-        OO1, OO2, OO3, &
-        H11, H12, H13, &
-        H21, H22, H23, &
-        H81, H82, H83, &
-        ! Outputs
-        FLXU_DEV, FLXAU_DEV, FLCU_DEV, FLAU_DEV, &
-        FLXD_DEV, FLXAD_DEV, FLCD_DEV, FLAD_DEV, &
-        DFDTS_DEV, SFCEM_DEV, TAUDIAG_DEV, &
-        ! Constants
-        XKW, XKE, MW, AW, BW, PM, FKW, &
-        GKW, AIB_IR, AWB_IR, AIW_IR, AWW_IR, AIG_IR, AWG_IR, &
-        CB, DCB, W11, W12, W13, P11, P12, &
-        P13, DWE, DPE
-#else
   use irradmod, only: IRRAD
-#endif
-  
+
   implicit none
   private
 
@@ -154,7 +104,7 @@ module GEOS_IrradGridCompMod
    ! temperature (Tbr) calculations in Update_Flx(), which
    ! use specified wavenumber endpoints, may require mod-
    ! ification for band 16 (pmn: TODO). For the moment,
-   ! the limits [2600,3250] are used. 
+   ! the limits [2600,3250] are used.
 
    ! Which bands are supported?
    !    (Currently RRTMG only)
@@ -211,7 +161,7 @@ contains
 
 ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
 !                the Initialize and Finalize services, as well as allocating
-!   our instance of a generic state and putting it in the 
+!   our instance of a generic state and putting it in the
 !   gridded component (GC). Here we only need to set the run method and
 !   add the state variable specifications (also generic) to our instance
 !   of the generic state. This is the way our true state variables get into
@@ -560,7 +510,7 @@ contains
         UNITS      = 'W m-2',                                     &
         DIMS       = MAPL_DimsHorzVert,                           &
         VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
-    
+
     call MAPL_AddExportSpec(GC,                                   &
         SHORT_NAME = 'FLCU',                                      &
         LONG_NAME  = 'upward_longwave_flux_in_air_assuming_clear_sky', &
@@ -671,7 +621,7 @@ contains
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
              write(wvn_rng,'(I0,"-",I0)') nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
-   
+
              call MAPL_AddExportSpec(GC,                                    &
                 SHORT_NAME = 'OLRB'//bb//'RG',                              &
                 LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RRTMG_band' &
@@ -820,7 +770,7 @@ contains
         VLOCATION  = MAPL_VLocationNone,                         __RC__ )
 
 !  Irrad does not have a "real" internal state. To update the net_longwave_flux
-!  due to the change of surface temperature every time step, we keep 
+!  due to the change of surface temperature every time step, we keep
 !  several variables in the internal state.
 
 !  !INTERNAL STATE:
@@ -983,11 +933,6 @@ contains
     call MAPL_TimerAdd(GC, name="-LW_DRIVER"               , __RC__)
     call MAPL_TimerAdd(GC, name="--IRRAD"                  , __RC__)
     call MAPL_TimerAdd(GC, name="---IRRAD_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="---IRRAD_DATA"            , __RC__)
-    call MAPL_TimerAdd(GC, name="----IRRAD_DATA_DEVICE"    , __RC__)
-    call MAPL_TimerAdd(GC, name="----IRRAD_DATA_CONST"     , __RC__)
-    call MAPL_TimerAdd(GC, name="---IRRAD_ALLOC"           , __RC__)
-    call MAPL_TimerAdd(GC, name="---IRRAD_DEALLOC"         , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG"                  , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_RUN"             , __RC__)
     call MAPL_TimerAdd(GC, name="---RRTMG_INIT"            , __RC__)
@@ -1016,7 +961,7 @@ contains
     call MAPL_GenericSetServices(GC, __RC__)
 
     RETURN_(ESMF_SUCCESS)
-  
+
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1028,7 +973,7 @@ contains
 subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! !ARGUMENTS:
-  type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component 
+  type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
   type(ESMF_State),    intent(inout) :: IMPORT ! Import state
   type(ESMF_State),    intent(inout) :: EXPORT ! Export state
   type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
@@ -1110,7 +1055,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 !=============================================================================
 
-! Begin... 
+! Begin...
 
 ! Get the target components name and set-up traceback handle.
 ! -----------------------------------------------------------
@@ -1244,7 +1189,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! If it is time, refresh internal state.
 !---------------------------------------
-   
+
    if ( ESMF_AlarmIsRinging   (ALARM, RC=STATUS) ) then
       call ESMF_AlarmRingerOff(ALARM, RC=STATUS)
       VERIFY_(STATUS)
@@ -1253,7 +1198,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        call LW_Driver( IM,JM,LM,LATS,LONS,CoresPerNode, RC=STATUS )
        VERIFY_(STATUS)
       call MAPL_TimerOff(MAPL,"-LW_DRIVER")
- 
+
    endif
 
 ! Fill exported fluxes based on latest Ts
@@ -1312,7 +1257,7 @@ contains
    integer,                   intent(IN )    :: IM, JM, LM, CoresPerNode
    real,    dimension(IM,JM), intent(IN )    :: LATS, LONS
    integer, optional,         intent(OUT)    :: RC
-     
+
 !  Locals
 
    character(len=ESMF_MAXSTR)        :: IAm
@@ -1322,7 +1267,7 @@ contains
 
    logical, parameter :: TRACE    = .true.
 
-   integer, parameter :: NS       = 1       ! number of sub-grid surface types 
+   integer, parameter :: NS       = 1       ! number of sub-grid surface types
 
    integer, parameter :: KICE     = 1
    integer, parameter :: KLIQUID  = 2
@@ -1382,7 +1327,7 @@ contains
 ! --------------------
    type (ESMF_State)                    :: AERO
    type (ESMF_Field)                    :: AS_FIELD
-   character(len=ESMF_MAXSTR)           :: AS_FIELD_NAME   
+   character(len=ESMF_MAXSTR)           :: AS_FIELD_NAME
    type (ESMF_Field)                    :: AS_FIELD_Q
    integer                              :: AS_STATUS
    real, pointer,     dimension(:,:,:)  :: AS_PTR_3D
@@ -1398,7 +1343,7 @@ contains
 
    real, pointer,     dimension(:,:,:)  :: VAR_PTR_3D
 
-   logical                              :: implements_aerosol_optics 
+   logical                              :: implements_aerosol_optics
 
    integer                              :: band
 
@@ -1415,10 +1360,10 @@ contains
    real,    allocatable, dimension(:,:)   :: PLE_R        ! Reverse of level pressure
    real,    allocatable, dimension(:,:)   :: ZM_R         ! Reverse of layer height
    real,    allocatable, dimension(:,:)   :: EMISS        ! Surface emissivity at 16 RRTMG bands
-   real,    allocatable, dimension(:,:)   :: CLIQWP       ! Cloud liquid water path 
-   real,    allocatable, dimension(:,:)   :: CICEWP       ! Cloud ice water path 
-   real,    allocatable, dimension(:,:)   :: RELIQ        ! Cloud liquid effective radius 
-   real,    allocatable, dimension(:,:)   :: REICE        ! Cloud ice effective radius 
+   real,    allocatable, dimension(:,:)   :: CLIQWP       ! Cloud liquid water path
+   real,    allocatable, dimension(:,:)   :: CICEWP       ! Cloud ice water path
+   real,    allocatable, dimension(:,:)   :: RELIQ        ! Cloud liquid effective radius
+   real,    allocatable, dimension(:,:)   :: REICE        ! Cloud ice effective radius
    real,    allocatable, dimension(:,:,:) :: TAUAER
    real,    allocatable, dimension(:,:)   :: PL_R, T_R,  Q_R, O2_R,  O3_R
    real,    allocatable, dimension(:,:)   :: CO2_R, CH4_R, N2O_R, CFC11_R, CFC12_R, CFC22_R, CCL4_R
@@ -1467,7 +1412,7 @@ contains
    class(ty_optical_props_arry), allocatable :: &
      cloud_props, cloud_props_subset, &
        aer_props,   aer_props_subset
- 
+
    ! The g-point cloud optical properties used for mcICA
    class(ty_optical_props_arry), allocatable :: cloud_props_gpt
 
@@ -1549,7 +1494,7 @@ contains
    real, pointer, dimension(:,:  )   :: CLDLOLW
    real, pointer, dimension(:,:  )   :: TSREFF
    real, pointer, dimension(:,:  )   :: SFCEM
-   real, pointer, dimension(:,:  )   :: LWS0 
+   real, pointer, dimension(:,:  )   :: LWS0
    real, pointer, dimension(:,:  )   :: DSFDTS
 
    ! for compact multi-export handling
@@ -1564,11 +1509,6 @@ contains
 ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _ASSERT(.false.,"RRTMGP Error: "//trim(error_msg)); endif
 
-#ifdef _CUDA
-! MATMAT CUDA Variables
-   type(dim3) :: Grid, Block
-   integer :: blocksize
-#endif
    integer :: PARTITION_SIZE
 
 !  Begin...
@@ -1579,7 +1519,7 @@ contains
 
 ! Pointer to Imports used only for full transfer calculation
 !-----------------------------------------------------------
-   
+
    call MAPL_GetPointer(IMPORT, PLE,    'PLE',    RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, T,      'T',      RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, Q,      'QV',     RC=STATUS); VERIFY_(STATUS)
@@ -1634,7 +1574,7 @@ contains
    if (USE_RRTMGP_SORAD) then
       OFFSET = NB_RRTMGP_SORAD
    else if (USE_RRTMG_SORAD) then
-      OFFSET = NB_RRTMG_SORAD 
+      OFFSET = NB_RRTMG_SORAD
    else
       OFFSET = NB_CHOU_SORAD
    end if
@@ -1643,7 +1583,7 @@ contains
    if (USE_RRTMGP) then
       NB_IRRAD = NB_RRTMGP
    else if (USE_RRTMG) then
-      NB_IRRAD = NB_RRTMG 
+      NB_IRRAD = NB_RRTMG
    else
       NB_IRRAD = NB_CHOU
    end if
@@ -1674,7 +1614,7 @@ contains
    end if
 
 ! Compute surface air temperature ("2 m") adiabatically
-!------------------------------------------------------ 
+!------------------------------------------------------
 
    T2M = T(:,:,LM)*(0.5*(1.0 + PLE(:,:,LM-1)/PLE(:,:,LM)))**(-MAPL_KAPPA)
 
@@ -1694,7 +1634,7 @@ contains
    EV                  = 0.0
    RV                  = 0.0
 
-! Copy cloud constituent properties into contiguous buffers 
+! Copy cloud constituent properties into contiguous buffers
 !----------------------------------------------------------
 
    CWC (:,:,:,KICE   ) = QI
@@ -1800,7 +1740,7 @@ contains
       if (AS_FIELD_NAME /= '') then
          call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), RC=STATUS)
          VERIFY_(STATUS)
-           
+
          AS_PTR_3D = PLE
       end if
 
@@ -1830,7 +1770,7 @@ contains
          if (AS_FIELD_NAME /= '') then
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1842,7 +1782,7 @@ contains
          if (AS_FIELD_NAME /= '') then
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1855,7 +1795,7 @@ contains
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS)
             VERIFY_(STATUS)
 
-            if (associated(AS_PTR_3D)) then 
+            if (associated(AS_PTR_3D)) then
                AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
             end if
          end if
@@ -1882,392 +1822,6 @@ contains
       call MAPL_TimerOn (MAPL,"--IRRAD",RC=STATUS)
       VERIFY_(STATUS)
 
-#ifdef _CUDA
-
-      call MAPL_GetResource(MAPL,BLOCKSIZE,'BLOCKSIZE:',DEFAULT=128,RC=STATUS)
-      VERIFY_(STATUS)
-
-      Block = dim3(blocksize,1,1)
-      Grid = dim3(ceiling(real(IM*JM)/real(blocksize)),1,1)
-
-      _ASSERT(LM <= GPU_MAXLEVS,'needs informative message') ! If this is tripped, ESMA_arch.mk must be edited.
-
-      _ASSERT(NS == MAXNS,'needs informative message') ! If this is tripped, the local GNUmakefile
-                           ! must be edited.
-
-      call MAPL_TimerOn(MAPL,"---IRRAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! ----------------------
-      ! Allocate device arrays
-      ! ----------------------
-
-      ! Inputs
-      ! ------
-
-      ALLOCATE(PLE_DEV(IM*JM,LM+1), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TA_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(WA_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(OA_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TB_DEV(IM*JM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(N2O_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CH4_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CFC11_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CFC12_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CFC22_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FS_DEV(IM*JM,NS), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TG_DEV(IM*JM,NS), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(EG_DEV(IM*JM,NS,10), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TV_DEV(IM*JM,NS), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(EV_DEV(IM*JM,NS,10), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(RV_DEV(IM*JM,NS,10), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(CWC_DEV(IM*JM,LM,4), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FCLD_DEV(IM*JM,LM), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(REFF_DEV(IM*JM,LM,4), STAT=STATUS)
-      VERIFY_(STATUS)
-
-      ALLOCATE(TAUA_DEV(IM*JM,LM,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(SSAA_DEV(IM*JM,LM,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(ASYA_DEV(IM*JM,LM,NB_CHOU), STAT = STATUS)
-      VERIFY_(STATUS)
-
-      ! Constant arrays in global memory
-      ! --------------------------------
-
-      ALLOCATE(C1(NX,NC), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(C2(NX,NC), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(C3(NX,NC), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(OO1(NX,NO), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(OO2(NX,NO), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(OO3(NX,NO), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H11(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H12(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H13(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H21(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H22(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H23(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H81(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H82(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(H83(NX,NH), STAT=STATUS)
-      VERIFY_(STATUS)
-
-      ! Outputs
-      ! -------
-
-      ALLOCATE(FLXU_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLXAU_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLCU_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLAU_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLXD_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLXAD_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLCD_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(FLAD_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(DFDTS_DEV(IM*JM,LM+1), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(SFCEM_DEV(IM*JM), STAT=STATUS)
-      VERIFY_(STATUS)
-      ALLOCATE(TAUDIAG_DEV(IM*JM,LM,10), STAT=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"---IRRAD_ALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---IRRAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"----IRRAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! --------------------------
-      ! Copy host arrays to device
-      ! --------------------------
-
-      ! Inputs
-      ! ------
-
-      STATUS = cudaMemcpy(PLE_DEV,PLE,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TA_DEV,T,IM*JM*LM)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(WA_DEV,Q,IM*JM*LM)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(OA_DEV,O3,IM*JM*LM)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TB_DEV,T2M,IM*JM)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(N2O_DEV,N2O,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CH4_DEV,CH4,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CFC11_DEV,CFC11,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CFC12_DEV,CFC12,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CFC22_DEV,HCFC22,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FS_DEV,FS,IM*JM*NS) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TG_DEV,TG,IM*JM*NS) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(EG_DEV,EG,IM*JM*NS*10) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TV_DEV,TV,IM*JM*NS) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(EV_DEV,EV,IM*JM*NS*10) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(RV_DEV,RV,IM*JM*NS*10) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(CWC_DEV,CWC,IM*JM*LM*4) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FCLD_DEV,FCLD,IM*JM*LM) 
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(REFF_DEV,REFF,IM*JM*LM*4) 
-      VERIFY_(STATUS)
-
-      STATUS = cudaMemcpy(TAUA_DEV,TAUA,IM*JM*LM*NB_CHOU)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(SSAA_DEV,SSAA,IM*JM*LM*NB_CHOU)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(ASYA_DEV,ASYA,IM*JM*LM*NB_CHOU)
-      VERIFY_(STATUS)
-
-      ! ---------------------------------------
-      ! Copy Constant Arrays into Global Memory
-      ! ---------------------------------------
-
-      C1 = C1_CONST
-      C2 = C2_CONST
-      C3 = C3_CONST
-      OO1 = OO1_CONST
-      OO2 = OO2_CONST
-      OO3 = OO3_CONST
-      H11 = H11_CONST
-      H12 = H12_CONST
-      H13 = H13_CONST
-      H21 = H21_CONST
-      H22 = H22_CONST
-      H23 = H23_CONST
-      H81 = H81_CONST
-      H82 = H82_CONST
-      H83 = H83_CONST
-
-      call MAPL_TimerOff(MAPL,"----IRRAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"----IRRAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! --------------
-      ! Copy Constants
-      ! --------------
-
-      XKW = XKW_CONST
-      XKE = XKE_CONST
-      MW = MW_CONST
-      AW = AW_CONST
-      BW = BW_CONST
-      PM = PM_CONST
-      FKW = FKW_CONST
-      GKW = GKW_CONST
-      AIB_IR = AIB_IR_CONST
-      AWB_IR = AWB_IR_CONST
-      AIW_IR = AIW_IR_CONST
-      AWW_IR = AWW_IR_CONST
-      AIG_IR = AIG_IR_CONST
-      AWG_IR = AWG_IR_CONST
-      CB = CB_CONST
-      DCB = DCB_CONST
-      W11 = W11_CONST
-      W12 = W12_CONST
-      W13 = W13_CONST
-      P11 = P11_CONST
-      P12 = P12_CONST
-      P13 = P13_CONST
-      DWE = DWE_CONST
-      DPE = DPE_CONST
-
-      call MAPL_TimerOff(MAPL,"----IRRAD_DATA_CONST",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"---IRRAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Do longwave calculations on a list of soundings
-      !  This fills the internal state
-      !------------------------------------------------
-      ! Note: IRRAD wants all species in mole fraction
-      ! except O3, which must be in mass mixing ratio.
-      !------------------------------------------------
-
-      call MAPL_TimerOn(MAPL,"---IRRAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call irrad<<<Grid, Block>>>(IM*JM,LM,CO2,TRACE,NS,NA,NB_CHOU,LCLDMH,LCLDLM)
-
-      STATUS = cudaGetLastError()
-      if (STATUS /= 0) then
-         write (*,*) "Error code from IRRAD kernel call: ", STATUS
-         write (*,*) "Kernel call failed: ", cudaGetErrorString(STATUS)
-         _ASSERT(.FALSE.,'needs informative message')
-      end if
-
-      call MAPL_TimerOff(MAPL,"---IRRAD_RUN",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---IRRAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"----IRRAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! Copy outputs from device
-      ! ------------------------
-
-      STATUS = cudaMemcpy(FLXU_INT,FLXU_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLXAU_INT,FLXAU_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLCU_INT,FLCU_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLAU_INT,FLAU_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-
-      STATUS = cudaMemcpy(FLXD_INT,FLXD_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLXAD_INT,FLXAD_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLCD_INT,FLCD_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(FLAD_INT,FLAD_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-
-      STATUS = cudaMemcpy(DFDTS,DFDTS_DEV,IM*JM*(LM+1))
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(SFCEM_INT,SFCEM_DEV,IM*JM)
-      VERIFY_(STATUS)
-      STATUS = cudaMemcpy(TAUDIAG,TAUDIAG_DEV,IM*JM*LM*10)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"----IRRAD_DATA_DEVICE",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOff(MAPL,"---IRRAD_DATA",RC=STATUS)
-      VERIFY_(STATUS)
-
-      call MAPL_TimerOn(MAPL,"---IRRAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-      ! ------------------------
-      ! Deallocate device arrays
-      ! ------------------------
-
-      ! Inputs
-      ! ------
-
-      DEALLOCATE(PLE_DEV)
-      DEALLOCATE(TA_DEV)
-      DEALLOCATE(WA_DEV)
-      DEALLOCATE(OA_DEV)
-      DEALLOCATE(TB_DEV)
-      DEALLOCATE(N2O_DEV)
-      DEALLOCATE(CH4_DEV)
-      DEALLOCATE(CFC11_DEV)
-      DEALLOCATE(CFC12_DEV)
-      DEALLOCATE(CFC22_DEV)
-      DEALLOCATE(FS_DEV)
-      DEALLOCATE(TG_DEV)
-      DEALLOCATE(EG_DEV)
-      DEALLOCATE(TV_DEV)
-      DEALLOCATE(EV_DEV)
-      DEALLOCATE(RV_DEV)
-      DEALLOCATE(CWC_DEV)
-      DEALLOCATE(FCLD_DEV)
-      DEALLOCATE(REFF_DEV)
-
-      DEALLOCATE(TAUA_DEV)
-      DEALLOCATE(SSAA_DEV)
-      DEALLOCATE(ASYA_DEV)
-
-      ! Constant arrays in global memory
-      ! --------------------------------
-
-      DEALLOCATE(C1)
-      DEALLOCATE(C2)
-      DEALLOCATE(C3)
-      DEALLOCATE(OO1)
-      DEALLOCATE(OO2)
-      DEALLOCATE(OO3)
-      DEALLOCATE(H11)
-      DEALLOCATE(H12)
-      DEALLOCATE(H13)
-      DEALLOCATE(H21)
-      DEALLOCATE(H22)
-      DEALLOCATE(H23)
-      DEALLOCATE(H81)
-      DEALLOCATE(H82)
-      DEALLOCATE(H83)
-
-      ! Outputs
-      ! -------
-
-      DEALLOCATE(FLXU_DEV)
-      DEALLOCATE(FLXAU_DEV)
-      DEALLOCATE(FLCU_DEV)
-      DEALLOCATE(FLAU_DEV)
-      DEALLOCATE(FLXD_DEV)
-      DEALLOCATE(FLXAD_DEV)
-      DEALLOCATE(FLCD_DEV)
-      DEALLOCATE(FLAD_DEV)
-      DEALLOCATE(DFDTS_DEV)
-      DEALLOCATE(SFCEM_DEV)
-      DEALLOCATE(TAUDIAG_DEV)
-
-      call MAPL_TimerOff(MAPL,"---IRRAD_DEALLOC",RC=STATUS)
-      VERIFY_(STATUS)
-
-#else
 ! Do longwave calculations on a list of soundings
 !  This fills the internal state
 !------------------------------------------------
@@ -2290,8 +1844,6 @@ contains
 
       call MAPL_TimerOff(MAPL,"---IRRAD_RUN",RC=STATUS)
       VERIFY_(STATUS)
-
-#endif
 
       ! pmn:
       ! Chou-Suarez does not provide these derivatives
@@ -2402,7 +1954,7 @@ contains
       top_at_1 = p_lay(1, 1) < p_lay(1, LM)
       _ASSERT(top_at_1, 'unexpected vertical ordering')
 
-      ! pmn: pressure KLUGE 
+      ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
@@ -2421,7 +1973,7 @@ contains
         endif
       endif
 
-      ! pmn: temperature KLUGE 
+      ! pmn: temperature KLUGE
       ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
       ! temperature below this occasionally (< 1% of time). (The lowest temp
       ! seen is so far 151K). Consequently we will limit min(t_lay) to 160K.
@@ -2691,7 +2243,7 @@ contains
 
         ! note: have made cloud_props for all ncol columns
         !   and will subset below into blocks ... we can also
-        !   look at option of making cloud_props for each block 
+        !   look at option of making cloud_props for each block
         !   as its needed ... same for aer_props
 
         ! set desired cloud overlap type
@@ -2715,7 +2267,7 @@ contains
         ! that remains the same for the members of an ensemble. If a different set is
         ! required for ensemble members, then the model state, such as the fractional
         ! part of the surface pressure, should be incorporated into the key.
-        !   To get a different set of random numbers for the SW, for example, either a 
+        !   To get a different set of random numbers for the SW, for example, either a
         ! key change or a counter advance will be needed.
         !
         ! Time Component of key:
@@ -2729,7 +2281,7 @@ contains
         ! 1. should be based on some globally unique index for a gridcolumn, so that
         !   each gridcolumn is independent and so it is agnostic to runs with varying
         !   decompositions among processors.
-        ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent 
+        ! 2. 2^32 = 4,294,967,296 or about 2.1475e9 positives, which can represent
         !   globe at over 1/180th degree resolution, so plenty for forseeable
         !   future.
         !
@@ -2814,7 +2366,7 @@ contains
       !--------------------------------------------------!
       ! Loop over subsets (blocks) of blockSize columns  !
       !  - choose rrtmgp_blockSize for efficiency        !
-      !  - one possible partial block is done at the end ! 
+      !  - one possible partial block is done at the end !
       !--------------------------------------------------!
 
       call MAPL_GetResource( MAPL, &
@@ -2990,20 +2542,20 @@ contains
               select type (clean_optical_props)
                 class is (ty_optical_props_2str)
                   dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%g   = clean_optical_props%g  
+                  dirty_optical_props%g   = clean_optical_props%g
               end select
             class is (ty_optical_props_nstr)
               TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_subset, LM, clean_optical_props))
               select type (clean_optical_props)
                 class is (ty_optical_props_nstr)
                   dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%p   = clean_optical_props%p  
+                  dirty_optical_props%p   = clean_optical_props%p
               end select
           end select
           ! all streams have tau
           dirty_optical_props%tau = clean_optical_props%tau
         end if
-        
+
         ! clean all-sky case
         if (calc_allnoa) then
 
@@ -3061,7 +2613,7 @@ contains
 
           else
 
-            ! there are no aerosols so we are done because the 
+            ! there are no aerosols so we are done because the
             !   dirty cases are the same as the clean ones
             if (export_clrsky) then
               flux_up_clrsky(colS:colE,:) = flux_up_clrnoa(colS:colE,:)
@@ -3073,7 +2625,7 @@ contains
               flux_dn_allsky(colS:colE,:) = flux_dn_allnoa(colS:colE,:)
               dfupdts_allsky(colS:colE,:) = dfupdts_allnoa(colS:colE,:)
             end if
-          
+
           end if ! implements_aerosol_optics
         end if ! export dirty clear-sky or all-sky
 
@@ -3153,7 +2705,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"--RRTMG",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_GetResource(MAPL,PARTITION_SIZE,'RRTMGLW_PARTITION_SIZE:',DEFAULT=4,RC=STATUS)
       VERIFY_(STATUS)
 
@@ -3203,7 +2755,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       ! reverse super-layer interface indicies
       LCLDMH = LM - LCLDMH + 1
       LCLDLM = LM - LCLDLM + 1
@@ -3243,7 +2795,7 @@ contains
             CICEWP(IJ,K) = xx*CWC(I,J,LV,KICE)
             RELIQ (IJ,K) =   REFF(I,J,LV,KLIQUID)
             REICE (IJ,K) =   REFF(I,J,LV,KICE   )
-               
+
             ! impose RRTMG re_liq limits
             if    (LIQFLGLW.eq.0) then
                ! pmn: this one not available inside RRTMG_LW
@@ -3325,17 +2877,17 @@ contains
 
       call MAPL_TimerOff(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_INIT",RC=STATUS)
       VERIFY_(STATUS)
- 
+
 ! pmn: consider putting futher up calling tree?
 ! pmn: only needs to be done once per run, but does consume memory
       call RRTMG_LW_INI
 
       call MAPL_TimerOff(MAPL,"---RRTMG_INIT",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
 
@@ -3350,10 +2902,10 @@ contains
 
       call MAPL_TimerOff(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
       VERIFY_(STATUS)
- 
+
       ! for outputs, unpack flattened horizontal and flip back vertical
       IJ = 0
       do J = 1,JM
@@ -3466,7 +3018,7 @@ contains
    FLXA_INT = FLXAD_INT + FLXAU_INT
    FLC_INT  = FLCD_INT  + FLCU_INT
    FLA_INT  = FLAD_INT  + FLAU_INT
-   
+
    ! Revert to SFCEM to a positive quantity.
    ! Earlier surface emitted positive downwards per Chou-Suarez.
    SFCEM_INT = -SFCEM_INT
@@ -3657,7 +3209,7 @@ contains
    VERIFY_(STATUS)
    call MAPL_GetPointer( IMPORT, PREF, 'PREF', RC=STATUS)
    VERIFY_(STATUS)
-   
+
    ALLOCATE( DUMTT(IM,JM), STAT=STATUS)
    VERIFY_(STATUS)
 
@@ -3760,8 +3312,8 @@ contains
 
        ! absorbed (non-reflected) downward surface fluxes
        ! (remember: downward fluxes are not not linearized)
-       if(associated(LWS  )) LWS   =  FLX_INT(:,:,LM) + SFCEM_INT  
-       if(associated(LWSA )) LWSA  = FLXA_INT(:,:,LM) + SFCEM_INT  
+       if(associated(LWS  )) LWS   =  FLX_INT(:,:,LM) + SFCEM_INT
+       if(associated(LWSA )) LWSA  = FLXA_INT(:,:,LM) + SFCEM_INT
        if(associated(LCS  )) LCS   =  FLC_INT(:,:,LM) + SFCEM_INT
        if(associated(LAS  )) LAS   =  FLA_INT(:,:,LM) + SFCEM_INT
        if(associated(LCSC5)) then
@@ -3826,7 +3378,7 @@ contains
 
        ! absorbed (non-reflected) downward surface fluxes
        ! (remember: downward fluxes are not not linearized)
-       if(associated(LWS  )) LWS   = FLX_INT(:,:,LM) + SFCEM_INT  
+       if(associated(LWS  )) LWS   = FLX_INT(:,:,LM) + SFCEM_INT
        if(associated(LWSA )) LWSA  = MAPL_UNDEF
        if(associated(LCS  )) LCS   = FLC_INT(:,:,LM) + SFCEM_INT
        if(associated(LAS  )) LAS   = MAPL_UNDEF
