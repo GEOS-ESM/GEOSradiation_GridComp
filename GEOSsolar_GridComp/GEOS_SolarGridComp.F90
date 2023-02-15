@@ -3146,7 +3146,7 @@ contains
       ! cloud optical properties from cloud physical properties)
       call MAPL_GetResource( &
         MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_COEFFS_SW:", &
-        DEFAULT='rrtmgp-cloud-optics-coeffs-sw.nc', __RC__)
+        DEFAULT='rrtmgp-cloud-optics-coeffs-reordered-sw.nc', __RC__)
       call MAPL_GetResource( &
         MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
         DEFAULT='LUT', __RC__)
