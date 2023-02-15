@@ -12,13 +12,11 @@ set (RRTMGP_SRCS
   rte/mo_source_functions.F90
   rte/mo_fluxes.F90
   rrtmgp/mo_rrtmgp_constants.F90
-  rrtmgp/mo_rrtmgp_util_reorder.F90
   rrtmgp/mo_rrtmgp_util_string.F90
   rrtmgp/mo_gas_optics.F90
   rrtmgp/mo_gas_optics_rrtmgp.F90
   rrtmgp/mo_gas_concentrations.F90
   rrtmgp/kernels/mo_gas_optics_kernels.F90
-  rrtmgp/kernels/mo_rrtmgp_util_reorder_kernels.F90
   extensions/mo_compute_bc.F90
   extensions/mo_fluxes_byband.F90
   extensions/mo_fluxes_bygpoint.F90
