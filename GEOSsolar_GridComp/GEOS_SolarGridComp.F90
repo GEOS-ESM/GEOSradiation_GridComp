@@ -2056,9 +2056,7 @@ contains
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
       use mo_gas_concentrations,      only: ty_gas_concs
-      use mo_cloud_optics,            only: ty_cloud_optics, &
-                                            get_min_radius_liq, get_max_radius_liq, &
-                                            get_min_radius_ice, get_max_radius_ice
+      use mo_cloud_optics,            only: ty_cloud_optics
       use mo_cloud_sampling,          only: draw_samples, &
                                             sampled_mask_max_ran, sampled_mask_exp_ran
       use mo_optical_props,           only: ty_optical_props, &
@@ -3201,17 +3199,17 @@ contains
       ! effective radii [microns]
       allocate(radliq(ncol,LM), radice(ncol,LM),__STAT__)
       radliq = min( max( real(RR3(:,:,2),kind=wp), &
-         cloud_optics%get_min_radius_liq(), &
-         cloud_optics%get_max_radius_liq()))
+         cloud_optics%get_min_radius_liq()), &
+         cloud_optics%get_max_radius_liq())
       radice = min( max( real(RR3(:,:,1),kind=wp), &
-         cloud_optics%get_min_radius_ice(), &
-         cloud_optics%get_max_radius_ice()))
+         cloud_optics%get_min_radius_ice()), &
+         cloud_optics%get_max_radius_ice())
 
       ! make band in-cloud optical properties from cloud_optics
       error_msg = cloud_optics%cloud_optics( &
         clwp, ciwp, radliq, radice, cloud_props)
       TEST_(error_msg)
-      deallocate(clwp, ciwp, radliq, radice__STAT__)
+      deallocate(clwp, ciwp, radliq, radice, __STAT__)
 
       call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
