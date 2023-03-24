@@ -892,6 +892,8 @@ contains
    ! Original: H. Barker
    ! Revision: Integrated with rrtmg_sw, J.-J. Morcrette, ECMWF, Oct 2002
    ! Revision: Reformatted for consistency with rrtmg_lw: MJIacono, AER, Jul 2006
+   ! Revision: Tidy up, reordering for speed, etc.: PM Norris, GMAO, Aug 2021
+   ! Revision: Add code explanations: PM Norris, GMAO, Dec 2022.
    !
    !-----------------------------------------------------------------------
 
@@ -901,11 +903,18 @@ contains
       integer, intent (in) :: ncol                    ! actual number of gridcols
       integer, intent (in) :: nlay                    ! number of model layers
     
+      ! Layer reflectivities and transmittivities (1..nlay). The nlay+1 values
+      ! of pref[d] have albedo values discussed below. Note: the direct/diffuse
+      ! nomenclature refers to the SOURCE prior to reflection/transmission. Of
+      ! course a diffuse source remains diffuse in its reflection/tranmission,
+      ! but a direct beam source will, in general, produce both direct beam and
+      ! diffuse components in transmission (& a diffuse-only reflected component).
       real, intent(in) :: pref (nlay+1,ngptsw,pncol)  ! direct beam reflectivity
       real, intent(in) :: prefd(nlay+1,ngptsw,pncol)  ! diffuse reflectivity
       real, intent(in) :: ptra (nlay+1,ngptsw,pncol)  ! direct beam transmissivity
       real, intent(in) :: ptrad(nlay+1,ngptsw,pncol)  ! diffuse transmissivity
 
+      ! Note: these describe the transmission of the direct beam as a direct beam.
       real, intent(in) :: pdbt (nlay,  ngptsw,pncol)  ! lyr mean dir beam transmittance
       real, intent(in) :: ptdbt(nlay+1,ngptsw,pncol)  ! total direct beam transmittance
 
@@ -930,21 +939,61 @@ contains
       
             ! The nlay+1 level of prup/prupd require palbp/palbd which
             ! are already available in fixed nlay+1 level of pref/prefd.
+            ! Explanation: prup[d](nlay+1) are reflected fractions of
+            ! downelling direct[diffuse] radiation due to the surface alone.
+
             prup (nlay+1,iw,icol) = pref (nlay+1,iw,icol)
             prupd(nlay+1,iw,icol) = prefd(nlay+1,iw,icol)
 
-            ! Link lowest layer with surface
+            ! Link lowest layer with surface.
+            ! Explanation: prup[d](nlay) are reflected fractions of downwelling
+            ! direct[diffuse] radiation due to the lowest model layer and the
+            ! surface combined. The first term in each, pref[d](nlay), accounts
+            ! for the reflection from the lowest model layer alone, before
+            ! reaching the surface. Any additioinal reflected radiation must
+            ! involve a surface reflection (which results in diffuse reflected
+            ! radiation regardless of type of incoming radiation) and needs a
+            ! a final transmission through the lowest model layer to make it
+            ! out. This is the ptrad(nlay) factor common to both prup[d](nlay).
+            ! The factor ptrad(nlay) * prefd(nlay+1) in prupd(nlay) is the 
+            ! necessary transmission of the diffuse incoming radiation to the
+            ! surface and its reflection by the surface. The corresponding
+            ! factor for prup(nlay) is more complicated:
+            ! (ptra(nlay) - pdbt(nlay)) * prefd(nlay+1) + pdbt(nlay) * pref(nlay+1)
+            ! Here pdbt(nlay) is the fraction of the incoming direct beam trans-
+            ! mitted to the surface as a direct beam, while ptra(nlay) - pdbt(nlay)
+            ! is the fraction of the incoming direct beam transmitted to the surface
+            ! as diffuse radiation. Each is multiplied by the appropriate surface
+            ! reflection, pref(nlay+1) and prefd(nlay+1), respectively. Finally,
+            ! AFTER reflection by the surface, and BEFORE final transmission thru
+            ! the model layer, the reflected diffuse radiation can undergo ANY 
+            ! NUMBER of RE-reflections by the layer, prefd(nlay), and subsequent
+            ! reflections, prefd(nlay+1), by the surface. This gives rise to a
+            ! geometric series that converges to the zreflect term.
+
             zreflect = 1. / (1. - prefd(nlay+1,iw,icol) * prefd(nlay,iw,icol))
             prup(nlay,iw,icol) = pref(nlay,iw,icol) + (ptrad(nlay,iw,icol) * &
                ((ptra(nlay,iw,icol) - pdbt(nlay,iw,icol)) * prefd(nlay+1,iw,icol) + &
                pdbt(nlay,iw,icol) * pref(nlay+1,iw,icol))) * zreflect
-            prupd(nlay,iw,icol) = prefd(nlay,iw,icol) + ptrad(nlay,iw,icol) * ptrad(nlay,iw,icol) * &
-               prefd(nlay+1,iw,icol) * zreflect
+            prupd(nlay,iw,icol) = prefd(nlay,iw,icol) + ptrad(nlay,iw,icol) * &
+               ptrad(nlay,iw,icol) * prefd(nlay+1,iw,icol) * zreflect
 
           end do
       end do
       
       ! Pass from bottom to top 
+      ! Explantion: prup[d](ikx) are reflected fractions of downwelling direct[diffuse]
+      ! radiation due to layer ikx, all those below it, and the surface, combined.
+      ! This is achieved by isolating the effects of layer ikx alone, and the cmbined
+      ! effects of the lower layers (ikp .. nlay) and the surface. This proceeds by 
+      ! iteration, adding one layer ikx at a time and depending on the previous 
+      ! prup[d](ikp). Otherwise it is completely analagopus to the explation above,
+      ! but with prup[d](ikp) for the layers/surface below ikx repacing prefd(nlay+1)
+      ! for the surface in the above formulas/explanation.
+      ! Note that the the top of leyer ikx is level ikx, which is another way of
+      ! thinking about the index ikx in these definitions and the formula below.
+      ! PMN: possible to combine this loop with one above?
+
       do icol = 1,ncol
          do iw = 1,ngptsw
             do jk = 1,nlay-1
@@ -955,11 +1004,22 @@ contains
                prup(ikx,iw,icol) = pref(ikx,iw,icol) + (ptrad(ikx,iw,icol) * &
                   ((ptra(ikx,iw,icol) - pdbt(ikx,iw,icol)) * prupd(ikp,iw,icol) + &
                   pdbt(ikx,iw,icol) * prup(ikp,iw,icol))) * zreflectj
-               prupd(ikx,iw,icol) = prefd(ikx,iw,icol) + ptrad(ikx,iw,icol) * ptrad(ikx,iw,icol) * &
-                  prupd(ikp,iw,icol) * zreflectj
+               prupd(ikx,iw,icol) = prefd(ikx,iw,icol) + ptrad(ikx,iw,icol) * &
+                  ptrad(ikx,iw,icol) * prupd(ikp,iw,icol) * zreflectj
+
             enddo
          end do
       end do
+
+      ! Now work from top to bottom calculating:
+      ! ztdn(ikp), the transmision fraction of the incoming top of
+      !    model direct beam flux through the bottom of layer ikp-1,
+      !    as either direct beam or diffuse radiation.
+      ! prdnd(ikp), the combined reflection fraction of upwelling
+      !    diffuse radiation downward by layers ikp-1 and above.
+      ! Note that the the bottom of leyer ikp-1 is level ikp, which
+      ! is another way of thinking about the index ikp in these
+      ! definitions and the formula below.
 
       do icol = 1,ncol
          do iw = 1,ngptsw
@@ -970,6 +1030,7 @@ contains
             prdnd(1,iw,icol) = 0. 
             ztdn (2,iw,icol) = ptra (1,iw,icol)  
             prdnd(2,iw,icol) = prefd(1,iw,icol)  
+
          end do
       end do
       
@@ -977,6 +1038,31 @@ contains
          do iw = 1,ngptsw
 
             ! Pass from top to bottom
+            ! Explanation: prdnd is simple in terms of the definition above and
+            ! the concepts discussed in previous explanations. For ztdn, first
+            ! note the use of ptdbt(jk) (cf. pdbt), which is the total direct-
+            ! beam-remaining transmission from the top of the model thru LEVEL jk.
+            ! This is one of only two routes --- not involving reflection(s) from
+            ! layer jk below --- for radiation to arrive at level jk. The other
+            ! is as diffuse radiation ztdn(jk) - ptdbt(jk).
+            !   In the first case, the direct-beam source, ptdbt(jk), is either
+            ! directly transmitted by layer jk, the term ptdbt(jk) * ptra(jk),
+            ! or else it is indirectly transmitted as diffuse, factor ptrad(jk),
+            ! after:
+            !     (1) a double-reflection pref(jk) * prdnd(jk), namely a direct-
+            !   source reflection by layer jk, pref(jk), converting it to diffuse,
+            !   and a re-reflection down from layers above jk, prdnd(jk);
+            !     (2) followed by zero or more all-diffuse double-reflections
+            !   prefd(jk) * prdnd(jk), as encapsulated in zreflect.
+            ! Note that it is because of the differences between the reflection
+            ! and transmission of a layer for direct-source vs. diffuse-source,
+            ! namely the difference between pref and prefd and ptra and ptrad,
+            ! that this first case appears as it does and cannot be simplified.
+            !   In the second case, the diffuse fraction ztdn(jk) - ptdbt(jk)
+            ! is transmitted after zero or more double-reflections, hence the
+            ! final fraction, (ztdn(jk) - ptdbt(jk)) * zreflect * ptrad(jk).
+            ! Note that the radiation is always diffuse for this case, so the
+            ! complexity of the first case is not required.
 
             do jk = 2,nlay
                ikp = jk+1
@@ -985,8 +1071,8 @@ contains
                ztdn(ikp,iw,icol) = ptdbt(jk,iw,icol) * ptra(jk,iw,icol) + &
                   (ptrad(jk,iw,icol) * ((ztdn(jk,iw,icol) - ptdbt(jk,iw,icol)) + &
                   ptdbt(jk,iw,icol) * pref(jk,iw,icol) * prdnd(jk,iw,icol))) * zreflect
-               prdnd(ikp,iw,icol) = prefd(jk,iw,icol) + ptrad(jk,iw,icol) * ptrad(jk,iw,icol) * &
-                      prdnd(jk,iw,icol) * zreflect
+               prdnd(ikp,iw,icol) = prefd(jk,iw,icol) + ptrad(jk,iw,icol) * &
+                  ptrad(jk,iw,icol) * prdnd(jk,iw,icol) * zreflect
 
             enddo
          end do
