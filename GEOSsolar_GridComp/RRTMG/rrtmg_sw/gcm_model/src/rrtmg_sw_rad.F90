@@ -44,12 +44,14 @@
 ! *                                                                          *
 ! ****************************************************************************
 
+#include "MAPL_Generic.h"
     
 module rrtmg_sw_rad
 
+   use ESMF
+   use MAPL
+
    use rrsw_vsn
-!  use cloud_condensate_inhomogeneity, only: &
-!     initialize_inhomogeneity, release_inhomogeneity
    use cloud_subcol_gen, only: &
       generate_stochastic_clouds, clearCounts_threeBand
    use rrtmg_sw_cldprmc, only: cldprmc_sw
@@ -63,7 +65,7 @@ module rrtmg_sw_rad
 
 contains
 
-   subroutine rrtmg_sw ( &
+   subroutine rrtmg_sw (MAPL, &
       rpart, ncol, nlay, &
       scon, adjes, coszen, isolvar, &
       play, plev, tlay, &
@@ -78,13 +80,14 @@ contains
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
       tautp, tauhp, taump, taulp, &
       do_drfband, drband, dfband, &
-
-      ! optional inputs
-      bndscl, indsolvar, solcycfrac)
+      bndscl, indsolvar, solcycfrac, &  ! optional inputs
+      RC)
 
       use parrrsw, only : nbndsw
 
       ! ----- Inputs -----
+
+      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
       ! dimensions
       ! ----------
@@ -137,7 +140,7 @@ contains
       ! The main input for isolvar = 1 is solcycfrac in [0,1], which is the normalized input
       ! position in the 11-year average cycle. This solcycfrac is used to interpolate into the
       ! {mg,sb}avgcyc arrays to values Mg and SB, which are then converted to svar_f and svar_s
-      ! via the linear relationship provided. These linear relationships are desined such that
+      ! via the linear relationship provided. These linear relationships are designed such that
       ! svar_f = 1 at Mg = <Mg>, the time average Mg index over AvgCyc11, and similarly for svar_s
       ! and SB, such that <svar_{s,f}> are both unity. So, if solcyclfr is uniformly cycled in
       ! [0,1] by the caller of rrtmg_sw_rad(), then each of the faculae and sunspot terms will
@@ -239,12 +242,12 @@ contains
       ! Subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: clearCounts(ncol,4)
 
-      real, intent(out) :: swuflx  (ncol,nlay+1)     ! Total sky SW up   flux (W/m2)
-      real, intent(out) :: swdflx  (ncol,nlay+1)     ! Total sky SW down flux (W/m2)
-      real, intent(out) :: swuflxc (ncol,nlay+1)     ! Clear sky SW up   flux (W/m2)
-      real, intent(out) :: swdflxc (ncol,nlay+1)     ! Clear sky SW down flux (W/m2)
+      real, intent(out) :: swuflx  (ncol,nlay+1)     !   All-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflx  (ncol,nlay+1)     !   All-sky SW down flux (W/m2)
+      real, intent(out) :: swuflxc (ncol,nlay+1)     ! Clear-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflxc (ncol,nlay+1)     ! Clear-sky SW down flux (W/m2)
 
-      ! Output added for Land/Surface process
+      ! Output added for Land/Surface process (all-sky)
       real, intent(out) :: nirr    (ncol)            ! Near-IR direct  down SW flux (W/m2)
       real, intent(out) :: nirf    (ncol)            ! Near-IR diffuse down SW flux (W/m2)
       real, intent(out) :: parr    (ncol)            ! Visible direct  down SW flux (W/m2)
@@ -263,111 +266,33 @@ contains
       ! if (do_drfband), must point to (ncol,nbndsw) space.
       real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
+      integer, intent(out), optional :: RC  ! return code
+
       ! ----- Locals -----
 
       integer :: pncol
+      integer :: STATUS  ! for MAPL error reporting
       
       ! ASSERTs to catch unphysical or invalid inputs
-
-      if (any(play   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(play):', minval(play)
-        error stop 'negative values in input: play'
-      end if
-      if (any(plev   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(plev):', minval(plev)
-        error stop 'negative values in input: plev'
-      end if
-      if (any(tlay   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(tlay):', minval(tlay)
-        error stop 'negative values in input: tlay'
-      end if
-      if (any(h2ovmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(h2ovmr):', minval(h2ovmr)
-        error stop 'negative values in input: h2ovmr'
-      end if
-      if (any(o3vmr  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(o3vmr):', minval(o3vmr)
-        error stop 'negative values in input: o3vmr'
-      end if
-      if (any(co2vmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(co2vmr):', minval(co2vmr)
-        error stop 'negative values in input: co2vmr'
-      end if
-      if (any(ch4vmr < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ch4vmr):', minval(ch4vmr)
-        error stop 'negative values in input: ch4vmr'
-      end if
-      if (any(o2vmr  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(o2vmr):', minval(o2vmr)
-        error stop 'negative values in input: o2vmr'
-      end if
-      if (any(asdir  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(asdir):', minval(asdir)
-        error stop 'negative values in input: asdir'
-      end if
-      if (any(aldir  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(aldir):', minval(aldir)
-        error stop 'negative values in input: aldir'
-      end if
-      if (any(asdif  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(asdif):', minval(asdif)
-        error stop 'negative values in input: asdif'
-      end if
-      if (any(aldif  < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(aldif):', minval(aldif)
-        error stop 'negative values in input: aldif'
-      end if
-      if (any(cld    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(cld):', minval(cld)
-        error stop 'negative values in input: cld'
-      end if
-      if (any(ciwp   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ciwp):', minval(ciwp)
-        error stop 'negative values in input: ciwp'
-      end if
-      if (any(clwp   < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(clwp):', minval(clwp)
-        error stop 'negative values in input: clwp'
-      end if
-      if (any(rei    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(rei):', minval(rei)
-        error stop 'negative values in input: rei'
-      end if
-      if (any(rel    < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(rel):', minval(rel)
-        error stop 'negative values in input: rel'
-      end if
-      if (any(tauaer < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(tauaer):', minval(tauaer)
-        error stop 'negative values in input: tauaer'
-      end if
-      if (any(ssaaer < 0.)) then
-        write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-        write(error_unit,*) 'minval(ssaaer):', minval(ssaaer)
-        error stop 'negative values in input: ssaaer'
-      end if
-
-!     ! Set up condensate inhomogeneity tables.
-!     ! Done in Radiation GC MAPL Initialize now since LW and SW both have same inhomogeneity.
-!     call initialize_inhomogeneity(1)
+      _ASSERT(all(play   >= 0.), 'negative values in input:   play')
+      _ASSERT(all(plev   >= 0.), 'negative values in input:   plev')
+      _ASSERT(all(tlay   >= 0.), 'negative values in input:   tlay')
+      _ASSERT(all(h2ovmr >= 0.), 'negative values in input: h2ovmr')
+      _ASSERT(all( o3vmr >= 0.), 'negative values in input:  o3vmr')
+      _ASSERT(all(co2vmr >= 0.), 'negative values in input: co2vmr')
+      _ASSERT(all(ch4vmr >= 0.), 'negative values in input: ch4vmr')
+      _ASSERT(all( o2vmr >= 0.), 'negative values in input:  o2vmr')
+      _ASSERT(all( asdir >= 0.), 'negative values in input:  asdir')
+      _ASSERT(all( aldir >= 0.), 'negative values in input:  aldir')
+      _ASSERT(all( asdif >= 0.), 'negative values in input:  asdif')
+      _ASSERT(all( aldif >= 0.), 'negative values in input:  aldif')
+      _ASSERT(all(   cld >= 0.), 'negative values in input:    cld')
+      _ASSERT(all(  ciwp >= 0.), 'negative values in input:   ciwp')
+      _ASSERT(all(  clwp >= 0.), 'negative values in input:   clwp')
+      _ASSERT(all(   rei >= 0.), 'negative values in input:    rei')
+      _ASSERT(all(   rel >= 0.), 'negative values in input:    rel')
+      _ASSERT(all(tauaer >= 0.), 'negative values in input: tauaer')
+      _ASSERT(all(ssaaer >= 0.), 'negative values in input: ssaaer')
 
       ! set column partition size pncol
       if (rpart > 0) then
@@ -377,7 +302,7 @@ contains
       end if
       
       ! do partitions
-      call rrtmg_sw_sub ( &
+      call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
          scon, adjes, coszen, isolvar, &
          play, plev, tlay, &
@@ -392,16 +317,14 @@ contains
          nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
          tautp, tauhp, taump, taulp, &
          do_drfband, drband, dfband, &
-         ! optional inputs
-         bndscl, indsolvar, solcycfrac)
+         bndscl, indsolvar, solcycfrac, &  ! optional inputs
+         __RC__)
                                                       
-!     ! release condensate inhomogeneity resources
-!     call release_inhomogeneity
-
+      _RETURN(_SUCCESS)
    end subroutine rrtmg_sw                                                     
 
 
-   subroutine rrtmg_sw_sub ( &
+   subroutine rrtmg_sw_sub (MAPL, &
       pncol, gncol, nlay, &
       scon, adjes, gcoszen, isolvar, &
       gplay, gplev, gtlay, &
@@ -416,9 +339,8 @@ contains
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
       tautp, tauhp, taump, taulp, &
       do_drfband, drband, dfband, &
-      ! optional inputs
-      bndscl, indsolvar, solcycfrac)
-
+      bndscl, indsolvar, solcycfrac, &  ! optional inputs
+      RC)
 
      ! ----- Modules -----
       use parrrsw, only : nbndsw, ngptsw, &
@@ -435,6 +357,8 @@ contains
 
       ! ----- Inputs -----
       ! (see rrtmg_sw() for more detailed comments)
+
+      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
       ! dimensions
       integer, intent(in) :: pncol                     ! Nominal horiz cols in a partition
@@ -505,18 +429,18 @@ contains
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
       integer, intent(out) :: clearCounts(gncol,4)
 
-      real, intent(out) :: swuflx  (gncol,nlay+1)      ! Total sky SW up   flux (W/m2)
-      real, intent(out) :: swdflx  (gncol,nlay+1)      ! Total sky SW down flux (W/m2)
-      real, intent(out) :: swuflxc (gncol,nlay+1)      ! Clear sky SW up   flux (W/m2)
-      real, intent(out) :: swdflxc (gncol,nlay+1)      ! Clear sky SW down flux (W/m2)
+      real, intent(out) :: swuflx  (gncol,nlay+1)      !   All-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflx  (gncol,nlay+1)      !   All-sky SW down flux (W/m2)
+      real, intent(out) :: swuflxc (gncol,nlay+1)      ! Clear-sky SW up   flux (W/m2)
+      real, intent(out) :: swdflxc (gncol,nlay+1)      ! Clear-sky SW down flux (W/m2)
 
-      ! Output added for Land/Surface process
-      real, intent(out) :: nirr   (gncol)             ! Near-IR direct  down SW flux (w/m2)
-      real, intent(out) :: nirf   (gncol)             ! Near-IR diffuse down SW flux (w/m2)
-      real, intent(out) :: parr   (gncol)             ! Visible direct  down SW flux (w/m2)
-      real, intent(out) :: parf   (gncol)             ! Visible diffuse down SW flux (w/m2)
-      real, intent(out) :: uvrr   (gncol)             ! UV      direct  down SW flux (w/m2)
-      real, intent(out) :: uvrf   (gncol)             ! UV      diffuse down SW flux (w/m2)
+      ! Output added for Land/Surface process (all-sky)
+      real, intent(out) :: nirr    (gncol)             ! Near-IR direct  down SW flux (w/m2)
+      real, intent(out) :: nirf    (gncol)             ! Near-IR diffuse down SW flux (w/m2)
+      real, intent(out) :: parr    (gncol)             ! Visible direct  down SW flux (w/m2)
+      real, intent(out) :: parf    (gncol)             ! Visible diffuse down SW flux (w/m2)
+      real, intent(out) :: uvrr    (gncol)             ! UV      direct  down SW flux (w/m2)
+      real, intent(out) :: uvrf    (gncol)             ! UV      diffuse down SW flux (w/m2)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (gncol) :: tautp, tauhp, taump, taulp
@@ -529,12 +453,13 @@ contains
       ! if (do_drfband), must point to (gncol,nbndsw) space.
       real, intent(inout), dimension (:,:), pointer :: drband, dfband
 
+      integer, intent(out), optional :: RC  ! return code
+
       ! ----- Locals -----
 
       ! Control
-      real, parameter :: zepzen = 1.e-10                    ! very small cossza
-
-      integer :: ibnd, icol, ilay, ilev  ! various indices
+      real, parameter :: zepzen = 1.e-10  ! very small cossza
+      integer :: ibnd, icol, ilay, ilev   ! various indices
 
       ! Atmosphere
       real :: coldry (nlay,pncol)        ! dry air column amount
@@ -576,9 +501,9 @@ contains
       real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11  
       
       ! general
-      real :: play (nlay,  pncol)             ! Layer pressures (hPa)
-      real :: plev (nlay+1,pncol)             ! Interface pressures (hPa)
-      real :: tlay (nlay,  pncol)             ! Layer temperatures (K)
+      real :: play (nlay,  pncol)           ! Layer pressures (hPa)
+      real :: plev (nlay+1,pncol)           ! Interface pressures (hPa)
+      real :: tlay (nlay,  pncol)           ! Layer temperatures (K)
 
       ! Atmosphere/clouds - cldprop
       ! ---------------------------
@@ -612,19 +537,19 @@ contains
       real :: omga (nlay,nbndsw,pncol)
 
       ! SW flux temporaries [W/m2]
-      real :: zbbfu    (nlay+1,pncol)  ! all-SW  up
-      real :: zbbfd    (nlay+1,pncol)  ! all-SW  down
+      real :: zbbfu    (nlay+1,pncol)  ! all-SW  up            all-sky
+      real :: zbbfd    (nlay+1,pncol)  ! all-SW  down          all-sky
       real :: zbbcu    (nlay+1,pncol)  ! all-SW  up          clear-sky
       real :: zbbcd    (nlay+1,pncol)  ! all-SW  down        clear-sky
-      real :: zbbfddir (nlay+1,pncol)  ! all-SW  down direct
+      real :: zbbfddir (nlay+1,pncol)  ! all-SW  down direct   all-sky
       real :: zbbcddir (nlay+1,pncol)  ! all-SW  down direct clear-sky
-      real :: zuvfd    (nlay+1,pncol)  ! UV-Vis  down
+      real :: zuvfd    (nlay+1,pncol)  ! UV-Vis  down          all-sky
       real :: zuvcd    (nlay+1,pncol)  ! UV-Vis  down        clear-sky
-      real :: zuvfddir (nlay+1,pncol)  ! UV-Vis  down direct
+      real :: zuvfddir (nlay+1,pncol)  ! UV-Vis  down direct   all-sky
       real :: zuvcddir (nlay+1,pncol)  ! UV-Vis  down direct clear-sky
-      real :: znifd    (nlay+1,pncol)  ! near-IR down
+      real :: znifd    (nlay+1,pncol)  ! near-IR down          all-sky
       real :: znicd    (nlay+1,pncol)  ! near-IR down        clear-sky
-      real :: znifddir (nlay+1,pncol)  ! near-IR down direct
+      real :: znifddir (nlay+1,pncol)  ! near-IR down direct   all-sky
       real :: znicddir (nlay+1,pncol)  ! near-IR down direct clear-sky
 
       real, dimension (pncol) :: &
@@ -683,6 +608,8 @@ contains
       real :: solcycfr, Mg_now, SB_now
       real :: scon_int, svar_r
 
+      integer :: STATUS  ! for MAPL error reporting
+
       ! Initializations
       ! ---------------
 
@@ -704,8 +631,7 @@ contains
 
          ! require solcycfrac present, else what's the point of using isolvar=1 ?
          if (.not.present(solcycfrac)) then
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            error stop 'RRTMG_SW: isolvar == 1 requires solcycfrac present!'
+            _FAIL('isolvar == 1 requires solcycfrac present!')
          end if
          solcycfr = solcycfrac
 
@@ -828,9 +754,7 @@ contains
             enddo
 
          else
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            write(error_unit,*) 'bad isolvar value:', isolvar
-            error stop 'RRTMG_SW: invalid isolvar'
+            _FAIL('invalid isolvar')
          endif 
 
       elseif (scon > 0.) then 
@@ -910,14 +834,11 @@ contains
             enddo
 
          else
-            write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-            write(error_unit,*) 'bad isolvar value:', isolvar
-            error stop 'RRTMG_SW: invalid isolvar'
+            _FAIL('invalid isolvar')
          endif 
 
       else
-         write(error_unit,*) 'file:', __FILE__, ', line:', __LINE__
-         error stop 'RRTMG_SW: scon cannot be negative!'
+         _FAIL('scon cannot be negative!')
       endif
 
       ! Earth-Sun distance adjustment
@@ -978,6 +899,8 @@ contains
 
          ! loop over partitions
          do ipart = 0,npart-1
+
+            call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
 
             ! partition dimensions
             cols = ipart * pncol + 1
@@ -1132,6 +1055,8 @@ contains
 
             end if  ! clear or cloudy gridcolumns
 
+            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
             ! limit tiny cosine zenith angles
             do icol = 1,ncol
                cossza(icol) = max(zepzen,coszen(icol))
@@ -1162,6 +1087,7 @@ contains
             if (cc == 2) then
 
                ! McICA subcolumn generation
+               call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
                call generate_stochastic_clouds( &
                   pncol, ncol, ngptsw, nlay, &
                   zm, alat, dyofyr, &
@@ -1173,12 +1099,15 @@ contains
                call clearCounts_threeBand( &
                   pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
                   p_clearCounts)
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
 
                ! cloud optical property generation
+               call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
                call cldprmc_sw( &
                   pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                   cldymcl, ciwpmcl, clwpmcl, rei, rel, &
                   taormc, taucmc, ssacmc, asmcmc)
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
             end if
 
             ! Calculate information needed by the radiative transfer routine
@@ -1186,14 +1115,16 @@ contains
             ! coefficients and indices needed to compute the optical depths
             ! by interpolating data from stored reference atmospheres.
 
+            call MAPL_TimerOn(MAPL,"---RRTMG_SETCOEF",__RC__)
             call setcoef_sw( &
                pncol, ncol, nlay, play, tlay, coldry, &
                colch4, colco2, colh2o, colmol, colo2, colo3, &
                laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                selffac, selffrac, indself, forfac, forfrac, indfor)
+            call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
 
             ! compute sw radiative fluxes
-            call spcvmc_sw( &
+            call spcvmc_sw(MAPL, &
                cc, pncol, ncol, nlay, &
                albdif, albdir, &
                cldymcl, taucmc, asmcmc, ssacmc, taormc, &
@@ -1209,10 +1140,13 @@ contains
                zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
                ztautp, ztauhp, ztaump, ztaulp, &
-               do_drfband, zdrband, zdfband)
+               do_drfband, zdrband, zdfband, &
+               __RC__)
 
-            ! Copy out up and down, clear and total sky fluxes to output arrays.
+            ! Copy out up and down, clear- and all-sky fluxes to output arrays.
             ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
+
+            call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
 
             if (cc == 1) then  ! clear gridcolumns
 
@@ -1322,6 +1256,8 @@ contains
 
          enddo  ! over partitions
 
+         call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
       enddo  ! outer loop (cc) over clear then cloudy columns
 
       ! If the user requests 'normalized' fluxes, divide
@@ -1359,6 +1295,7 @@ contains
 
       endif
 
+      _RETURN(_SUCCESS)
    end subroutine rrtmg_sw_sub
 
 

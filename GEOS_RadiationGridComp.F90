@@ -459,7 +459,7 @@ module GEOS_RadiationGridCompMod
   subroutine Initialize ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! !USES:
-  use cloud_condensate_inhomogeneity, only: initialize_inhomogeneity
+  use cloud_condensate_inhomogeneity, only: set_inhomogeneity
   use cloud_subcol_gen, only : initialize_cloud_subcol_gen, &
     def_aam1, def_aam2, def_aam30, def_aam4, &
     def_ram1, def_ram2, def_ram30, def_ram4
@@ -493,6 +493,10 @@ module GEOS_RadiationGridCompMod
   type (MAPL_MetaComp),      pointer  :: MAPL
 ! type (ESMF_State),         pointer  :: GIM(:)
 ! type (ESMF_Config)                  :: CF
+
+! Condensate inhomogeneity type from resource file
+
+  integer :: ih
 
 ! Correlation length parameters from resource file
 
@@ -528,17 +532,20 @@ module GEOS_RadiationGridCompMod
 
 !   call MAPL_Get (MAPL, GIM=GIM, __RC__)
 
-! Initialize module-level cloud generator details.
-! Currently these are only used by RRTMG SW and LW, so should probably
-! make conditional on either RRTMG SW and LW being used. Dont bother
-! for now. Also, may later use the cloud generator for RRTMGP as well.
+! Initialize module-level cloud generator details. Currently these are
+! only used by RRTMG[P] SW and LW, so could make conditional on either
+! RRTMG[P] SW or LW being used. Dont bother for now.
 !---------------------------------------------------------------------
 
-! Set up RRTMG condensate inhomogeneity tables
+! Set up RRTMG[P] sub-gridscale condensate inhomogeneity tables
+! ih == 0: homogeneous
+! ih == 1: inhomogeneous, beta  distribution
+! ih == 2: inhomogeneous, gamma distribution
 
-    call initialize_inhomogeneity(1)
+    call MAPL_GetResource(MAPL,ih,LABEL="RAD_CONDENSATE_INHOMOGENEITY:",default=1,__RC__)
+    call set_inhomogeneity(ih)
 
-! Set RRTMG cloud subcolumn generator correlation length parameters to non-default values
+! Set RRTMG[P] cloud subcolumn generator correlation length parameters to non-default values
 ! from MAPL resource parameters. Comment out to just use defaults in module cloud_subcol_gen.
 
     call MAPL_GetResource(MAPL,aam1 ,LABEL="ADL_AM1:" ,default=def_aam1 ,__RC__)
