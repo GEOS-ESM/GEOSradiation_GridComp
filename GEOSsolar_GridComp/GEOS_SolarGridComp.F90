@@ -2779,11 +2779,14 @@ contains
       allocate(QQ3 (size(Q,1),size(Q,2),4),__STAT__)
       allocate(RR3 (size(Q,1),size(Q,2),4),__STAT__)
 
+      ! In-cloud water contents
       QQ3(:,:,1) = QI
       QQ3(:,:,2) = QL
       QQ3(:,:,3) = QR
       QQ3(:,:,4) = QS
-      RR3(:,:,1) = RI*1.e6  ! microns
+
+      ! Effective radii [microns]
+      RR3(:,:,1) = RI*1.e6
       RR3(:,:,2) = RL*1.e6
       RR3(:,:,3) = RR*1.e6
       RR3(:,:,4) = RS*1.e6
