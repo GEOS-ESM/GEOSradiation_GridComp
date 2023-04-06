@@ -1254,9 +1254,9 @@ contains
 
             endif  ! clear/cloudy
 
-         enddo  ! over partitions
+            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
 
-         call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+         enddo  ! over partitions
 
       enddo  ! outer loop (cc) over clear then cloudy columns
 
