@@ -3745,7 +3745,6 @@ end subroutine RUN
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
       
-    character(len=ESMF_MAXSTR) :: IAm
     real :: RFLAG
     integer :: STATUS 
       

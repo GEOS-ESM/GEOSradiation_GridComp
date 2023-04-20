@@ -1868,7 +1868,7 @@ contains
        ! are without-aerosol exports requested?
        do_no_aero_calc = .false.
        list = [S_('FSWNA'), S_('FSWUNA'), S_('FSWDNA'), &
-               S_('FSCNA'), S_('FSCUNA'), S_('FSWDNA'), &
+               S_('FSCNA'), S_('FSCUNA'), S_('FSCDNA'), &
                S_('FSWBANDNA')]           
        do i = 1, size(list)
          call MAPL_GetPointer( EXPORT, ptr3d, list(i)%str, __RC__)
@@ -5272,7 +5272,6 @@ contains
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
-    character(len=ESMF_MAXSTR) :: IAm
     real :: RFLAG
     integer :: STATUS 
     
