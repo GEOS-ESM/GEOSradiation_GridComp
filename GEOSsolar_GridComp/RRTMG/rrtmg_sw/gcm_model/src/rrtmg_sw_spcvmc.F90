@@ -2,6 +2,8 @@
 !pmn: and must have at some point been removed ... consider
 !pmn: removing LW table lookup as well.
 
+#include "MAPL_Generic.h"
+
 module rrtmg_sw_spcvmc
 
 !  --------------------------------------------------------------------------
@@ -16,6 +18,9 @@ module rrtmg_sw_spcvmc
 
    ! ------- Modules -------
 
+   use ESMF
+   use MAPL
+
    use parrrsw, only : nbndsw, ngptsw, jpband
    use rrsw_tbl, only : od_lo
    use rrsw_wvn, only : ngb
@@ -26,7 +31,7 @@ module rrtmg_sw_spcvmc
 contains
 
    ! ---------------------------------------------------------------------------
-   subroutine spcvmc_sw ( &
+   subroutine spcvmc_sw (MAPL, &
       cc, pncol, ncol, nlay, &
       palbd, palbp, &
       pcldymc, ptaucmc, pasycmc, pomgcmc, ptaormc, &
@@ -42,7 +47,8 @@ contains
       pbbfddir, pbbcddir, puvfddir, puvcddir, pnifddir, pnicddir, &
       znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
       ztautp, ztauhp, ztaump, ztaulp, &
-      do_drfband, zdrband, zdfband)
+      do_drfband, zdrband, zdfband, &
+      RC)
    ! ---------------------------------------------------------------------------
    !
    ! Purpose: Contains spectral loop to compute the shortwave radiative fluxes, 
@@ -72,10 +78,14 @@ contains
    ! Revision: Uniform formatting for RRTMG: MJIacono, AER, Jul 2006 
    ! Revision: Use exponential lookup table for transmittance: MJIacono, AER, 
    !           Aug 2007 
+   ! Revision: Added ztau[lmht]p: PMNorris, GMAO, at some point
+   ! Revision: Added zdrband, zdfband for OBIO support: PMNorris, GMAO, Nov 2022
    !
    ! ------------------------------------------------------------------
 
       ! ------- Input -------
+
+      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
 
       integer, intent(in) :: pncol, ncol, cc
       integer, intent(in) :: nlay
@@ -172,6 +182,8 @@ contains
       !    in each band (all-sky): Only filled if (do_drfband).
       real, intent(out), dimension (pncol,nbndsw) :: zdrband, zdfband
 
+      integer, intent(out), optional :: RC  ! return code
+
       ! ------- Local -------
 
       integer :: icol
@@ -203,6 +215,8 @@ contains
       real :: zsflxzen (ngptsw,pncol)
       real :: ssi      (ngptsw,pncol)
 
+      integer :: STATUS  ! for MAPL error reporting
+
       ! ------------------------------------------------------------------
 
       ! zero output accumulators
@@ -233,6 +247,7 @@ contains
       end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
+      call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
       call taumol_sw( &
          pncol, ncol, nlay, &
          colh2o, colco2, colch4, colo2, colo3, colmol, &
@@ -240,6 +255,7 @@ contains
          selffac, selffrac, indself, forfac, forfrac, indfor, &
          isolvar, svar_f, svar_s, svar_i, svar_f_bnd, svar_s_bnd, svar_i_bnd, &
          ssi, zsflxzen, ztaug, ztaur)
+      call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
 
       ! Set fixed boundary values.
       ! The sfc (jk=nlay+1) zref[d] & ztra[d] never change from these.
@@ -291,9 +307,11 @@ contains
       ! Clear-sky reflectivities / transmissivities
       ! note: pcldymc may not be defined here but the
       !       last arg .false. means it is not used anyway.
+      call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
       call reftra_sw (pncol, ncol, nlay, &
                       pcldymc, zgco, prmu0, ztauo, zomco, &
                       zref, zrefd, ztra, ztrad, .false.)
+      call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
 
       ! Clear-sky direct beam transmittance        
       do icol = 1,ncol
@@ -306,10 +324,12 @@ contains
       end do
 
       ! Vertical quadrature for clear-sky fluxes
+      call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
       call vrtqdr_sw(pncol, ncol, nlay, &
                      zref, zrefd, ztra, ztrad, &
                      zdbt, ztdbt, &
                      zfd, zfu)
+      call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
 
       ! Band integration for clear cases      
       do icol = 1,ncol
@@ -385,9 +405,11 @@ contains
 
          ! Update reflectivities / transmissivities for cloudy cells only
          ! note: since cc==2 here pcldymc is defined
+         call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
          call reftra_sw (pncol, ncol, nlay, &
                          pcldymc, zgco, prmu0, ztauo, zomco, &
                          zref, zrefd, ztra, ztrad, .true.)
+         call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
 
          ! Recalculate direct transmission
          do icol = 1,ncol
@@ -405,10 +427,12 @@ contains
          end do
 
          ! Vertical quadrature for total-sky fluxes
+         call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
          call vrtqdr_sw(pncol, ncol, nlay, &
                         zref, zrefd, ztra, ztrad, &
                         zdbt, ztdbt, &
                         zfd, zfu)
+         call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
 
          ! Upwelling and downwelling fluxes at levels
          !   Two-stream calculations go from top to bottom; 
@@ -616,6 +640,7 @@ contains
 
       end if  ! cc==2
 
+      _RETURN(_SUCCESS)
    end subroutine spcvmc_sw
 
    ! --------------------------------------------------------------------
@@ -661,7 +686,7 @@ contains
    ! Original: J-JMorcrette, ECMWF, Feb 2003
    ! Revised for F90 reformatting: MJIacono, AER, Jul 2006
    ! Revised to add exponential lookup table: MJIacono, AER, Aug 2007
-   ! Cleaned up and nodified as per above note: PMNorris, GMAO, Aug 2021
+   ! Cleaned up and modified as per above note: PMNorris, GMAO, Aug 2021
    !
    ! ------------------------------------------------------------------
 

@@ -1,5 +1,3 @@
-!  $Id$
-
 #include "MAPL_Generic.h"
 
 module GEOS_SolarGridCompMod
@@ -13,17 +11,17 @@ module GEOS_SolarGridCompMod
 ! !DESCRIPTION:
 !
 ! {\tt GEOS\_SolarGridCompMod} is an ESMF/MAPL gridded component that performs
-!  a broadband calculation of shortwave radiative fluxes for use as a
-!  solar radiation parameterization in atmospheric models on a sphere. \newline
+! a broadband calculation of shortwave radiative fluxes for use as a solar
+! radiation parameterization in atmospheric models on a sphere. \newline
 !
-! {\em Scientific Basis:} The radiative transfer calculation is based on M-D Chou shortwave
-! parameterization. The basic reference for the scheme is:
-! Chou and Suarez 1999: A Solar Radiation Parameterization for Atmospheric Studies,
-! NASA-TM-1999-104606, Vol 15. An updated version of this report can be
-! found in SolarDoc.pdf in this directory. \newline
+! {\em Scientific Basis:} The radiative transfer calculation is based on the
+! M-D Chou shortwave parameterization. The basic reference for the scheme is:
+! Chou and Suarez 1999: A Solar Radiation Parameterization for Atmospheric
+! Studies, NASA-TM-1999-104606, Vol 15. An updated version of this report
+! can be found in SolarDoc.pdf in this directory. \newline
 !
-! The parameterization treats direct and diffuse fluxes of solar
-! radiation in eight spectral bands:
+! The parameterization treats direct and diffuse fluxes of solar radiation
+! in eight spectral bands:
 ! \begin{verbatim}
 !        in the uv region :
 !           index  1 for the 0.225-0.285 micron band
@@ -38,142 +36,122 @@ module GEOS_SolarGridCompMod
 !           index  8 for the 2.270-3.850 micron band
 ! \end{verbatim}
 ! It includes gaseous absorption due to water vapor, ozone, CO$_2$, and
-! molecular oxygen and the effects of molecular scattering,
-! as well as multiple scattering due to clouds and aerosols.
+! molecular oxygen and the effects of molecular scattering, as well as
+! multiple scattering due to clouds and aerosols. \newline
 !
-! It allows clouds to occur in any layer and
-! horizontal cloud cover fractions must be specified
-! for all layers; clear layers
-! simply have a fraction of zero. Vertically, the layers are
-! assumed to be filled by cloud. To simplify the treatment of
-! cloud effects, the model layers,
-! are grouped into three super layers. Effective cloud properties are then
-! parameterized by assuming that clouds are maximally overlapped within the super layers
-! and randomly overlapped between the super layers.  The
-! optical properties of cloud particles depend on the liquid, ice, and rain mixing ratios,
-! as well as on spatially dependent effective radii for the three species.
-! These are all inputs to the component. \newline
+! It allows clouds to occur in any layer and horizontal cloud cover fractions
+! must be specified for all layers; clear layers simply have a zero fraction.
+! Vertically, the layers are assumed to be filled by cloud. To simplify the
+! treatment of cloud effects, the model layers, are grouped into three super
+! layers. Effective cloud properties are then parameterized by assuming that
+! clouds are maximally overlapped within the super layers and randomly over-
+! lapped between the super layers. The optical properties of cloud particles
+! depend on the liquid, ice, and rain mixing ratios, as well as on spatially
+! dependent effective radii for the three species. These are all inputs to
+! the Gridded Component. \newline
 !
-!  The parameterization can include the effects of an arbitrary
-!  number of aerosol species.
-!  Aerosol optical thickness, single-scattering albedo, and asymmetry
-!  factor must be determined as functions of height and spectral band
-!  for each species. \newline
-!
+! The parameterization can include the effects of an arbitrary number of
+! aerosol species. Aerosol optical thickness, single-scattering albedo, and
+! asymmetry factor must be determined as functions of height and spectral
+! band for each species. \newline
 !
 ! {\em Code Implementation:} \newline
 !
-!  {\tt GEOS\_SolarGridCompMod} is an encapsulation of Chou's plug-compatible
-!  SORAD Fortran routine in a MAPL/ESMF gridded component (GC).
-!  It follows the standard rules for an ESMF/MAPL GCs.
-!  It operates on the ESMF grid that appears in the
-!  gridded component. This grid must
-!  be present in the GC and properly initialized before Initialize
-!  is called. The only restrictions on the grid are that it be 3-dimensional
-!  with two horizontal and one vertical dimension and
-!  with only the horizontal dimensions decomposed. The vertical dimension
-!  is also assumed to the the thrid dimension of the Fortran arrays and
-!  is indexed from the top down. No particular vertical coordinate is assumed,
-!  rather the 3-dimensional field of air pressure at the layer interfaces is
-!  a required Import. \newline
+! {\tt GEOS\_SolarGridCompMod} is an encapsulation of Chou's plug-compatible
+! SORAD Fortran routine in a MAPL/ESMF gridded component (GC). It follows the
+! standard rules for an ESMF/MAPL GCs. It operates on the ESMF grid that
+! appears in the gridded component. This grid must be present in the GC and
+! properly initialized before Initialize is called. The only restrictions on
+! the grid are that it be 3-dimensional with two horizontal and one vertical
+! dimension and with only the horizontal dimensions decomposed. The vertical
+! dimension is also assumed to the the third dimension of the Fortran arrays
+! and is indexed from the top down. No particular vertical coordinate is
+! assumed, rather the 3-dimensional field of air pressure at the layer
+! interfaces is a required Import. \newline
 !
-!  This module contains only SetServices and Run methods.
-!  The Initialize and Finalize methods
-!  being defaulted to the MAPL\_Generic versions.
-!  The SetServices method is the only public
-!  entity. There are no public types or data. \newline
+! This module contains only SetServices and Run methods. The Initialize
+! and Finalize methods being defaulted to the MAPL\_Generic versions. The
+! SetServices method is the only public entity. There are no public types
+! or data. \newline
 !
-!  The contents of the Import, Export, and Internal States are explicitly
-!  described in SetServices and in tables in this documentation.
-!  All quantities in these states are in either ESMF Fields or Bundles,
-!  and all share a common grid---the ESMF grid in the gridded component
-!  at the time Initialize (MAPL\_GenericInitialize, in this case) was called.
-!  All outputs appearing in the Export state are optional and are
-!  filled only if they have been allocated. All filled Exports are valid
-!  for the time interval on the GC's clock when the run method is invoked.
-!  Imports can be from either an instantaneous or a time-averaged state of the
-!  atmosphere. All Imports are read-only; none are Friendly.
-!  Most imports are simple ESMF Fields containing 2- or
-!  3-dimensional quantities, such as temperature and humidity, needed in
-!  the flux calculation. Non-cloud aerosol amounts are the exception; they
-!  appear in an ESMF Bundle.  \newline
+! The contents of the Import, Export, and Internal States are explicitly
+! described in SetServices and in tables in this documentation. All quantities
+! in these states are in either ESMF Fields or Bundles, and all share a common
+! grid---the ESMF grid in the gridded component at the time Initialize (in this
+! case, MAPL\_GenericInitialize) was called. All outputs appearing in the Export
+! state are optional and are filled only if they have been allocated. All filled
+! Exports are valid for the time interval on the GC's clock when the run method
+! is invoked. Imports can be from either an instantaneous or a time-averaged
+! state of the atmosphere. All Imports are read-only; none are Friendly. Most
+! imports are simple ESMF Fields containing 2- or 3-dimensional quantities,
+! such as temperature and humidity, needed in the flux calculation. Non-cloud
+! aerosol amounts are the exception; they appear in an ESMF Bundle. \newline
 !
-!  The net (+ve downward) fluxes on the Export state are defined at the layer
-!  interfaces, which are indexed from the top of the atmosphere (L=0)
-!  to the surface. Incident fluxes
-!  at the surface also appear in the Export state; these are separated
-!  into direct (beam) and diffuse fluxes for three spectral bands
-!  (uv, par, nir), as defined in the table above.  \newline
+! The net (+ve downward) fluxes on the Export state are defined at the layer
+! interfaces, which are indexed from the top of the atmosphere (L=0) to the
+! surface. Incident fluxes at the surface also appear in the Export state;
+! these are separated into direct (beam) and diffuse fluxes for three spectral
+! bands (uv, par, nir), as defined in the table above. \newline
 !
-!  The full transfer calculation is done infrequently and
-!  its results kept in the Internal state.
-!  The frequency of full calculations is controlled
-!  by an alarm whose interval can be set
-!  from a value in the configuration and whose origin is taken as the
-!  beginning of the run.
-!  For the full calculations, solar fluxes are computed based on
-!  mean zenith angles averaged over sun positions for a
-!  given period (the long interval, which can be specified in
-!  the configuration) beyond the
-!  current time on the input clock. On every call to the Run method,
-!  whatever the state of the alarm that controls the full calculation,
-!  the sun's position
-!  is updated to the mean position for the clock's current interval
-!  and fluxes are updated based on normalized fluxes computed during
-!  the previous full transfer calculation, but using
-!  the TOA insolation for the current time on the clock. Because of this
-!  intermittent scheme, checkpoint-restart sequences are seamless
-!  only when interrupted at the time of the full calculation.\newline
+! The full transfer calculation is done infrequently and its results kept in
+! the Internal state. The frequency of full calculations is controlled by an
+! alarm whose interval can be set from a value in the configuration and whose
+! origin is taken as the beginning of the run. For the full calculations, solar
+! fluxes are computed based on mean zenith angles averaged over sun positions
+! for a given period (the long interval, which can be specified in the config-
+! uration) beyond the current time on the input clock. On every call to the Run
+! method, whatever the state of the alarm that controls the full calculation,
+! the sun's position is updated to the mean position for the clock's current
+! interval and fluxes are updated based on normalized fluxes computed during
+! the previous full transfer calculation, but using the TOA insolation for the
+! current time on the clock. Because of this intermittent scheme, checkpoint-
+! restart sequences are seamless only when interrupted at the time of the full
+! calculation. \newline
 !
-!  The calculation relies in MAPL's Astronomy layer, which in turn
-!  assumes that the ESMF grid can be queried for latitude and longitude
-!  coordinates. \newline
+! The calculation relies in MAPL's Astronomy layer, which in turn assumes that
+! the ESMF grid can be queried for latitude and longitude coordinates. \newline
 !
 ! {\em Configuration:} \newline
 !
-!  Like all MAPL GCs, {\tt GEOS\_SolarGridCompMod} assumes that the configuration
-!  in the ESMF GC is open and treats it as an environment from which it can
-!  {\em at any time} read control information. It uses MAPL rules for scanning this
-!  configuration.
+! Like all MAPL GCs, {\tt GEOS\_SolarGridCompMod} assumes that the configuration
+! in the ESMF GC is open and treats it as an environment from which it can {\em
+! at any time} read control information. It uses MAPL rules for scanning this
+! configuration.
 !\begin{verbatim}
 !
-!VARIABLE             DESCRIPTION           UNITS      DEFAULT   NOTES
+! VARIABLE             DESCRIPTION           UNITS      DEFAULT   NOTES
 !
-!RUN_DT:              Short time interval   (seconds)  none
-!DT:                  Long time interval    (seconds)  RUN_DT
-!AVGR:                Averaging interval    (seconds)  DT
-!PRS_LOW_MID_CLOUDS:  Interface pressure    (Pa)       70000.
-!                     between the low and
-!                     middle cloud layers
-!PRS_MID_HIGH_CLOUDS: Interface pressure    (Pa)       40000.
-!                     between the high and
-!                     middle cloud layers
-!SOLAR_CONSTANT:                            (W m-2)    none      Use -1 for time-dependent values
-!CO2:                 CO2 concentration     (ppmv)     none      Use -1 for time-dependent values
+! RUN_DT:              Short time interval   (seconds)  none
+! DT:                  Long time interval    (seconds)  RUN_DT
+! AVGR:                Averaging interval    (seconds)  DT
+! PRS_LOW_MID_CLOUDS:  Interface pressure    (Pa)       70000.
+!                      between the low and
+!                      middle cloud layers
+! PRS_MID_HIGH_CLOUDS: Interface pressure    (Pa)       40000.
+!                      between the high and
+!                      middle cloud layers
+! SOLAR_CONSTANT:                            (W m-2)    none      Use -1 for time-dependent values
+! CO2:                 CO2 concentration     (ppmv)     none      Use -1 for time-dependent values
 !
 !\end{verbatim}
-!
 !
 ! !BUGS:
 !
-!\end{verbatim}
 !\begin{itemize}
-!    \item Aerosol properties for each aerosol in the Bundle are obtained by
-!    calling a global method (Get\_AeroOptProp) that must recognize
-!    the aerosol by its Field name in the Bundle. This is a placeholder
-!    for a scheme in which each Field carries with it a method for computing
-!    its aerosol's optical properties.
+!  \item Aerosol properties for each aerosol in the Bundle are obtained by calling a global
+!  method (Get\_AeroOptProp) that must recognize the aerosol by its Field name in the Bundle.
+!  This is a placeholder for a scheme in which each Field carries with it a method for
+!  computing its aerosol's optical properties.
 !
-!    \item The grid must have two horizontal dimensions and they must be the inner dimensions
-!    of Fortran arrays.
+!  \item The grid must have two horizontal dimensions and they must be the inner dimensions
+!  of Fortran arrays.
 !
-!    \item The load-balancing relies on the grid describing a sphere. Everything
-!    works for non-spherical grids but the load-balancing should be disabled
-!    and this can be done only by going into the code.
+!  \item The load-balancing relies on the grid describing a sphere. Everything works for
+!  non-spherical grids but the load-balancing should be disabled and this can be done only
+!  by going into the code.
 !\end{itemize}
-! \begin{verbatim}
 !
-!   */
+! */
 
 ! !USES:
 
@@ -187,9 +165,11 @@ module GEOS_SolarGridCompMod
   use sorad_constants, only : HK_IR_OLD, HK_UV_OLD
   use gettau, only: getvistau
 
-  use rrtmg_sw_rad
+  use rrtmg_sw_rad, only: rrtmg_sw
   use rrtmg_sw_init, only: rrtmg_sw_ini
   use parrrsw, only: ngptsw
+  use cloud_subcol_gen, only: &
+     generate_stochastic_clouds, clearCounts_threeBand
 
   implicit none
   private
@@ -206,21 +186,18 @@ module GEOS_SolarGridCompMod
   INTEGER, PARAMETER :: NB_RRTMGP   = 14
   INTEGER, PARAMETER :: NB_OBIO     = 33
 
-#define PACKIT   1
-#define UNPACKIT 2
-
 !EOP
 
-  ! RRTMGP internal state
-  ! This will be attached to the Gridded Component
-  ! used to provide efficient initialization
+  ! RRTMGP internal state:
+  ! Will be attached to the Gridded Component.
+  ! Used to provide efficient initialization
   type ty_RRTMGP_state
     private
     logical :: initialized = .false.
     type (ty_gas_optics_rrtmgp) :: k_dist
   end type ty_RRTMGP_state
 
-  ! wrapper to access RRTMGP internal state
+  ! Wrapper to access RRTMGP internal state
   type ty_RRTMGP_wrap
     type (ty_RRTMGP_state), pointer :: ptr => null()
   end type ty_RRTMGP_wrap
@@ -241,10 +218,10 @@ contains
     integer, optional                  :: RC  ! return code
 
 ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
-!                the Initialize and Finalize services, as well as allocating
-!   our instance of a MAPL\_MetaComp and putting it in the
-!   gridded component (GC). Here we only need to register the Run method with ESMF and
-!   register the state variable specifications with MAPL. \newline
+!   the Initialize and Finalize services, as well as allocating our instance of a
+!   MAPL\_MetaComp and putting it in the gridded component (GC). Here we only need
+!   to register the Run method with ESMF and register the state variable
+!   specifications with MAPL. \newline
 !
 
 !EOP
@@ -253,36 +230,31 @@ contains
 
 ! ErrLog Variables
 
-    character(len=ESMF_MAXSTR)              :: IAm
-    integer                                 :: STATUS
-    character(len=ESMF_MAXSTR)              :: COMP_NAME
+    character(len=ESMF_MAXSTR) :: IAm
+    character(len=ESMF_MAXSTR) :: COMP_NAME
+    integer                    :: STATUS
 
 ! Local derived type aliases
 
-    type (ESMF_Config          )            :: CF
+    type (MAPL_MetaComp), pointer :: MAPL
 
 ! Locals
 
-    integer      :: RUN_DT
-    integer      :: MY_STEP
-    integer      :: ACCUMINT
-    real         :: DT
+    integer :: RUN_DT
+    integer :: MY_STEP
+    integer :: ACCUMINT
+    real    :: DT
 
-    logical      :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    real         :: RFLAG
-    integer      :: NUM_BANDS_SOLAR
-    logical      :: SOLAR_TO_OBIO
+    logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer :: NUM_BANDS_SOLAR
+    logical :: SOLAR_TO_OBIO
 
-    type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
+    type (ty_RRTMGP_state), pointer :: rrtmgp_state
     type (ty_RRTMGP_wrap)           :: wrap
 
 !=============================================================================
 
-! Begin...
-
-! Get my name and set-up traceback handle
-! ---------------------------------------
-
+    ! Get my name and set-up traceback handle
     call ESMF_GridCompGet(GC, NAME=COMP_NAME, __RC__)
     Iam = trim(COMP_NAME) // 'SetServices'
 
@@ -292,46 +264,26 @@ contains
     call ESMF_UserCompSetInternalState(GC, 'RRTMGP_state', wrap, status)
     VERIFY_(status)
 
-! Get the configuration
-! ---------------------
+    ! Get my internal MAPL_Generic state
+    call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
-    call ESMF_GridCompGet(GC, CONFIG=CF, __RC__)
-
-! Get the intervals; "heartbeat" must exist
-! -----------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label="RUN_DT:", __RC__)
+    ! Get the intervals; "heartbeat" must exist
+    call MAPL_GetResource (MAPL, DT, Label="RUN_DT:", __RC__)
     RUN_DT = nint(DT)
 
-! Refresh interval defaults to heartbeat.
-! ---------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label=trim(COMP_NAME)//"_DT:", default=DT, __RC__)
+    ! Refresh interval defaults to heartbeat.
+    call MAPL_GetResource (MAPL, DT, Label=trim(COMP_NAME)//"_DT:", default=DT, __RC__)
     MY_STEP = nint(DT)
 
-! Averaging interval defaults to refresh interval.
-!-------------------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label=trim(COMP_NAME)//'Avrg:', default=DT, __RC__)
+    ! Averaging interval defaults to refresh interval.
+    call MAPL_GetResource (MAPL, DT, Label=trim(COMP_NAME)//"Avrg:", default=DT, __RC__)
     ACCUMINT = nint(DT)
 
-! Decide which radiation to use
-! RRTMGP dominates RRTMG dominates Chou-Suarez
-! Chou-Suarez is the default if nothing else asked for in Resource file
-! Needed in SetServices because we Export a per-band flux and the
-!   number of bands differs between codes.
-!----------------------------------------------------------------------
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call ESMF_ConfigGetAttribute(CF, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.0
-    if (.not. USE_RRTMGP) then
-      call ESMF_ConfigGetAttribute(CF, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.0
-      USE_CHOU  = .not.USE_RRTMG
-    end if
+    ! Decide which radiation to use:
+    ! Needed in SetServices because we Export a per-band flux and the
+    !   number of bands differs between codes.
+    !----------------------------------------------------------------------
+    call choose_solar_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
 
     ! Set number of solar bands
     if (USE_RRTMGP) then
@@ -343,7 +295,7 @@ contains
     end if
 
     ! Decide if should make OBIO exports
-    call ESMF_ConfigGetAttribute(CF, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', &
+    call MAPL_GetResource (MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', &
        DEFAULT=.FALSE., __RC__)
 
 ! Set the state variable specs.
@@ -547,6 +499,14 @@ contains
 !  Versions of these, weighted by the appropriate TOA insolation,
 !  are returned at each time step.
 
+!  NB: Those INTERNALs with "FRIENDLYTO = trim(COMP_NAME)" effect a
+!  MAPL feature where INTERNALs can be EXPORTed without an explicit
+!  EXPORT of the same name and without any explicit INTERNAL to
+!  EXPORT copying (such as we used to do with DRUVRN, etc., after
+!  the second SORADCORE call in REFRESH). With this feature there is
+!  only INTERNAL storage reserved, and the EXPORT, if requested, just
+!  gets its value from that space.
+
 !  !INTERNAL STATE:
 
     call MAPL_AddInternalSpec(GC,                                            &
@@ -590,42 +550,48 @@ contains
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DRUVRN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  = 'normalized_surface_downwelling_ultraviolet_diffuse_flux',&
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DFUVRN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  = 'normalized_surface_downwelling_par_beam_flux',          &
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DRPARN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  = 'normalized_surface_downwelling_par_diffuse_flux',       &
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DFPARN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  = 'normalized_surface_downwelling_nearinfrared_beam_flux', &
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DRNIRN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  = 'normalized_surface_downwelling_nearinfrared_diffuse_flux',&
        UNITS      = '1',                                                     &
        SHORT_NAME = 'DFNIRN',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     if (SOLAR_TO_OBIO) then
 
@@ -683,6 +649,123 @@ contains
        UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                               &
        VLOCATION      = MAPL_VLocationNone,                            __RC__)
 
+!  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!  NB: The following INTERNALs are really EXPORTs. As of 5/2022 MAPL only re-
+!  loads IMPORTs and INTERNALs at the beginning of the replay Corrector phase,
+!  not EXPORTs, with the consequence that intermittant EXPORTs (such as these
+!  solar REFRESH exports) which were assumed to persist will actually have
+!  values from the end of the Predictor phase, which is 3 hours ahead.
+!    The fix below uses the combined INTERNAL/EXPORT feature of MAPL mentioned
+!  above (with the required FRIENDLYTO). Since the EXPORT becomes an INTERNAL,
+!  it IS reloaded and time-synced correctly. It is not a perfect solution,
+!  since now EXPORTS that are NOT requested still take up INTERNAL storage.
+!  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    ! This is the flux-weighted and time-averaged value over the REFRESH interval.
+    ! It should be used for sub-sampling or analysing REFRESH diagnostics, such
+    ! as CLDxxSW.
+    call MAPL_AddInternalSpec(GC,                                            &
+       SHORT_NAME = 'COSZSW',                                                &
+       LONG_NAME  = 'cosine_of_the_solar_zenith_angle_of_Solar_REFRESH',     &
+       UNITS      = '1',                                                     &
+       DEFAULT    = MAPL_UNDEF,                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
+
+    ! Note: the four CLDxxSW diagnostics below represent super-layer cloud
+    ! fractions based on the subcolumn cloud generation called in RRTMG SW.
+    ! They are sunlit only fields and generated only at the SW REFRESH frequency,
+    ! NOT at the heartbeat. As such, they are useful for diagnostic comparisons
+    ! with the CLDxx set above. But they should NOT be used to subsample fields
+    ! that are produced on the model heartbeat (e.g. subsampling for cloud
+    ! presence). Note, also, that when comparing CLDxxSW with CLDxx, it is better
+    ! to subsample both with COSZSW >= cmin, (e.g., 0.25). This COSZSW is a
+    ! REFRESH-frequency version of MCOSZ and, as such, is most appropriate for
+    ! subsampling REFRESH-frequency fields like CLDxxSW. Of course, you can also
+    ! subsample CLDxx with COSZSW since CLDxx are global. By sampling both
+    ! CLDxxSW and CLDxx with COSZSW you get a fair apples-to-apples comparison
+    ! between the two.
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       SHORT_NAME = 'CLDTTSW',                                               &
+       LONG_NAME  = 'total_cloud_area_fraction_rrtmg_sw_REFRESH',            &
+       UNITS      = '1',                                                     &
+       DEFAULT    = MAPL_UNDEF,                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       SHORT_NAME = 'CLDHISW',                                               &
+       LONG_NAME  = 'high-level_cloud_area_fraction_rrtmg_sw_REFRESH',       &
+       UNITS      = '1',                                                     &
+       DEFAULT    = MAPL_UNDEF,                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       SHORT_NAME = 'CLDMDSW',                                               &
+       LONG_NAME  = 'mid-level_cloud_area_fraction_rrtmg_sw_REFRESH',        &
+       UNITS      = '1',                                                     &
+       DEFAULT    = MAPL_UNDEF,                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       SHORT_NAME = 'CLDLOSW',                                               &
+       LONG_NAME  = 'low-level_cloud_area_fraction_rrtmg_sw_REFRESH',        &
+       UNITS      = '1',                                                     &
+       DEFAULT    = MAPL_UNDEF,                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
+
+    ! Note: The following four TAUxxPAR are REFRESH-frequency fields. As such, all
+    ! the important provisos given in the comment on CLDxxSW above apply to these
+    ! fields as well. Please read those provisos.
+
+    call MAPL_AddInternalSpec(GC,                                                    &
+       SHORT_NAME = 'TAULOPAR',                                                      &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_PAR_REFRESH',    &
+       UNITS      = '1' ,                                                            &
+       DEFAULT    = MAPL_UNDEF,                                                      &
+       DIMS       = MAPL_DimsHorzOnly,                                               &
+       VLOCATION  = MAPL_VLocationNone,                                              &
+       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                    &
+       SHORT_NAME = 'TAUMDPAR',                                                      &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_PAR_REFRESH', &
+       UNITS      = '1' ,                                                            &
+       DEFAULT    = MAPL_UNDEF,                                                      &
+       DIMS       = MAPL_DimsHorzOnly,                                               &
+       VLOCATION  = MAPL_VLocationNone,                                              &
+       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                    &
+       SHORT_NAME = 'TAUHIPAR',                                                      &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_PAR_REFRESH',   &
+       UNITS      = '1' ,                                                            &
+       DEFAULT    = MAPL_UNDEF,                                                      &
+       DIMS       = MAPL_DimsHorzOnly,                                               &
+       VLOCATION  = MAPL_VLocationNone,                                              &
+       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                    &
+       SHORT_NAME = 'TAUTTPAR',                                                      &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_PAR_REFRESH',    &
+       UNITS      = '1' ,                                                            &
+       DEFAULT    = MAPL_UNDEF,                                                      &
+       DIMS       = MAPL_DimsHorzOnly,                                               &
+       VLOCATION  = MAPL_VLocationNone,                                              &
+       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+
+!  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!  END of EXPORTs masquerading as INTERNALs
+!  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 !  !EXPORT STATE:
 
@@ -785,48 +868,6 @@ contains
        DIMS           = MAPL_DimsHorzOnly,                                   &
        UNGRIDDED_DIMS = (/ NUM_BANDS_SOLAR /),                               &
        VLOCATION      = MAPL_VLocationNone,                            __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_ultraviolet_beam_flux',  &
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DRUVRN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_ultraviolet_diffuse_flux',&
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DFUVRN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_par_beam_flux',          &
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DRPARN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_par_diffuse_flux',       &
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DFPARN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_nearinfrared_beam_flux', &
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DRNIRN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'normalized_surface_downwelling_nearinfrared_diffuse_flux',&
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'DFNIRN',                                                &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'surface_downwelling_ultraviolet_beam_normal_flux',      &
@@ -946,53 +987,11 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
-! Note: the four CLDxxSW diagnostics below represent super-layer cloud
-! fractions based on the subcolumn cloud generation called in RRTMG SW.
-! They are sunlit only fields and generated only at the SW REFRESH frequency,
-! NOT at the heartbeat. As such, they are useful for diagnostic comparisons
-! with with the full CLDxx set above. But they should NOT be used to subsample
-! fields that are produced on the model heartbeat (e.g. subsampling for cloud
-! presence). Note, also, that when comparing CLDxxSW with CLDxx, it is better
-! to subsample both with COSZSW >= cmin, (e.g., 0.25). This COSZSW is a
-! REFRESH-frequency version of MCOSZ and, as such, is most appropriate for
-! subsampling REFRESH-frequency fields like CLDxxSW. Of course, you can also
-! subsample CLDxx with COSZSW since CLDxx are global. By sampling both
-! CLDxxSW and CLDxx with COSZSW you get a fair apples-to-apples comparison
-! between the two.
-
-    call MAPL_AddExportSpec(GC,                                              &
-        SHORT_NAME = 'CLDTTSW',                                              &
-        LONG_NAME  = 'total_cloud_area_fraction_rrtmg_sw_REFRESH',           &
-        UNITS      = '1',                                                    &
-        DIMS       = MAPL_DimsHorzOnly,                                      &
-        VLOCATION  = MAPL_VLocationNone,                              __RC__ )
-
-    call MAPL_AddExportSpec(GC,                                              &
-        SHORT_NAME = 'CLDHISW',                                              &
-        LONG_NAME  = 'high-level_cloud_area_fraction_rrtmg_sw_REFRESH',      &
-        UNITS      = '1',                                                    &
-        DIMS       = MAPL_DimsHorzOnly,                                      &
-        VLOCATION  = MAPL_VLocationNone,                              __RC__ )
-
-    call MAPL_AddExportSpec(GC,                                              &
-        SHORT_NAME = 'CLDMDSW',                                              &
-        LONG_NAME  = 'mid-level_cloud_area_fraction_rrtmg_sw_REFRESH',       &
-        UNITS      = '1',                                                    &
-        DIMS       = MAPL_DimsHorzOnly,                                      &
-        VLOCATION  = MAPL_VLocationNone,                              __RC__ )
-
-    call MAPL_AddExportSpec(GC,                                              &
-        SHORT_NAME = 'CLDLOSW',                                              &
-        LONG_NAME  = 'low-level_cloud_area_fraction_rrtmg_sw_REFRESH',       &
-        UNITS      = '1',                                                    &
-        DIMS       = MAPL_DimsHorzOnly,                                      &
-        VLOCATION  = MAPL_VLocationNone,                              __RC__ )
-
 ! Note: the four CLDxxSWHB diagnostics below represent super-layer cloud
 ! fractions based on essentially the same subcolumn cloud generation used
 ! by RRTMG SW but called from within the SOLAR UPDATE at the HEARTBEAT.
 ! They are GLOBAL (not just sunlit) fields and generated on the heartbeat.
-! But because subcolumn cloud generation is EXPENSIVE, asking for any of
+! BUT, because subcolumn cloud generation is EXPENSIVE, asking for any of
 ! these exports will DOUBLE the cost of running the SOLAR GC. As such,
 ! they are for SPECIAL VALIDATION PURPOSES ONLY. No cost is incurred if
 ! they are not exported. Note, also, that they are NOT EXACTLY heartbeat
@@ -1001,8 +1000,8 @@ contains
 ! the generation inside UPDATE is on non-flipped vertical fields. This latter
 ! difference should be statistically insignificant. A re-coding to use vert-
 ! ically flipped fields as per RRTMG SW is possible but will be slightly
-! slower, and was deemed not necessary since the first cloud fraction
-! frequency difference will likely dominate.
+! slower, and was deemed not necessary since the cloud fraction frequency
+! difference will likely dominate.
 
     call MAPL_AddExportSpec(GC,                                              &
         SHORT_NAME = 'CLDTTSWHB',                                            &
@@ -1095,38 +1094,6 @@ contains
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationCenter,                              __RC__)
 
-! Note: The following four TAUxxPAR are REFRESH-frequency fields. As such, all
-! the important provisos given in the comment on CLDxxSW above apply to these
-! fields as well. Please read those provisos.
-
-    call MAPL_AddExportSpec(GC,                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_PAR_REFRESH',    &
-       UNITS      = '1' ,                                                            &
-       SHORT_NAME = 'TAULOPAR',                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                        __RC__)
-
-    call MAPL_AddExportSpec(GC,                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_PAR_REFRESH', &
-       UNITS      = '1' ,                                                            &
-       SHORT_NAME = 'TAUMDPAR',                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                        __RC__)
-
-    call MAPL_AddExportSpec(GC,                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_PAR_REFRESH',   &
-       UNITS      = '1' ,                                                            &
-       SHORT_NAME = 'TAUHIPAR',                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                        __RC__)
-
-    call MAPL_AddExportSpec(GC,                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_PAR_REFRESH',    &
-       UNITS      = '1' ,                                                            &
-       SHORT_NAME = 'TAUTTPAR',                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                        __RC__)
-
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'surface_net_downward_shortwave_flux_assuming_clear_sky',&
        UNITS      = 'W m-2',                                                 &
@@ -1210,7 +1177,6 @@ contains
        SHORT_NAME = 'SLRSUFCNA',                                             &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
-!END CAR
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'toa_outgoing_shortwave_flux',                           &
@@ -1239,7 +1205,6 @@ contains
        SHORT_NAME = 'OSRCNA',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
-!END CAR
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'toa_net_downward_shortwave_flux',                       &
@@ -1311,6 +1276,10 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+    ! Three (one above now) different cos(SZA)s ...
+
+    ! This one is instantaneous at the end of the UPDATE period,
+    ! so it is consistent with the HISTORY files output time.
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'cosine_of_the_solar_zenith_angle',                      &
        UNITS      = '1',                                                     &
@@ -1318,17 +1287,13 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+    ! This one is the mean over the update period, so it will be half
+    ! a heartbeat behind the HISTORY file time. But this is the flux-
+    ! weighted and update-interval-averaged COSZ value used by the UPDATE.
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'mean_cosine_of_the_solar_zenith_angle',                 &
        UNITS      = '1',                                                     &
        SHORT_NAME = 'MCOSZ',                                                 &
-       DIMS       = MAPL_DimsHorzOnly,                                       &
-       VLOCATION  = MAPL_VLocationNone,                                __RC__)
-
-    call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'cosine_of_the_solar_zenith_angle_of_Solar_REFRESH',     &
-       UNITS      = '1',                                                     &
-       SHORT_NAME = 'COSZSW',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
@@ -1348,8 +1313,7 @@ contains
 
 !EOS
 
-! Set the Profiling timers
-! ------------------------
+    ! Set the Profiling timers
 
     call MAPL_TimerAdd(GC, name="PRELIMS"                 , __RC__)
     call MAPL_TimerAdd(GC, name="REFRESH"                 , __RC__)
@@ -1358,23 +1322,23 @@ contains
     call MAPL_TimerAdd(GC, name="--SORAD_RUN"             , __RC__)
     call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_PART"           , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
+    call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMG_FLIP"            , __RC__)
-
     call MAPL_TimerAdd(GC, name="-RRTMGP"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_SETUP_1"        , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_SETUP_2"        , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_SETUP_3"        , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_1"           , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_2"           , __RC__)
+    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_GAS"         , __RC__)
+    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_AEROSOL_SETUP"  , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_SUBSET"         , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_POST"           , __RC__)
-
     call MAPL_TimerAdd(GC, name="-BALANCE"                , __RC__)
     call MAPL_TimerAdd(GC, name="--CREATE"                , __RC__)
     call MAPL_TimerAdd(GC, name="--DISTRIBUTE"            , __RC__)
@@ -1383,9 +1347,7 @@ contains
     call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
     call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
 
-! Set Run method and use generic init and final methods
-! -----------------------------------------------------
-
+    ! Set Run method and use generic Initalize and Finalize methods
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
 
@@ -1408,7 +1370,7 @@ contains
     type(ESMF_State),    intent(inout) :: IMPORT ! Import state
     type(ESMF_State),    intent(inout) :: EXPORT ! Export state
     type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
-    integer, optional,   intent(  out) :: RC     ! Error code:
+    integer, optional,   intent(  out) :: RC     ! Error code
 ! /*
 ! !DESCRIPTION: Each time the Run method is called it fills all Exports for
 !   which an allocated pointer is available. Exports are filled from the
@@ -1429,15 +1391,12 @@ contains
 ! !BUGS:
 !
 !\end{verbatim}
-!
 ! \begin{itemize}
 !  \item Deciding on the correct behavior for intermitent calls can be tricky.
-!
 !  \item Load-balancing communication needs to be upgraded to most up-to-date
 !  ESMF machine model.
 ! \end{itemize}
-!
-! \begin{verbatim}
+!\begin{verbatim}
 !
 
 !EOP
@@ -1445,47 +1404,36 @@ contains
 
 ! ErrLog Variables
 
-    character(len=ESMF_MAXSTR)          :: IAm
-    integer                             :: STATUS
-    character(len=ESMF_MAXSTR)          :: COMP_NAME
+    character(len=ESMF_MAXSTR) :: IAm
+    character(len=ESMF_MAXSTR) :: COMP_NAME
+    integer :: STATUS
 
 ! Local derived type aliases
 
-    type (MAPL_MetaComp),     pointer   :: MAPL
-    type (ESMF_Grid        )            :: ESMFGRID
-    type (ESMF_Config      )            :: CF
+    type (MAPL_MetaComp), pointer :: MAPL
+    type (ESMF_Grid)              :: ESMFGRID
+    type (ESMF_Config)            :: CF
 
-    type (ty_RRTMGP_state), pointer     :: rrtmgp_state => null()
-    type (ty_RRTMGP_wrap)               :: wrap
+    type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
+    type (ty_RRTMGP_wrap)           :: wrap
 
 ! Local variables
 
-    type (ESMF_Alarm)                   :: ALARM
-    type (ESMF_State)                   :: INTERNAL
-    type (ESMF_Time)                    :: currentTime
-    type (ESMF_TimeInterval)            :: intDT
-    integer                             :: IM, JM, LM
-    type (MAPL_SunOrbit)                :: ORBIT
-    type (MAPL_VarSpec), pointer        :: ImportSpec(:)   => null()
-    type (MAPL_VarSpec), pointer        :: ExportSpec(:)   => null()
-    type (MAPL_VarSpec), pointer        :: InternalSpec(:) => null()
-    real, pointer, dimension(:,:)       :: LONS
-    real, pointer, dimension(:,:)       :: LATS
+    type (ESMF_Alarm)             :: ALARM
+    type (ESMF_State)             :: INTERNAL
+    type (ESMF_Time)              :: currentTime
+    type (ESMF_TimeInterval)      :: intDT
+    integer                       :: IM, JM, LM
+    type (MAPL_SunOrbit)          :: ORBIT
+    type (MAPL_VarSpec), pointer  :: ImportSpec(:)   => null()
+    type (MAPL_VarSpec), pointer  :: ExportSpec(:)   => null()
+    type (MAPL_VarSpec), pointer  :: InternalSpec(:) => null()
+    real, pointer, dimension(:,:) :: LONS
+    real, pointer, dimension(:,:) :: LATS
 
-    real, pointer, dimension(:,:,:)     :: FSWNA, FSWUNA, FSWDNA
-    real, pointer, dimension(:,:,:)     :: FSCNA, FSCUNA, FSCDNA
-    real, pointer, dimension(:,:,:)     :: FSWBANDNA
-
-    real, pointer, dimension(:,:  )     :: RSRNA, RSRSNA, OSRNA,  SLRSFNA,  SLRSUFNA
-    real, pointer, dimension(:,:  )     :: RSCNA, RSCSNA, OSRCNA, SLRSFCNA, SLRSUFCNA
-
-    real, pointer, dimension(:,:  )     :: DFUVRN, DRUVRN
-    real, pointer, dimension(:,:  )     :: DFPARN, DRPARN
-    real, pointer, dimension(:,:  )     :: DFNIRN, DRNIRN
-    real, pointer, dimension(:,:  )     ::  DFUVR,  DRUVR
-    real, pointer, dimension(:,:  )     ::  DFPAR,  DRPAR
-    real, pointer, dimension(:,:  )     ::  DFNIR,  DRNIR
-
+    real, pointer, dimension(:,:,:) :: ptr3d
+    real, pointer, dimension(:,:  ) :: ptr2d
+    
     type (ESMF_State)                     :: AERO
     character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME
     integer                               :: AS_STATUS
@@ -1500,17 +1448,17 @@ contains
     real, allocatable, dimension(:,:,:,:) :: AEROSOL_SSA
     real, allocatable, dimension(:,:,:,:) :: AEROSOL_ASY
 
-    integer            :: band
-    logical            :: implements_aerosol_optics
-    logical            :: USE_RRTMGP, USE_RRTMGP_IRRAD
-    logical            :: USE_RRTMG , USE_RRTMG_IRRAD
-    logical            :: USE_CHOU  , USE_CHOU_IRRAD
-    real               :: RFLAG
-    integer            :: NUM_BANDS_SOLAR, NUM_BANDS, TOTAL_RAD_BANDS
-    logical            :: SOLAR_TO_OBIO
+    integer :: band
+    logical :: implements_aerosol_optics
+    logical :: USE_RRTMGP, USE_RRTMGP_IRRAD
+    logical :: USE_RRTMG,  USE_RRTMG_IRRAD
+    logical :: USE_CHOU,   USE_CHOU_IRRAD
+    integer :: NUM_BANDS_SOLAR, NUM_BANDS, TOTAL_RAD_BANDS
+    logical :: SOLAR_TO_OBIO
 
     integer, parameter :: BANDS_SOLAR_OFFSET = 0
 
+!PMN these three are redundant ... remove with zero-diff test later
     integer, parameter :: NB_CHOU  = 8         ! Num bands in SORAD calcs for Chou
     integer, parameter :: NB_RRTMG = 14        ! Num bands in SORAD calcs for RRTMG
     integer, parameter :: NB_RRTMGP = 14       ! Num bands in SORAD calcs for RRTMGP
@@ -1520,10 +1468,9 @@ contains
     integer, parameter :: NB_RRTMGP_IRRAD = 16 ! Num bands in IRRAD calcs for RRTMGP
 
     integer :: CalledLast
-    integer :: LCLDMH
-    integer :: LCLDLM
-    integer :: K
+    integer :: LCLDMH, LCLDLM
     integer :: YY, DOY
+    integer :: K
     real    :: CO2
     real    :: PRS_LOW_MID
     real    :: PRS_MID_HIGH
@@ -1549,27 +1496,28 @@ contains
     logical                        :: USE_NRLSSI2
     logical                        :: PersistSolar
 
+    logical :: do_no_aero_calc
+       
+    ! list of strings facility
+    integer :: i
+    type S_    
+      character(len=:), allocatable :: str
+    end type S_
+    type(S_), allocatable :: list(:)
+
 !=============================================================================
 
-! Begin...
-
-! Get the target components name and set-up traceback handle.
-! -----------------------------------------------------------
-
+    ! Get the target components name and set-up traceback handle.
     call ESMF_GridCompGet (GC, name=COMP_NAME, GRID=ESMFGRID, __RC__ )
     Iam = trim(COMP_NAME) // "Run"
 
-! Get my internal MAPL_Generic state
-!-----------------------------------
-
+    ! Get my internal MAPL_Generic state
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
     call MAPL_TimerOn (MAPL,"TOTAL"  ,__RC__)
     call MAPL_TimerOn (MAPL,"PRELIMS",__RC__)
 
-! Get parameters from generic state.
-!-----------------------------------
-
+    ! Get parameters from generic state.
     call MAPL_Get(MAPL,                                &
          IM                  = IM,                     &
          JM                  = JM,                     &
@@ -1584,36 +1532,28 @@ contains
          EXPORTspec          = ExportSpec,             &
          INTERNAL_ESMF_STATE = INTERNAL,         __RC__)
 
-! Get parameters from configuration
-!----------------------------------
-
+    ! Get parameters from configuration
     call MAPL_GetResource (MAPL, PRS_LOW_MID,  'PRS_LOW_MID_CLOUDS:' , DEFAULT=70000., __RC__)
     call MAPL_GetResource (MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', DEFAULT=40000., __RC__)
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
 
-! Should we load balance solar radiation?
-! For the single-column model, we always use the
-! DATMO DYCORE. If this is our DYCORE, turn off
-! load balancing.
-!---------------------------------------------
-
+    ! Should we load balance solar radiation?
+    ! For the single-column model, we always use the DATMO DYCORE.
+    ! If this is our DYCORE, turn off load balancing.
+    !---------------------------------------------
     call MAPL_GetResource (MAPL, DYCORE, 'DYCORE:', __RC__)
     call MAPL_GetResource (MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', DEFAULT=1, __RC__)
-
     if (adjustl(DYCORE)=="DATMO" .OR. SOLAR_LOAD_BALANCE==0) then
        LoadBalance = .FALSE.
     else
        LoadBalance = .TRUE.
     end if
 
-! Use time-varying co2
-!---------------------
-
+    ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
     call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, __RC__)
-
     if(CO2<0.0) then
        CO2 = GETCO2(YY,DOY)
        write(MSGSTRING,'(A,I4,A,I3,A,e12.5)') &
@@ -1629,35 +1569,13 @@ contains
        call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, __RC__)
     end if
 
-! Decide which radiation to use
-! RRTMGP dominates RRTMG dominates Chou-Suarez
-! Chou-Suarez is the default if nothing else asked for in Resource file
-! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
-!----------------------------------------------------------------------
-
-   ! first for SORAD
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMGP_SORAD:', DEFAULT=0.0, __RC__)
-    USE_RRTMGP = RFLAG /= 0.0
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMG_SORAD:', DEFAULT=0.0, __RC__)
-      USE_RRTMG = RFLAG /= 0.0
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    ! then IRRAD
-    USE_RRTMGP_IRRAD = .false.
-    USE_RRTMG_IRRAD  = .false.
-    USE_CHOU_IRRAD   = .false.
-    call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMGP_IRRAD:', DEFAULT=0.0, __RC__)
-    USE_RRTMGP_IRRAD = RFLAG /= 0.0
-    if (.not. USE_RRTMGP_IRRAD) then
-      call MAPL_GetResource( MAPL, RFLAG ,'USE_RRTMG_IRRAD:', DEFAULT=0.0, __RC__)
-      USE_RRTMG_IRRAD = RFLAG /= 0.0
-      USE_CHOU_IRRAD  = .not.USE_RRTMG_IRRAD
-    end if
+    ! Decide which radiation to use:
+    ! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
+    !-------------------------------------------------------------------------------
+    call choose_solar_scheme (MAPL, &
+      USE_RRTMGP,       USE_RRTMG,       USE_CHOU,       __RC__)
+    call choose_irrad_scheme (MAPL, &
+      USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD, __RC__)
 
     ! Set number of solar bands
     if (USE_RRTMGP) then
@@ -1668,15 +1586,8 @@ contains
       NUM_BANDS_SOLAR = NB_CHOU
     end if
 
-    ! Decide if should make OBIO exports
-    call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', & 
-       DEFAULT=.FALSE., __RC__)
-
-! Test to see if AGCM.rc is set up correctly for the Radiation selected
-!----------------------------------------------------------------------
-
-    call MAPL_GetResource (MAPL, NUM_BANDS ,'NUM_BANDS:', __RC__)
-
+    ! Test to see if AGCM.rc is set up correctly for the Radiation selected
+    !----------------------------------------------------------------------
     TOTAL_RAD_BANDS = NUM_BANDS_SOLAR
     if (USE_RRTMGP_IRRAD) then
       TOTAL_RAD_BANDS = TOTAL_RAD_BANDS + NB_RRTMGP_IRRAD
@@ -1686,6 +1597,7 @@ contains
       TOTAL_RAD_BANDS = TOTAL_RAD_BANDS + NB_CHOU_IRRAD
     end if
 
+    call MAPL_GetResource (MAPL, NUM_BANDS ,'NUM_BANDS:', __RC__)
     if (NUM_BANDS /= TOTAL_RAD_BANDS) then
       if (MAPL_am_I_Root()) then
          write (*,*) "NUM_BANDS is not set up correctly for the radiation combination selected:"
@@ -1693,19 +1605,31 @@ contains
          write (*,*) "    IRRAD RRTMG: ", USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD
          write (*,*) "Please check that your optics tables and NUM_BANDS are correct."
       end if
-      _ASSERT(.FALSE.,'Total number of radiatiuon bands is inconsistent!')
+      _FAIL('Total number of radiation bands is inconsistent!')
    end if
 
-! Decide how to do solar forcing
-!-------------------------------
+   ! Decide if should make OBIO exports
+   !-----------------------------------
+   call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', & 
+      DEFAULT=.FALSE., __RC__)
+
+   ! Decide how to do solar forcing
+   !-------------------------------
 
     call MAPL_GetResource (MAPL, SolCycFileName, "SOLAR_CYCLE_FILE_NAME:", DEFAULT='/dev/null', __RC__)
+    if (SolCycFileName /= '/dev/null') THEN
 
-    if(SolCycFileName /= '/dev/null') THEN
+       ! Solar forcing is from NRL SSI2 file for RRTMG[P].
+       ! For chou-Suarez, the typical forcing is from internal tables, but a special
+       ! file forcing is also possible.
 
        call MAPL_GetResource( MAPL, USE_NRLSSI2, "USE_NRLSSI2:", DEFAULT=.TRUE., __RC__)
-
        if (USE_NRLSSI2) then
+
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         !!! Use NRL SSI2 forcing file !!!
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
          _ASSERT(USE_RRTMG .or. USE_RRTMGP, 'only RRTMG[P] can use NRLSSI2 currently')
 
          call MAPL_GetResource (MAPL, PersistSolar, "PERSIST_SOLAR:", DEFAULT=.TRUE., __RC__)
@@ -1737,7 +1661,9 @@ contains
             HK_IR_TEMP(K,:)=HK_IR_OLD(K,:)*(HK(5+K)/sum(HK_IR_OLD(K,:)))
          end do
        end if
-    else if(SC<0.0) then
+
+    else if (SC < 0.) then
+
        call MAPL_SunGetSolarConstant (CURRENTTIME, SC, HK, __RC__)
 
        HK_UV_TEMP = HK(:5)
@@ -1757,19 +1683,17 @@ contains
           endif
        endif
        call ESMF_LogWrite (MSGSTRING, ESMF_LOGMSG_INFO, __RC__)
+
     else
        HK_UV_TEMP = HK_UV_OLD
        HK_IR_TEMP = HK_IR_OLD
     end if
 
+    ! Determine the model level separating high-middle and low-middle clouds
+    !-----------------------------------------------------------------------
 
-! We use the reference pressures to separate high, middle, and low clouds.
-!-------------------------------------------------------------------------
-
+    ! Use the reference pressures to separate high, middle, and low clouds.
     call MAPL_GetPointer(IMPORT, PREF, 'PREF', __RC__)
-
-! Determine the model level separating high-middle and low-middle clouds
-!-----------------------------------------------------------------------
 
     _ASSERT(PRS_MID_HIGH > PREF(1)     , 'mid-high pressure band boundary too high!')
     _ASSERT(PRS_LOW_MID  > PRS_MID_HIGH, 'pressure band misordering!')
@@ -1802,41 +1726,38 @@ contains
     !    layers [LCLDMH, LCLDLM-1] are in mid  pressure band
     !    layers [LCLDLM, LM      ] are in low  pressure band
 
-    call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
-
-! Determine calling sequence
-! This getresource is a kludge for now and needs to be fixed
-! in the spec, because GC needs this info to
-! know when to set the alarm, last or first step of interval
-! right now it is always the last, which is only correct for called_last=1.
-!---------------------------
-
-    call MAPL_TimerOn (MAPL,"UPDATE",__RC__)
+    ! Determine calling sequence ...
+    ! This getresource is a kludge for now and needs to be fixed in the spec,
+    ! because GC needs this info to know when to set the alarm, last or first
+    ! step of interval. Right now it is always the last, which is only correct
+    ! for called_last=1.
+    !---------------------------
 
     call MAPL_GetResource (MAPL, CalledLast, 'CALLED_LAST:', default=1, __RC__)
     UPDATE_FIRST = CalledLast /= 0
 
-! Update the Sun position and weigh the export variables
-! --------------------------------------------------------
+    call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
 
-    if (UPDATE_FIRST) then
-       call UPDATE_EXPORT (IM,JM,LM,__RC__)
+    ! Update the Sun position and weight the export variables
+    ! -------------------------------------------------------
+    if (UPDATE_FIRST) then                             
+       call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)       
+       call UPDATE_EXPORT (IM,JM,LM,__RC__)            
+       call MAPL_TimerOff (MAPL,"UPDATE",__RC__)       
     end if
 
-    call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
-
-! If its time, refresh the internal state
-! ---------------------------------------
-
+    ! Periodically, refresh the internal state with a full solar calc
+    ! ---------------------------------------------------------------
     REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
 
-    REFRESH: if ( REFRESH_FLUXES ) then
+    REFRESH: if (REFRESH_FLUXES) then
        call MAPL_TimerOn (MAPL,"REFRESH",__RC__)
 
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)
 
-       ! Set offset INTDT from current time for beginning of refresh period.
+       ! Set offset INTDT from current time for beginning of refresh period
+       ! ------------------------------------------------------------------
        if (UPDATE_FIRST) then
           ! The update is already done, so the refresh interval should start one
           ! timestep beyond current time so it is constent with the NEXT update.
@@ -1847,202 +1768,169 @@ contains
           call ESMF_TimeIntervalSet(INTDT, s=0, __RC__)
        end if
 
-! Get optical properties of radiatively active aerosols.
-! ------------------------------------------------------
-
-       call MAPL_TimerOn (MAPL,"-AEROSOLS", __RC__)
-
-       call ESMF_StateGet(IMPORT, 'AERO', AERO, __RC__)
-
-       call ESMF_AttributeGet(AERO, name='implements_aerosol_optics_method', &
-                                    value=implements_aerosol_optics, __RC__)
-
-       RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
+       ! Get optical properties of radiatively active aerosols
+       ! -----------------------------------------------------
+       call MAPL_TimerOn(MAPL,"-AEROSOLS",__RC__)
+       call ESMF_StateGet(IMPORT,'AERO',AERO,__RC__)
+       call ESMF_AttributeGet(AERO, &
+          name='implements_aerosol_optics_method', &
+          value=implements_aerosol_optics,__RC__)
+       if (implements_aerosol_optics) then
 
            ! set RH for aerosol optics
-           call ESMF_AttributeGet(AERO, name='relative_humidity_for_aerosol_optics', &
-                                        value=AS_FIELD_NAME, __RC__)
-
+           call ESMF_AttributeGet(AERO, &
+              name='relative_humidity_for_aerosol_optics', &
+              value=AS_FIELD_NAME,__RC__)
            if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(IMPORT, AS_PTR_PLE, 'PLE', __RC__)
-               call MAPL_GetPointer(IMPORT, AS_PTR_Q,   'QV',  __RC__)
-               call MAPL_GetPointer(IMPORT, AS_PTR_T,   'T',   __RC__)
-
-               allocate(AS_ARR_RH(IM,JM,LM), AS_ARR_PL(IM,JM,LM), __STAT__)
-               AS_ARR_PL = 0.5*(AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
-               AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-               AS_PTR_3D = AS_ARR_RH
-
-               deallocate(AS_ARR_RH, AS_ARR_PL, __STAT__)
+              call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
+              call MAPL_GetPointer(IMPORT,AS_PTR_Q,  'QV', __RC__)
+              call MAPL_GetPointer(IMPORT,AS_PTR_T,  'T',  __RC__)
+              allocate(AS_ARR_RH(IM,JM,LM),AS_ARR_PL(IM,JM,LM),__STAT__)
+              AS_ARR_PL = 0.5 * (AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
+              AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T,PL=AS_ARR_PL)
+              call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              AS_PTR_3D = AS_ARR_RH
+              deallocate(AS_ARR_RH,AS_ARR_PL,__STAT__)
            end if
 
            ! set PLE for aerosol optics
-           call ESMF_AttributeGet(AERO, name='air_pressure_for_aerosol_optics', &
-                                        value=AS_FIELD_NAME, __RC__)
-
+           call ESMF_AttributeGet(AERO, &
+              name='air_pressure_for_aerosol_optics', &
+              value=AS_FIELD_NAME,__RC__)
            if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(IMPORT, AS_PTR_PLE, 'PLE', __RC__)
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-               AS_PTR_3D = AS_PTR_PLE
+              call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
+              call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              AS_PTR_3D = AS_PTR_PLE
            end if
 
-           ! allocate memory for total aerosol ext, ssa and asy at all solar bands
+           ! allocate memory for TOTAL aerosol ext, ssa and asy at all solar bands
            allocate(AEROSOL_EXT(IM,JM,LM,NUM_BANDS_SOLAR), &
                     AEROSOL_SSA(IM,JM,LM,NUM_BANDS_SOLAR), &
                     AEROSOL_ASY(IM,JM,LM,NUM_BANDS_SOLAR), __STAT__)
 
+           ! zero by default
+           ! (in case aero provider cant provide some of them)
            AEROSOL_EXT = 0.
            AEROSOL_SSA = 0.
            AEROSOL_ASY = 0.
 
            ! compute aerosol optics at all solar bands
            SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
-               call ESMF_AttributeSet(AERO, name='band_for_aerosol_optics', &
-                                           value=(BANDS_SOLAR_OFFSET+band), __RC__)
+              call ESMF_AttributeSet(AERO, &
+                 name='band_for_aerosol_optics', &
+                 value=(BANDS_SOLAR_OFFSET+band),__RC__)
 
-               ! execute the aero provider's optics method
-               call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=AS_STATUS, RC=STATUS)
-               VERIFY_(AS_STATUS)
-               VERIFY_(STATUS)
+              ! execute the aero provider's optics method
+              call ESMF_MethodExecute(AERO, &
+                 label="run_aerosol_optics", &
+                 userRC=AS_STATUS, RC=STATUS)
+              VERIFY_(AS_STATUS)
+              VERIFY_(STATUS)
 
-               ! EXT from AERO_PROVIDER
-               call ESMF_AttributeGet(AERO, name='extinction_in_air_due_to_ambient_aerosol', &
-                                            value=AS_FIELD_NAME, __RC__)
-               if (AS_FIELD_NAME /= '') then
-                   call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                   if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
-               end if
+              ! EXT from AERO_PROVIDER
+              call ESMF_AttributeGet(AERO, &
+                 name='extinction_in_air_due_to_ambient_aerosol', &
+                 value=AS_FIELD_NAME,__RC__)
+              if (AS_FIELD_NAME /= '') then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
+              end if
 
-               ! SSA from AERO_PROVIDER
-               call ESMF_AttributeGet(AERO, name='single_scattering_albedo_of_ambient_aerosol', &
-                                            value=AS_FIELD_NAME, __RC__)
-               if (AS_FIELD_NAME /= '') then
-                   call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                   if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
-               end if
+              ! SSA from AERO_PROVIDER (actually EXT * SSA)
+              call ESMF_AttributeGet(AERO, &
+                 name='single_scattering_albedo_of_ambient_aerosol', &
+                 value=AS_FIELD_NAME,__RC__)
+              if (AS_FIELD_NAME /= '') then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
+              end if
 
-               ! ASY from AERO_PROVIDER
-               call ESMF_AttributeGet(AERO, name='asymmetry_parameter_of_ambient_aerosol', &
-                                            value=AS_FIELD_NAME, __RC__)
-               if (AS_FIELD_NAME /= '') then
-                   call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
-                   if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
-               end if
+              ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
+              call ESMF_AttributeGet(AERO, &
+                 name='asymmetry_parameter_of_ambient_aerosol', &
+                 value=AS_FIELD_NAME,__RC__)
+              if (AS_FIELD_NAME /= '') then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
+              end if
+
            end do SOLAR_BANDS
 
-       end if RADIATIVELY_ACTIVE_AEROSOLS
-
+       end if  ! implements_aerosol_optics
        call MAPL_TimerOff(MAPL,"-AEROSOLS", __RC__)
 
-! No-aerosol calculations if requested.
-!--------------------------------------
+       ! Optional without-aerosol diagnostics
+       ! ------------------------------------
 
-       call MAPL_GetPointer(EXPORT, FSWNA,     'FSWNA',     __RC__)
-       call MAPL_GetPointer(EXPORT, FSCNA,     'FSCNA',     __RC__)
-       call MAPL_GetPointer(EXPORT, FSWUNA,    'FSWUNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, FSCUNA,    'FSCUNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, FSWDNA,    'FSWDNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, FSCDNA,    'FSCDNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, FSWBANDNA, 'FSWBANDNA', __RC__)
+       ! this line temporarily needed because of compiler bug
+       allocate(list(1)); list(1) = S_('dummy')
+             
+       ! are without-aerosol exports requested?
+       do_no_aero_calc = .false.
+       list = [S_('FSWNA'), S_('FSWUNA'), S_('FSWDNA'), &
+               S_('FSCNA'), S_('FSCUNA'), S_('FSCDNA'), &
+               S_('FSWBANDNA')]           
+       do i = 1, size(list)
+         call MAPL_GetPointer( EXPORT, ptr3d, list(i)%str, __RC__)
+         do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
+       end do
+       list = [S_('RSRNA'), S_('RSRSNA'), S_('OSRNA') , &
+               S_('RSCNA'), S_('RSCSNA'), S_('OSRCNA'), &
+               S_('SLRSFNA'),  S_('SLRSUFNA'), &
+               S_('SLRSFCNA'), S_('SLRSUFCNA')]
+       do i = 1, size(list)
+         call MAPL_GetPointer( EXPORT, ptr2d, list(i)%str, __RC__)
+         do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
+       end do
 
-       call MAPL_GetPointer(EXPORT, RSRSNA,    'RSRSNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, RSCSNA,    'RSCSNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, RSRNA,     'RSRNA',     __RC__)
-       call MAPL_GetPointer(EXPORT, RSCNA,     'RSCNA',     __RC__)
-       call MAPL_GetPointer(EXPORT, OSRNA,     'OSRNA',     __RC__)
-       call MAPL_GetPointer(EXPORT, OSRCNA,    'OSRCNA',    __RC__)
-       call MAPL_GetPointer(EXPORT, SLRSFNA,   'SLRSFNA',   __RC__)
-       call MAPL_GetPointer(EXPORT, SLRSFCNA,  'SLRSFCNA',  __RC__)
-       call MAPL_GetPointer(EXPORT, SLRSUFNA,  'SLRSUFNA',  __RC__)
-       call MAPL_GetPointer(EXPORT, SLRSUFCNA, 'SLRSUFCNA', __RC__)
+       if (do_no_aero_calc) then
 
-       if( associated(FSWNA)     .or. associated(FSCNA)     .or.  &
-           associated(FSWDNA)    .or. associated(FSCDNA)    .or.  &
-           associated(FSWUNA)    .or. associated(FSCUNA)    .or.  &
-           associated(FSWBANDNA) .or.                             &
-           associated(RSRNA)     .or. associated(RSCNA)     .or.  &
-           associated(RSRSNA)    .or. associated(RSCSNA)    .or.  &
-           associated(OSRNA)     .or. associated(OSRCNA)    .or.  &
-           associated(SLRSFNA)   .or. associated(SLRSFCNA)  .or.  &
-           associated(SLRSUFNA)  .or. associated(SLRSUFCNA)       &
-       ) then
-           call SORADCORE(IM,JM,LM,            &
-                NO_AERO  = .true.,             &
-                CURRTIME = CURRENTTIME+INTDT,  &
-                LoadBalance = LoadBalance,     &
-                __RC__)
+          ! do a calculation without aerosols:
+          !   this just sets the no-aerosol internals ---
+          !   the exports are derived from the internals in update_export()
+          call SORADCORE(IM,JM,LM,           &
+               include_aerosols = .false.,   &
+               CURRTIME = CURRENTTIME+INTDT, &
+               LoadBalance = LoadBalance,    &
+               __RC__)
        else
-          ! no aerosol exports not requested, so set no aerosol
-          ! normalized internals to zero.
-          call MAPL_GetPointer(INTERNAL, FSWNA,     'FSWNAN',     __RC__)
-          call MAPL_GetPointer(INTERNAL, FSWUNA,    'FSWUNAN',    __RC__)
-          call MAPL_GetPointer(INTERNAL, FSCNA,     'FSCNAN',     __RC__)
-          call MAPL_GetPointer(INTERNAL, FSCUNA,    'FSCUNAN',    __RC__)
-          call MAPL_GetPointer(INTERNAL, FSWBANDNA, 'FSWBANDNAN', __RC__)
-          FSWNA = 0.0
-          FSCNA = 0.0
-          FSWUNA = 0.0
-          FSCUNA = 0.0
-          FSWBANDNA = 0.0
+
+          ! otherwise, zero the no-aerosol internals
+          list = [S_('FSWNAN'), S_('FSWUNAN'), &
+                  S_('FSCNAN'), S_('FSCUNAN'), S_('FSWBANDNAN')]
+          do i = 1, size(list)
+            call MAPL_GetPointer( INTERNAL, ptr3d, list(i)%str, __RC__)
+            ptr3d = 0.
+          end do
+
        end if
 
-! Regular with-aerosol calculations
-! ---------------------------------
-
+       ! Regular with-aerosol calculations
+       ! ---------------------------------
        call SORADCORE(IM,JM,LM,                    &
-                      NO_AERO  = .false.,          &
+                      include_aerosols = .true.,   &
                       CURRTIME = CURRENTTIME+INTDT,&
                       LoadBalance = LoadBalance,   &
                       __RC__)
 
-       ! Clean up aerosol optical properties.
-
+       ! Clean up aerosol optical properties
+       ! -----------------------------------
        if (implements_aerosol_optics) then
-           deallocate(AEROSOL_EXT, __STAT__)
-           deallocate(AEROSOL_SSA, __STAT__)
-           deallocate(AEROSOL_ASY, __STAT__)
+          deallocate(AEROSOL_EXT,__STAT__)
+          deallocate(AEROSOL_SSA,__STAT__)
+          deallocate(AEROSOL_ASY,__STAT__)
        end if
-
-       ! Export normalized internals if requested.
-
-       call MAPL_GetPointer(INTERNAL, DRUVRN, 'DRUVRN', __RC__)
-       call MAPL_GetPointer(INTERNAL, DFUVRN, 'DFUVRN', __RC__)
-       call MAPL_GetPointer(INTERNAL, DRPARN, 'DRPARN', __RC__)
-       call MAPL_GetPointer(INTERNAL, DFPARN, 'DFPARN', __RC__)
-       call MAPL_GetPointer(INTERNAL, DRNIRN, 'DRNIRN', __RC__)
-       call MAPL_GetPointer(INTERNAL, DFNIRN, 'DFNIRN', __RC__)
-
-       call MAPL_GetPointer(EXPORT  , DRUVR,  'DRUVRN', __RC__)
-       call MAPL_GetPointer(EXPORT  , DFUVR,  'DFUVRN', __RC__)
-       call MAPL_GetPointer(EXPORT  , DRPAR,  'DRPARN', __RC__)
-       call MAPL_GetPointer(EXPORT  , DFPAR,  'DFPARN', __RC__)
-       call MAPL_GetPointer(EXPORT  , DRNIR,  'DRNIRN', __RC__)
-       call MAPL_GetPointer(EXPORT  , DFNIR,  'DFNIRN', __RC__)
-
-       if (associated(DRUVR)) DRUVR = DRUVRN
-       if (associated(DFUVR)) DFUVR = DFUVRN
-       if (associated(DRPAR)) DRPAR = DRPARN
-       if (associated(DFPAR)) DFPAR = DFPARN
-       if (associated(DRNIR)) DRNIR = DRNIRN
-       if (associated(DFNIR)) DFNIR = DFNIRN
 
        call MAPL_TimerOff(MAPL,"REFRESH",__RC__)
     endif REFRESH
 
-
-! Update the Sun position and weigh the export variables
-! --------------------------------------------------------
-
+    ! Update the Sun position and weight the export variables
+    ! -------------------------------------------------------
     if (.not.UPDATE_FIRST) then
        call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)
        call UPDATE_EXPORT (IM,JM,LM,     __RC__)
        call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
-
-! All done
-!---------
 
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
     RETURN_(ESMF_SUCCESS)
@@ -2051,14 +1939,15 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    subroutine SORADCORE(IM,JM,LM,NO_AERO,CURRTIME,LoadBalance,RC)
+    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,LoadBalance,RC)
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
       use mo_gas_concentrations,      only: ty_gas_concs
       use mo_cloud_optics,            only: ty_cloud_optics
       use mo_cloud_sampling,          only: draw_samples, &
-                                            sampled_mask_max_ran, sampled_mask_exp_ran
+                                            sampled_mask_max_ran, sampled_mask_exp_ran, &
+                                            sampled_urand_gen_max_ran
       use mo_optical_props,           only: ty_optical_props, &
                                             ty_optical_props_arry, ty_optical_props_1scl, &
                                             ty_optical_props_2str, ty_optical_props_nstr
@@ -2067,6 +1956,7 @@ contains
       use mo_load_coefficients,       only: load_and_init
       use mo_load_cloud_coefficients, only: load_cld_lutcoeff, load_cld_padecoeff
 
+#ifdef HAVE_MKL
       ! Type of MKL VSL Basic RNGs
       ! (1) Mersenne Twister types
       ! brng = VSL_BRNG_MT19937
@@ -2075,87 +1965,76 @@ contains
       ! brng = VSL_BRNG_PHILOX4X32X10  ! 10-round Philox 4x32 counter, 2x32 key
       ! Alternatives are VSL_BRNG_ARS5 ! faster if AES-NI instructions hardware supported
       !
-#ifdef HAVE_MKL
       use MKL_VSL_TYPE
       use mo_rng_mklvsl_plus, only: ty_rng_mklvsl_plus
 #endif
 
+      ! for RRTMGP (use implicit inside RRTMG)
+      use cloud_condensate_inhomogeneity, only: condensate_inhomogeneous, zcw_lookup
+      use cloud_subcol_gen, only : &
+        correlation_length_cloud_fraction, correlation_length_condensate
+
+      implicit none
+
       integer,           intent(IN ) :: IM, JM, LM
-      logical,           intent(IN ) :: NO_AERO
+      logical,           intent(IN ) :: include_aerosols
       type (ESMF_Time),  intent(IN ) :: CURRTIME
       logical,           intent(IN ) :: LoadBalance
       integer, optional, intent(OUT) :: RC
 
-!  Locals
+      ! Locals
 
-      character(len=ESMF_MAXSTR)      :: IAm
-      integer                         :: STATUS
+      character(len=ESMF_MAXSTR)     :: IAm
+      integer                        :: STATUS
 
-      type (ESMF_TimeInterval)        :: TINT
-      type (ESMF_DELayout)            :: LAYOUT
-      type (ESMF_Array)               :: ARRAY
-      type (ESMF_FieldBundle)         :: BUNDLE
-      type (ESMF_Field)               :: FIELD
+      type (ESMF_TimeInterval)       :: TINT
+      type (ESMF_DELayout)           :: LAYOUT
+      type (ESMF_Array)              :: ARRAY
+      type (ESMF_FieldBundle)        :: BUNDLE
+      type (ESMF_Field)              :: FIELD
 
-      type (ESMF_VM)                  :: VM
-      integer                         :: COMM
+      type (ESMF_VM)                 :: VM
+      integer                        :: COMM
 
-      real,    dimension(IM,JM)       :: ZTH, SLR
-      logical, dimension(IM,JM)       :: daytime
+      real,    dimension(IM,JM)      :: ZTH, SLR
+      logical, dimension(IM,JM)      :: daytime
 
-      ! super-layer RRTMG cloud fraction exports
-      real, pointer, dimension(:,:)   :: CLDTTSW
-      real, pointer, dimension(:,:)   :: CLDHISW
-      real, pointer, dimension(:,:)   :: CLDMDSW
-      real, pointer, dimension(:,:)   :: CLDLOSW
+      ! Daytime ONLY copy of variables
+      ! ------------------------------
 
-      ! super-layer RRTMG PAR optical thickness exports
-      real, pointer, dimension(:,:)   :: TAUTTPAR
-      real, pointer, dimension(:,:)   :: TAUHIPAR
-      real, pointer, dimension(:,:)   :: TAUMDPAR
-      real, pointer, dimension(:,:)   :: TAULOPAR
+      ! inputs
+      real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, OX, CL, &
+                                        QL, QI, QR, QS, RL, RI, RR, RS
+      real, pointer, dimension(:)    :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
+                                        Ig1D, Jg1D, ALAT, SLR1D, ZT
 
-      ! cosine solar zenith angle used by REFRESH
-      real, pointer, dimension(:,:)   :: COSZSW
+      ! outputs (via internals)
+      real, pointer, dimension(:,:)  :: FSW, FSC, FSWA, FSCA, FSWU, FSCU, FSWUA, FSCUA, &
+                                        FSWBAND, FSWBANDA
+      real, pointer, dimension(:)    :: UVRR, UVRF, PARR, PARF, NIRR, NIRF
 
-!  DAYTIME ONLY COPY OF VARIABLES
+      ! outputs used for OBIO
+      real, pointer, dimension(:,:)  :: DRBAND, DFBAND
 
-      real, pointer, dimension(:  )   :: ALBNR,ALBNF,ALBVR,ALBVF,ZT,SLR1D, &
-                                         UVRR,UVRF,PARR,PARF,NIRR,NIRF,Ig1D,Jg1D, &
-                                         CLDTS,CLDHS,CLDMS,CLDLS, &
-                                         TAUTP,TAUHP,TAUMP,TAULP
-      real, pointer, dimension(:,:,:) :: FCLD,TAUI,TAUW,CLIN,RRL,RRI,RQI,RQL,RQR
-      real, pointer, dimension(:,:,:) :: DP, PLL
-      real, pointer, dimension(:,:,:) :: RAERO
-      real, pointer, dimension(:,:)   :: T, Q, OX, PLE, CL, QL, QI, QR, QS, &
-                                         RL, RI, RR, RS, FSW, FSC, FSWA, FSCA
-      real, pointer, dimension(:,:)   :: ALBIMP, ALBINT
+      ! REFRESH exports (via internals)
+      real, pointer, dimension(:)    :: COSZSW
+      real, pointer, dimension(:)    :: CLDTS, CLDHS, CLDMS, CLDLS, &
+                                        TAUTP, TAUHP, TAUMP, TAULP
 
-      real, pointer, dimension(:,:)   :: FSWU     ! Flux shortwave up all-sky
-      real, pointer, dimension(:,:)   :: FSCU     ! Flux shortwave up clear-sky
-      real, pointer, dimension(:,:)   :: FSWUA    ! Flux shortwave up all-sky no aerosol
-      real, pointer, dimension(:,:)   :: FSCUA    ! Flux shortwave up clear-sky no aerosol
-      real, pointer, dimension(:,:)   :: FSWBAND  ! Flux shortwave surface per band
-      real, pointer, dimension(:,:)   :: FSWBANDA ! Flux shortwave surface per band no aerosol
-                                         
-      real, pointer, dimension(:,:)   :: DRBAND, DFBAND
+      ! variables for RRTMG code
+      ! ------------------------
 
       integer :: ICEFLGSW        ! Flag for ice particle specification
       integer :: LIQFLGSW        ! Flag for liquid droplet specification
 
-      real, pointer, dimension(:  )       :: ALAT
-      real, pointer, dimension(:  )       :: TS
-      real, pointer, dimension(:,:)       :: CH4, N2O
-      real, allocatable, dimension(:,:)   :: SWUFLXR, SWDFLXR, SWUFLXCR, SWDFLXCR
-
-      real, allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
-      real, allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
-
+      real,    allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
+      real,    allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
       real,    allocatable, dimension(:,:,:) :: TAUAER, SSAAER, ASMAER
-      real,    allocatable, dimension(:,:)   :: DPR, PL_R, T_R, Q_R, O2_R, O3_R, ZL_R
-      real,    allocatable, dimension(:,:)   :: CO2_R, CH4_R
+      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R
+
       integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
-      real,    allocatable, dimension(:,:)   :: SWUFLX, SWDFLX, SWUFLXC, SWDFLXC
+      real,    allocatable, dimension(:,:)   :: SWUFLX,  SWDFLX,  SWUFLXC,  SWDFLXC
+      real,    allocatable, dimension(:,:)   :: SWUFLXR, SWDFLXR, SWUFLXCR, SWDFLXCR
 
       ! pmn: should we update these?
       real, parameter :: O2   = 0.2090029E+00 ! preexisting
@@ -2166,8 +2045,6 @@ contains
       integer :: DYOFYR
       integer :: NCOL
       integer :: RPART, IAER, NORMFLX
-
-      real :: X
 
       integer                   :: ISOLVAR
       real, dimension(2)        :: INDSOLVAR
@@ -2184,33 +2061,35 @@ contains
       real(wp), dimension(:),       allocatable         :: tsi, mu0
       real(wp), dimension(:,:),     allocatable         :: sfc_alb_dir, sfc_alb_dif
 
-      ! per g-point toa flux (ncols_subset,ngpt) [W/m2 NORMAL to solar beam]
+      ! per g-point toa flux (ncols_block,ngpt) [W/m2 NORMAL to solar beam]
       real(wp), dimension(:,:),     allocatable         :: toa_flux
 
       ! input arrays: dimensions (ncol,nlay[+1]) [Pa,K]
       real(wp), dimension(:,:),     allocatable         :: p_lay, t_lay, dp_wp
       real(wp), dimension(:,:),     allocatable         :: p_lev
 
+      ! inter-layer separations (from mid-points) (ncol,nlay-1) [m]
+      real(wp), dimension(:,:),     allocatable         :: dzmid
+
       ! fluxes that we actually need
       ! NB: fluxes_byand makes available fluxes%[bnd_]flux_[up|dn|net|dn_dir->"dir"].
       real(wp), dimension(:),       allocatable         :: flux_dn_top
       real(wp), dimension(:,:),     allocatable, target :: flux_up_clrsky, flux_net_clrsky
       real(wp), dimension(:,:),     allocatable, target :: flux_up_allsky, flux_net_allsky
-      real(wp), dimension(:,:,:),   allocatable, target :: bnd_flux_dn_allsky, bnd_flux_net_allsky, bnd_flux_dir_allsky
+      real(wp), dimension(:,:,:),   allocatable, target :: bnd_flux_dn_allsky, bnd_flux_net_allsky, &
+                                                           bnd_flux_dir_allsky
 
       ! derived types for interacting with RRTMGP
-      ! (cloud_optics generates cloud_props from loaded
+      ! (cloud_optics generates cloud_props_bnd from loaded
       ! coefficients and cloud physical properties)
       type(ty_gas_optics_rrtmgp), pointer               :: k_dist
-      type(ty_gas_concs)                                :: gas_concs, gas_concs_subset
+      type(ty_gas_concs)                                :: gas_concs, gas_concs_block
       type(ty_cloud_optics)                             :: cloud_optics
       type(ty_fluxes_byband)                            :: fluxes_clrsky, fluxes_allsky
 
       ! The band-space (ncol,nlay,nbnd) aerosol and in-cloud optical properties
       ! Polymorphic with dynamic type (#streams) defined later
-      class(ty_optical_props_arry), allocatable :: &
-        cloud_props, cloud_props_subset, &
-          aer_props,   aer_props_subset
+      class(ty_optical_props_arry), allocatable :: cloud_props_bnd, aer_props
 
       ! The g-point cloud optical properties used for mcICA
       class(ty_optical_props_arry), allocatable :: cloud_props_gpt
@@ -2221,22 +2100,22 @@ contains
 
       ! RRTMGP locals
       logical :: top_at_1, partial_block, need_aer_optical_props
+      logical :: gen_mro, cond_inhomo
       integer :: nbnd, ngpt, nmom, icergh
-      integer :: ib, b, nBlocks, colS, colE, ncols_subset, &
-                 partial_blockSize, icol, isub
+      integer :: ib, b, nBlocks, colS, colE, ncols_block, &
+                 partial_blockSize, icol, isub, ilay, igpt
+      real(wp), allocatable :: t_lev(:) ! (ncol)
       character(len=ESMF_MAXPATHLEN) :: k_dist_file, cloud_optics_file
       character(len=ESMF_MAXSTR)     :: error_msg
       character(len=128)             :: cloud_optics_type, cloud_overlap_type
       type (ESMF_Time)               :: ReferenceTime
       type (ESMF_TimeInterval)       :: RefreshInterval
+      real :: cld_frac, sigma_qcw
 
       ! for global gcolumn index seeding of PRNGs
       integer :: iBeg, iEnd, jBeg, jEnd
       integer :: IM_World, JM_World, Gdims(3)
       integer, dimension(IM,JM) :: Ig, Jg
-
-      ! gridcolum presence of liq and ice clouds (ncol,nlay)
-      real(wp), dimension(:,:), allocatable :: clwp, ciwp
 
       ! a column random number generator
 #ifdef HAVE_MKL
@@ -2244,66 +2123,71 @@ contains
 #endif
       integer, dimension(:), allocatable :: seeds
 
-      ! uniform random numbers need by mcICA (ngpt,nlay,cols)
-      real(wp), dimension(:,:,:), allocatable :: urand
+      ! uniform random numbers needed by mcICA (ngpt,nlay,rrtmgp_blocksize)
+      real(wp), dimension(:,:,:), allocatable :: &
+        urand, urand_aux, urand_cond, urand_cond_aux
 
-      ! Cloud mask from overlap scheme (cols,nlay,ngpt)
+      ! Cloud mask for overlap scheme (ncols_block,nlay,ngpt)
       logical,  dimension(:,:,:), allocatable :: cld_mask
 
+      ! sub-gridscale condensate scaling for overlap scheme (ncols_block,nlay,ngpt)
+      real(wp), dimension(:,:,:), allocatable :: zcw
+      
+      ! correlation length scales [m] for cloud presence and condensate (ncol)
+      real, dimension(:), allocatable :: adl, rdl
+      
+      ! binomial probability of maximum overlap (cf. random overlap)
+      ! for cloud presence and condensate (ncols_block,nlay-1)
+      real(wp), dimension(:,:), allocatable :: alpha, rcorr
+      
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
       real(wp) ::  temp_ref_min, tmin
       real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
       real(wp), parameter :: tmin_increase_OK_Kelvin   = 10.0_wp
 
-      ! block size for column processing
-      ! set for efficiency from resource file
+      ! block size for efficient column processing (set from resource file)
       integer :: rrtmgp_blockSize
 
-! For Aerosol
-      integer :: in, idx, ibb, i
-      real, pointer, dimension(:,:,:) :: qaero, taua, ssaa, asya
-
+      ! For Aerosol
+      real, pointer, dimension(:,:,:)     :: taua, ssaa, asya
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_EXT => null()
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_SSA => null()
       real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_ASY => null()
       real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
-! Decorrelation length
-      real    :: AM1, AM2, AM3, AM4, AMR
-
-      ! CPU Topology information for RRTMGPU
-      ! ------------------------------------
-      integer        :: CoresPerNode
-
-      character(len=ESMF_MAXSTR)      :: NAME
-
-      integer :: dims
-      integer :: NumVars
-      integer :: L, L1, LN, J, J1, JN, NA, K
-      integer :: NumLit, Num2do
-
-      real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:)
-      real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLTMP(:,:)
-
-      character(len=ESMF_MAXSTR), allocatable :: NamesInp(:), NamesOut(:)
-      type (ESMF_FieldBundle)   :: AEROBUNDLE
-      integer, allocatable      :: SlicesInp(:),SlicesOut(:)
-      real, target, allocatable :: BufInp(:),BufOut(:)
-      integer :: NumMax, NumInp, NumOut, HorzDims(2), BufLen
-
-! helper for testing RRTMGP error status on return;
-! allows line number reporting cf. original call method
-#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _ASSERT(.false.,"RRTMGP Error: "//trim(error_msg)); endif
-
-!  Begin...
-!----------
+      ! LoadBalance and general
+      integer :: I, J, K, L, i1, iN
+      integer, pointer :: pi1, piN
+      integer, target :: i1Out, iNOut, i1InOut, iNInOut
+      real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
+      real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
+      integer :: dims, NumLit, Num2do, num_aero_vars
+      character(len=ESMF_MAXSTR) :: short_name
+      integer, pointer :: ugdims(:) => null()
+      logical, allocatable :: IntInOut(:)
+      character(len=ESMF_MAXSTR), allocatable :: NamesInp(:), NamesInt(:)
+      integer, allocatable :: SlicesInp(:), SlicesInt(:)
+      real, target, allocatable :: BufInp(:), BufInOut(:), BufOut(:)
+      integer, allocatable :: rgDim(:), ugDim(:)
+      real, pointer :: buf(:)
+      integer :: NumImp, NumInt, NumInp
+      integer :: NumMax, HorzDims(2)
+      integer :: ibinary
+      real :: def
 
       IAm = trim(COMP_NAME)//"Soradcore"
       call MAPL_TimerOn(MAPL,"-MISC")
 
-! Get the average insolation for the next interval
-!-------------------------------------------------
+! Get the average insolation for the next alarm "REFRESH" interval
+!-----------------------------------------------------------------
+! @ In standard (legacy) mode, this longer REFRESH interval forms the basis of
+! a normalized full solar calculation that is simply scaled at each hearbeat (in
+! UPDATE_EXPORTS) by the TOA projected solar input. This scaled update is extremely
+! quick, but it lacks some important aspects of the full calculation, namely the
+! pathlength (cf. projection) effect of the updated solar position, and all the
+! changes caused by variations in surface albedo and atmospheric properties within
+! the REFRESH period.
 
       call ESMF_AlarmGet(ALARM, RINGINTERVAL=TINT, __RC__)
       call MAPL_SunGetInsolation(  &
@@ -2320,7 +2204,6 @@ contains
       SLR = SLR * SC
 
       ! prepare global gridcolumn indicies needed by random number generators
-
       ! get indicies of local rectangular grid
       call MAPL_GridGet(ESMFGRID, globalCellCountPerDim=Gdims, __RC__)
       IM_World = Gdims(1); JM_World = Gdims(2)
@@ -2331,21 +2214,6 @@ contains
           Jg(I,J) = jBeg + J - 1
         end do
       end do
-
-      ! cosine solar zenith angle used by REFRESH
-      call MAPL_GetPointer(EXPORT, COSZSW, 'COSZSW', __RC__)
-
-      ! super-layer RRTMG cloud fraction exports
-      call MAPL_GetPointer(EXPORT, CLDTTSW, 'CLDTTSW', __RC__)
-      call MAPL_GetPointer(EXPORT, CLDHISW, 'CLDHISW', __RC__)
-      call MAPL_GetPointer(EXPORT, CLDMDSW, 'CLDMDSW', __RC__)
-      call MAPL_GetPointer(EXPORT, CLDLOSW, 'CLDLOSW', __RC__)
-
-      ! super-layer RRTMG PAR optical thickness exports
-      call MAPL_GetPointer(EXPORT, TAUTTPAR, 'TAUTTPAR', __RC__)
-      call MAPL_GetPointer(EXPORT, TAUHIPAR, 'TAUHIPAR', __RC__)
-      call MAPL_GetPointer(EXPORT, TAUMDPAR, 'TAUMDPAR', __RC__)
-      call MAPL_GetPointer(EXPORT, TAULOPAR, 'TAULOPAR', __RC__)
 
       call MAPL_TimerOff(MAPL,"-MISC")
 
@@ -2373,9 +2241,6 @@ contains
          NumLit  = size(ZTH)
       end if
 
-      ! write out the cosine solar zenith angle actually used by REFRESH
-      if (associated(COSZSW)) COSZSW = ZTH
-
 !  Create a balancing strategy. This is a collective call on the communicator
 !  of the current VM. The original, unbalanced local work consists of (OrgLen)
 !  NumLit soundings, which may be zero. The local work after implementing the
@@ -2399,210 +2264,196 @@ contains
 
       call MAPL_TimerOff(MAPL,"--CREATE")
 
-!  The number of input and output variables to the calculations.
-!  The input number is five greater than the IMPORTS because the
-!  component needs the LATS, SLR and ZTH from MAPL and the global
-!  gridcolumn indicies Ig and Jg. The outputs are the INTERNAL
-!  variables being refreshed plus four cloud fraction diagnostics
-!  (CLDTTSW, CLDHISW, CLDMDSW, CLDLOSW) & four optical thickness
-!  diagnostics (TAUTTPAR, TAUHIPAR, TAUMDPAR, TAULOPAR).
+!  The number of Input and Output/InOut variables to the load balancing.
+!    The Input number is five more than the number of IMPORTS because the
+!  component needs the LATS, SLR and ZTH from MAPL and the global grid-
+!  column indicies Ig and Jg.
+!    The Outputs and InOuts are all INTERNAL variables.
 !--------------------------------------------------------------
-
-      NumInp = size(ImportSpec) + 5
-      NumOut = size(InternalSpec) + 8
-
-      allocate(SlicesInp(NumInp), NamesInp(NumInp), &
-               SlicesOut(NumOut), NamesOut(NumOut), __STAT__)
+      
+      NumImp = size(ImportSpec)
+      NumInt = size(InternalSpec)
+      
+      ! Inputs to load balancing:
+      ! All imports plus Ig, Jg, LATS, SLR & ZTH.
+      ! Vertical only imports (PREF) are explicitly skipped later.
+      NumInp = NumImp + 5
+      
+      allocate( &
+         SlicesInp(NumInp), NamesInp(NumInp), &
+         SlicesInt(NumInt), NamesInt(NumInt), &
+         IntInOut(NumInt), rgDim(NumInt), ugDim(NumInt), &
+         __STAT__)
 
       HorzDims = (/IM,JM/)
 
-!  Count the 2D slices in the input variables and calculate
-!  the required length of the 1D input buffer (BufInp).
-!----------------------------------------------------------
+      ! num_aero_vars for aerosol optics from aerosol bundle
+      if (include_aerosols .and. implements_aerosol_optics) then
+         num_aero_vars = 3
+      else
+         num_aero_vars = 0
+      end if
 
-      BufLen = 0
+! @@@@@@@@@@@@@@
+! @@@ Inputs @@@
+! @@@@@@@@@@@@@@
 
+      ! Count the 2D slices in the Input variables and calculate
+      ! the required length of the 1D Input buffer (BufInp)
+      ! --------------------------------------------------------
       INPUT_VARS_1: do k=1,NumInp
 
-         if (k < NumInp-4) then
+         ! Get names and dimensions of Inputs
+         if (k <= NumImp) then
             call MAPL_VarSpecGet(ImportSpec(k), &
                DIMS=dims, SHORT_NAME=NamesInp(k), __RC__)
          else
             dims = MAPL_DIMSHORZONLY
-            if (k == NumInp-4) then
+            if      (k == NumImp+1) then
                NamesInp(k) = "Ig"
-            else if (k == NumInp-3) then
+            else if (k == NumImp+2) then
                NamesInp(k) = "Jg"
-            else if (k == NumInp-2) then
+            else if (k == NumImp+3) then
                NamesInp(k) = "LATS"
-            else if (k == NumInp-1) then
+            else if (k == NumImp+4) then
                NamesInp(k) = "SLR"
-            else
+            else if (k == NumImp+5) then
                NamesInp(k) = "ZTH"
             end if
          end if
 
+         ! Skip vertical only inputs (PREF). They dont require
+         ! load-balancing since they have no horizontal dimension.
          if (dims == MAPL_DIMSVERTONLY) then
-
-            ! Skip PREF
             SlicesInp(k) = 0
-
-         else
-
-!  If Import is the aerosol bundle, we need to set NA and the list
-!  of aerosol names. Note that we are assuming all aerosol species
-!  are dimensions by LM levels. This will be asserted later.
-!-----------------------------------------------------------------
-
-
-            if (NamesInp(k)=="AERO") then
-
-               ! Aerosol input
-
-               if (NO_AERO) then
-                  ! This is a no aerosol call done for "clean" diagnostics
-                  NA = 0
-               else
-                  if (implements_aerosol_optics) then
-                     NA = 3
-                  else
-                     NA = 0
-                  end if
-               end if
-
-               SlicesInp(k) = LM*NA*NUM_BANDS_SOLAR
-
-            else
-
-               ! Non-aerosol input
-
-               select case(dims)
-
-                  case(MAPL_DIMSHORZVERT)
-                     ! We currently assume this case is 3D
-                     call ESMFL_StateGetPointerToData(IMPORT, ptr3, NamesInp(k), __RC__)
-                     SlicesInp(k) = size(ptr3,3)
-
-                  case(MAPL_DIMSHORZONLY)
-                     SlicesInp(k) = 1
-
-                  case default
-                     _ASSERT(.false.,'unknown dims for SOLAR import')
-
-               end select
-
-            end if
+            cycle
          end if
 
-         BufLen = BufLen + NumMax*SlicesInp(k)
+         ! If Import is aerosol bundle, make space for aerosol optical props.
+         ! Note: assume all aerosol species are dimensioned by LM levels.
+         !    This will be asserted later.
+
+         if (NamesInp(k) == "AERO") then
+
+            SlicesInp(k) = LM * num_aero_vars * NUM_BANDS_SOLAR
+
+         else  ! Non-aerosol input
+
+            select case(dims)
+               case(MAPL_DIMSHORZVERT)
+                  ! We currently assume this case is 3D
+                  call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
+                  SlicesInp(k) = size(ptr3,3)
+
+               case(MAPL_DIMSHORZONLY)
+                  SlicesInp(k) = 1
+
+               case default
+                  _FAIL('invalid dimension for SOLAR import')
+            end select
+
+         end if
 
       enddo INPUT_VARS_1
 
-!  Allocate the buffer that will hold all balanced variables. The "inner"
-!  dimension of its 2D representation must be NumMax.
-!------------------------------------------------------------------------
-
-      allocate(BufInp(BufLen),__STAT__)
+      ! Allocate buffer with enough space to hold both the unbalanced
+      ! and balanced data on the local PE for Input vars. The inner
+      ! dimension of its 2D representation must be NumMax.
+      ! -------------------------------------------------------------
+      allocate(BufInp(NumMax*sum(SlicesInp)),__STAT__)
       BufInp = MAPL_UNDEF
 
-!  Loop over imports, packing into the buffer that will be
-!  load balanced and used in the solar calculations.
-!---------------------------------------------------------
-
-      LN = 0
+      ! Loop over imports, packing into the buffer that will be
+      ! load balanced and used in the solar calculations.
+      ! -------------------------------------------------------
+      iN = 0
       INPUT_VARS_2: do k=1,NumInp
-         L1 = LN + 1
+         if (SlicesInp(k) == 0) cycle
 
-         if (SlicesInp(k) > 0) then  ! Skip PREF
+         i1 = iN + 1
 
-            if (NamesInp(k)=="AERO") then
+         if (NamesInp(k)=="AERO") then
 
-               _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
-               _ASSERT(size(AEROSOL_SSA,3)==LM,'mal-dimensioned AEROSOL_SSA')
-               _ASSERT(size(AEROSOL_ASY,3)==LM,'mal-dimensioned AEROSOL_ASY')
+            _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
+            _ASSERT(size(AEROSOL_SSA,3)==LM,'mal-dimensioned AEROSOL_SSA')
+            _ASSERT(size(AEROSOL_ASY,3)==LM,'mal-dimensioned AEROSOL_ASY')
 
-               allocate(BUF_AEROSOL(size(AEROSOL_EXT,1), &
-                                    size(AEROSOL_EXT,2), &
-                                    size(AEROSOL_EXT,3)), __STAT__)
+            allocate(BUF_AEROSOL(size(AEROSOL_EXT,1), &
+                                 size(AEROSOL_EXT,2), &
+                                 size(AEROSOL_EXT,3)), __STAT__)
 
-               ! pack extinctions
-               BUF_AEROSOL = MAPL_UNDEF
-               do j=1,NUM_BANDS_SOLAR
-                   BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
-                   call ReOrder(BufInp(L1 + (j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,&
-                        HorzDims,LM,PACKIT)
-               end do
-               LN = L1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(L1:LN)
-               BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
+            ! pack extinctions
+            BUF_AEROSOL = MAPL_UNDEF
+            do j=1,NUM_BANDS_SOLAR
+               BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+            end do
+            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+            BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
 
-               ! pack single scattering albedos
-               L1 = LN + 1
-               BUF_AEROSOL = MAPL_UNDEF
-               do j=1,NUM_BANDS_SOLAR
-                   BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
-                   call ReOrder(BufInp(L1 + (j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,&
-                        HorzDims,LM,PACKIT)
-               end do
-               LN = L1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(L1:LN)
-               BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
+            ! pack single scattering albedos
+            i1 = iN + 1
+            BUF_AEROSOL = MAPL_UNDEF
+            do j=1,NUM_BANDS_SOLAR
+               BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+            end do
+            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+            BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
 
-               ! pack asymmetry factors
-               L1 = LN + 1
-               BUF_AEROSOL = MAPL_UNDEF
-               do j=1,NUM_BANDS_SOLAR
-                   BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
-                   call ReOrder(BufInp(L1 + (j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,&
-                        HorzDims,LM,PACKIT)
-               end do
-               LN = L1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-               ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(L1:LN)
-               BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
+            ! pack asymmetry factors
+            i1 = iN + 1
+            BUF_AEROSOL = MAPL_UNDEF
+            do j=1,NUM_BANDS_SOLAR
+               BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
+               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
+            end do
+            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
+            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
+            BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
 
-               deallocate(BUF_AEROSOL, __STAT__)
+            deallocate(BUF_AEROSOL, __STAT__)
 
-            else  ! Non-aerosol imports.
+         else  ! Non-aerosol imports
 
-               if (SlicesInp(k) /= 1) then
+            if (SlicesInp(k) /= 1) then
 
-                  ! pack 3D imports
-                  call ESMFL_StateGetPointerToData(IMPORT, ptr3, NamesInp(k), __RC__)
-                  call ReOrder(BufInp(L1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),PACKIT)
+               ! pack 3D imports
+               call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
+               call PackIt(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+               iN = i1 + NumMax*size(ptr3,3) - 1
 
-                  LN = L1 + NumMax*size(ptr3,3) - 1
+            else  ! case(MAPL_DIMSHORZONLY)
 
-               else  ! case(MAPL_DIMSHORZONLY)
-
-                  ! pack auxilliary variables
-                  if (NamesInp(k) == 'Ig') then
-                     call ReOrder(BufInp(L1),real(Ig),daytime,NumMax,HorzDims,1,PACKIT)
-                  else if (NamesInp(k) == 'Jg') then
-                     call ReOrder(BufInp(L1),real(Jg),daytime,NumMax,HorzDims,1,PACKIT)
-                  else if (NamesInp(k) == 'LATS') then
-                     call ReOrder(BufInp(L1),LATS,    daytime,NumMax,HorzDims,1,PACKIT)
-                  else if (NamesInp(k) == 'SLR') then
-                     call ReOrder(BufInp(L1),SLR,     daytime,NumMax,HorzDims,1,PACKIT)
-                  else if (NamesInp(k) == 'ZTH') then
-                     call ReOrder(BufInp(L1),ZTH,     daytime,NumMax,HorzDims,1,PACKIT)
-                  else
-                     ! pack 2D imports
-                     call ESMFL_StateGetPointerToData(IMPORT, ptr2, NamesInp(k), __RC__)
-                     call ReOrder(BufInp(L1),ptr2,    daytime,NumMax,HorzDims,1,PACKIT)
-                  end if
-
-                  LN = L1 + NumMax - 1
-
+               ! pack auxilliary variables
+               if (NamesInp(k) == 'Ig') then
+                  call PackIt(BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+               else if (NamesInp(k) == 'Jg') then
+                  call PackIt(BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+               else if (NamesInp(k) == 'LATS') then
+                  call PackIt(BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+               else if (NamesInp(k) == 'SLR') then
+                  call PackIt(BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+               else if (NamesInp(k) == 'ZTH') then
+                  call PackIt(BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+               else
+                  ! pack 2D imports
+                  call ESMFL_StateGetPointerToData(IMPORT,ptr2,NamesInp(k),__RC__)
+                  call PackIt(BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
                end if
+               iN = i1 + NumMax - 1
 
-               ! Handles for the working input (Import) variables.
-               ! These use Fortran 2003 syntax for reshaping a 1D
-               ! vector into a higher rank array.
-               !--------------------------------------------------
+            end if
 
-               ptr2(1:NumMax,1:SlicesInp(k)) => BufInp(L1:LN)
+            ! Handles for the working input (Import) variables.
+            ! These use Fortran 2003 syntax for reshaping a 1D
+            ! vector into a higher rank array.
+            !--------------------------------------------------
+            ptr2(1:NumMax,1:SlicesInp(k)) => BufInp(i1:iN)
 
-               select case(NamesInp(k))
+            select case(NamesInp(k))
                case('PLE')
                   PLE   => ptr2(1:Num2do,:)
                case('TS')
@@ -2653,205 +2504,274 @@ contains
                   SLR1D => ptr2(1:Num2do,1)
                case('ZTH')
                   ZT    => ptr2(1:Num2do,1)
-               end select
+            end select
 
-            end if ! AERO vs non AERO input
-
-         end if ! skip PREF
+         end if
 
       enddo INPUT_VARS_2
 
-! Load balance the inputs
-!------------------------
+      ! Load balance the Inputs
+      ! -----------------------
 
       call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
-
-      call MAPL_BalanceWork(BufInp, NumMax, Direction=MAPL_Distribute, Handle=SolarBalanceHandle, __RC__)
-
+      call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
       call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
-!  Count the slices of internals, which will hold the intent(OUT) results of the
-!  calculations. In Solar calculations there are no INOUT variables.
-!------------------------------------------------------------------------------
+! @@@@@@@@@@@@@@@@@@@@@@
+! @@@ InOuts/Outputs @@@
+! @@@@@@@@@@@@@@@@@@@@@@
 
-      OUTPUT_VARS_1: do k=1,NumOut
+      ! Count the 2D slices in the Int (InOut/Out) vars and calc
+      ! the required length of their 1D buffers (BufInOut/BufOut).
+      ! ----------------------------------------------------------
+      INT_VARS_1: do k=1,NumInt
+      
+         ! InOut or Out? 
+         call MAPL_VarSpecGet(InternalSpec(k), &
+            SHORT_NAME=short_name, DIMS=dims, UNGRIDDED_DIMS=ugdims, __RC__)
+         ! later FAR variables will be InOut ... for now there are no InOut vars
+         IntInOut(k) = .false.
 
-         if (k < NumOut-7) then
-            ! internal outputs
-            call MAPL_VarSpecGet(InternalSpec(k), &
-               DIMS=dims, SHORT_NAME=NamesOut(k), __RC__)
-         else
-            ! cloud fraction outputs
-            dims = MAPL_DIMSHORZONLY
-            if      (k == NumOut-7) then
-               NamesOut(k) = "CLDTTSW"
-            else if (k == NumOut-6) then
-               NamesOut(k) = "CLDHISW"
-            else if (k == NumOut-5) then
-               NamesOut(k) = "CLDMDSW"
-            else if (k == NumOut-4) then
-               NamesOut(k) = "CLDLOSW"
-            else if (k == NumOut-3) then
-               NamesOut(k) = "TAUTTPAR"
-            else if (k == NumOut-2) then
-               NamesOut(k) = "TAUHIPAR"
-            else if (k == NumOut-1) then
-               NamesOut(k) = "TAUMDPAR"
-            else
-               NamesOut(k) = "TAULOPAR"
-            end if
-         end if
-
-         ! Exclude unused internals
-         if (       NO_AERO .and.                                                 &
-                 ( 'FSWN'       == NamesOut(k) .or.    'FSCN' == NamesOut(k) .or. &
-                   'FSWUN'      == NamesOut(k) .or.   'FSCUN' == NamesOut(k) .or. &
-                   'FSWBANDN'   == NamesOut(k) )                                  &
-            .or.                                                                  &
-               .not.NO_AERO .and.                                                 &
-                 ( 'FSWNAN'     == NamesOut(k) .or.  'FSCNAN' == NamesOut(k) .or. &
-                   'FSWUNAN'    == NamesOut(k) .or. 'FSCUNAN' == NamesOut(k) .or. &
-                   'FSWBANDNAN' == NamesOut(k) )                                  &
-            ) then
-
-            SlicesOut(k) = 0
+         ! save properties 
+         NamesInt(k) = short_name 
+         rgDim(k) = dims
+      
+         ! Skip vertical only variables. They dont require
+         ! load-balancing since they have no horizontal dimension.
+         if (dims == MAPL_DIMSVERTONLY) then
+            SlicesInt(k) = 0
             cycle
          end if
 
-         ! Don't calculate D[RF]BANDN for NO_AERO
-         if (NO_AERO) then
-            if (NamesOut(k) == 'DRBANDN' .or. NamesOut(k) == 'DFBANDN') then
-               SlicesOut(k) = 0
+         ! Exclude unused internals
+         if (.not. include_aerosols .and.                                    &
+               ('FSWN'       == short_name .or.    'FSCN' == short_name .or. &
+                'FSWUN'      == short_name .or.   'FSCUN' == short_name .or. &
+                'FSWBANDN'   == short_name)                                  &
+            .or. include_aerosols .and.                                      &
+               ('FSWNAN'     == short_name .or.  'FSCNAN' == short_name .or. &
+                'FSWUNAN'    == short_name .or. 'FSCUNAN' == short_name .or. &
+                'FSWBANDNAN' == short_name)                                  &
+            ) then
+            SlicesInt(k) = 0
+            cycle
+         end if
+
+         ! Don't calculate D[RF]BANDN for .not. include_aerosols
+         if (.not. include_aerosols) then
+            if (short_name == 'DRBANDN' .or. short_name == 'DFBANDN') then
+               SlicesInt(k) = 0
                cycle
             end if
          end if
 
-         if (dims == MAPL_DIMSHORZVERT   .or. &
-             NamesOut(k) == 'FSWBANDN'   .or. &
-             NamesOut(k) == 'FSWBANDNAN' .or. &
-             NamesOut(k) == 'DRBANDN'    .or. &
-             NamesOut(k) == 'DFBANDN'         &
-         ) then
-
-            call ESMFL_StateGetPointerToData(INTERNAL, ptr3, NamesOut(k), __RC__)
-            SlicesOut(k) = size(ptr3,3)
-
-         else if (dims == MAPL_DIMSHORZONLY) then
-
-            SlicesOut(k) = 1
-
+         if (associated(ugdims)) then
+            ! ungridded dims are present, make sure just one
+            _ASSERT(size(ugdims)==1,'Only one ungridded dimension allowed')
+            ugDim(k) = ugdims(1)
+            select case(dims)
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
+                  SlicesInt(k) = size(ptr4,3) * ugDim(k)
+               case(MAPL_DIMSHORZONLY)
+                  SlicesInt(k) = ugDim(k)
+               case default
+                  _FAIL('invalid dimension for Internal')
+            end select
          else
+            ! no ungridded dimension
+            ugDim(k) = 0
+            select case(dims)
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
+                  SlicesInt(k) = size(ptr3,3)
+               case(MAPL_DIMSHORZONLY)
+                  SlicesInt(k) = 1
+               case default
+                  _FAIL('invalid dimension for Internal')
+            end select
+         end if
 
-            _ASSERT(.false.,'unknown dims for SOLAR input')
+      enddo INT_VARS_1
+
+      ! Allocate buffers with enough space to hold both the unbalanced
+      ! and balanced data on the local PE for InOut/Out vars
+      ! --------------------------------------------------------------
+      allocate(BufInOut(NumMax*sum(SlicesInt,MASK=IntInOut)),__STAT__)
+      BufInOut = MAPL_UNDEF
+      allocate(BufOut(NumMax*sum(SlicesInt,MASK=.not.IntInOut)),__STAT__)
+      BufOut = MAPL_UNDEF
+
+      ! Loop over Internals (InOuts/Outs), packing them into buffers
+      ! that will be load balanced and used in the solar calculations.
+      ! --------------------------------------------------------------
+      iNInOut = 0; iNOut = 0
+      INT_VARS_2: do k=1,NumInt
+         if (SlicesInt(k) == 0) cycle
+
+         if (IntInOut(k)) then
+            buf => bufInOut; pi1 => i1InOut; piN => iNInOut
+         else
+            buf => bufOut;   pi1 => i1Out;   piN => iNOut
+         endif
+         pi1 = piN + 1
+
+         if (ugDim(k) > 0) then  ! has ungridded dimensions
+
+            select case(rgDim(k))
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
+                  do j=1,ugDim(k)
+!pmn compiler       call PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                    if (IntInOut(k)) then
+                      call PackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                    else
+                      call PackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
+                    endif
+                  end do
+                  piN = pi1 + NumMax*size(ptr4,3)*ugDim(k) - 1
+                  ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
+               case(MAPL_DIMSHORZONLY)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
+!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                  if (IntInOut(k)) then
+                    call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                  else
+                    call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                  endif
+                  piN = pi1 + NumMax*ugDim(k) - 1
+                  ptr2(1:NumMax,1:ugDim(k)) => Buf(pi1:piN)
+            end select
+
+         else  ! no ungridded dimensions
+
+            select case(rgDim(k))
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
+!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  if (IntInOut(k)) then
+                     call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  else
+                     call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  endif
+                  piN = pi1 + NumMax*size(ptr3,3) - 1
+               case(MAPL_DIMSHORZONLY)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
+!pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
+                  if (IntInOut(k)) then
+                     call PackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
+                  else
+                     call PackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1)
+                  endif
+                  piN = pi1 + NumMax - 1
+            end select
+            ptr2(1:NumMax,1:SlicesInt(k)) => Buf(pi1:piN)
 
          end if
 
-      enddo OUTPUT_VARS_1
-
-!  Allocate the output buffer with enough space to hold both the
-!  balanced and unbalanced data associated with the local PE.
-!--------------------------------------------------------------
-
-      allocate(BufOut(NumMax*sum(SlicesOut)),__STAT__)
-
-!  Handles for the working output variables.
-!  These have an inner dimension of the balanced work.
-!-----------------------------------------------------
-
-      L1 = 1
-      OUTPUT_VARS_2: do k=1,NumOut
-         if (SlicesOut(k) == 0) cycle
-
-         LN = L1 + SlicesOut(k)*NumMax - 1
-         ptr2(1:NumMax,1:SlicesOut(k)) => BufOut(L1:LN)
-         L1 = LN + 1
-
-         select case(NamesOut(k))
-         case('FSWN')
-            FSW       => ptr2(1:Num2do,:)
-         case('FSCN')
-            FSC       => ptr2(1:Num2do,:)
-         case('FSWUN')
-            FSWU      => ptr2(1:Num2do,:)
-         case('FSCUN')
-            FSCU      => ptr2(1:Num2do,:)
-         case('FSWBANDN')
-            FSWBAND   => ptr2(1:Num2do,:)
-         case('DRUVRN')
-            UVRR      => ptr2(1:Num2do,1)
-         case('DFUVRN')
-            UVRF      => ptr2(1:Num2do,1)
-         case('DRPARN')
-            PARR      => ptr2(1:Num2do,1)
-         case('DFPARN')
-            PARF      => ptr2(1:Num2do,1)
-         case('DRNIRN')
-            NIRR      => ptr2(1:Num2do,1)
-         case('DFNIRN')
-            NIRF      => ptr2(1:Num2do,1)
-         case('DRBANDN')  
-            DRBAND    => ptr2(1:Num2do,:)
-         case('DFBANDN')  
-            DFBAND    => ptr2(1:Num2do,:)
-         case('FSWNAN')  
-            FSWA      => ptr2(1:Num2do,:)               
-         case('FSCNAN')  
-            FSCA      => ptr2(1:Num2do,:)               
-         case('FSWUNAN') 
-            FSWUA     => ptr2(1:Num2do,:)                              
-         case('FSCUNAN') 
-            FSCUA     => ptr2(1:Num2do,:)                              
-         case('FSWBANDNAN')
-            FSWBANDA  => ptr2(1:Num2do,:)
-         case('CLDTTSW')
-            CLDTS     => ptr2(1:Num2do,1)
-         case('CLDHISW')
-            CLDHS     => ptr2(1:Num2do,1)
-         case('CLDMDSW')
-            CLDMS     => ptr2(1:Num2do,1)
-         case('CLDLOSW')
-            CLDLS     => ptr2(1:Num2do,1)
-         case('TAUTTPAR')
-            TAUTP     => ptr2(1:Num2do,1)
-         case('TAUHIPAR')
-            TAUHP     => ptr2(1:Num2do,1)
-         case('TAUMDPAR')
-            TAUMP     => ptr2(1:Num2do,1)
-         case('TAULOPAR')
-            TAULP     => ptr2(1:Num2do,1)
+         ! Handles for the working InOut/Out variables.
+         ! These have an inner dimension of the balanced work.
+         ! ---------------------------------------------------
+         select case(NamesInt(k))
+            case('FSWN')
+               FSW       => ptr2(1:Num2do,:)
+            case('FSCN')
+               FSC       => ptr2(1:Num2do,:)
+            case('FSWUN')
+               FSWU      => ptr2(1:Num2do,:)
+            case('FSCUN')
+               FSCU      => ptr2(1:Num2do,:)
+            case('FSWBANDN')
+               FSWBAND   => ptr2(1:Num2do,:)
+            case('DRUVRN')
+               UVRR      => ptr2(1:Num2do,1)
+            case('DFUVRN')
+               UVRF      => ptr2(1:Num2do,1)
+            case('DRPARN')
+               PARR      => ptr2(1:Num2do,1)
+            case('DFPARN')
+               PARF      => ptr2(1:Num2do,1)
+            case('DRNIRN')
+               NIRR      => ptr2(1:Num2do,1)
+            case('DFNIRN')
+               NIRF      => ptr2(1:Num2do,1)
+            case('DRBANDN')  
+               DRBAND    => ptr2(1:Num2do,:)
+            case('DFBANDN')  
+               DFBAND    => ptr2(1:Num2do,:)
+            case('FSWNAN')  
+               FSWA      => ptr2(1:Num2do,:)               
+            case('FSCNAN')  
+               FSCA      => ptr2(1:Num2do,:)               
+            case('FSWUNAN') 
+               FSWUA     => ptr2(1:Num2do,:)                              
+            case('FSCUNAN') 
+               FSCUA     => ptr2(1:Num2do,:)                              
+            case('FSWBANDNAN')
+               FSWBANDA  => ptr2(1:Num2do,:)
+            case('COSZSW')
+               COSZSW    => ptr2(1:Num2do,1)
+            case('CLDTTSW')
+               CLDTS     => ptr2(1:Num2do,1)
+            case('CLDHISW')
+               CLDHS     => ptr2(1:Num2do,1)
+            case('CLDMDSW')
+               CLDMS     => ptr2(1:Num2do,1)
+            case('CLDLOSW')
+               CLDLS     => ptr2(1:Num2do,1)
+            case('TAUTTPAR')
+               TAUTP     => ptr2(1:Num2do,1)
+            case('TAUHIPAR')
+               TAUHP     => ptr2(1:Num2do,1)
+            case('TAUMDPAR')
+               TAUMP     => ptr2(1:Num2do,1)
+            case('TAULOPAR')
+               TAULP     => ptr2(1:Num2do,1)
          end select
 
-      enddo OUTPUT_VARS_2
+      enddo INT_VARS_2
+
+      ! Load balance the InOuts for Input
+      !----------------------------------
+      if (size(BufInOut) > 0) then
+         call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
+         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
+         call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+      end if
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
 ! Do shortwave calculations on a list of soundings
 !-------------------------------------------------
-!-------------------------------------------------
 
       call MAPL_TimerOn(MAPL,"-MISC")
 
-      ! Point to correct outputs
-      ! ------------------------
+      ! report cosine solar zenith angle actually used by REFRESH     
+      COSZSW = ZT
 
-      if (NO_AERO) then
-         FSW  => FSWA
-         FSC  => FSCA
-         FSWU => FSWUA
-         FSCU => FSCUA
-      FSWBAND => FSWBANDA
+      ! save soon-to-be-calculated fluxes to correct set of internals
+      if (.not. include_aerosols) then
+         FSW     => FSWA
+         FSC     => FSCA
+         FSWU    => FSWUA
+         FSCU    => FSCUA
+         FSWBAND => FSWBANDA
       end if
+
+      ! Option to force binary clouds for SW
+      call MAPL_GetResource(MAPL,ibinary,"RADSW_BINARY_CLOUDS:",DEFAULT=0,__RC__)
+      if (ibinary /= 0) where (CL > 0.) CL = 1.
 
       ! Prepare auxilliary variables
       ! ----------------------------
 
-      allocate(RH (size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL (size(Q,1),size(Q,2)),__STAT__)
-      allocate(PLTMP (size(PLE,1),size(PLE,2)),__STAT__)
+      allocate(RH(size(Q,1),size(Q,2)),__STAT__)
+      allocate(PL(size(Q,1),size(Q,2)),__STAT__)
+      allocate(PLhPa(size(PLE,1),size(PLE,2)),__STAT__)
 
       PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
       RH = Q/MAPL_EQSAT(T,PL=PL)
-      PLTMP = PLE * 0.01  ! hPa version for shrtwave
+      PLhPa = PLE * 0.01
 
       ! Water amounts and effective radii are in arrays indexed by species
       !-------------------------------------------------------------------
@@ -2859,25 +2779,18 @@ contains
       allocate(QQ3 (size(Q,1),size(Q,2),4),__STAT__)
       allocate(RR3 (size(Q,1),size(Q,2),4),__STAT__)
 
+      ! In-cloud water contents
       QQ3(:,:,1) = QI
       QQ3(:,:,2) = QL
       QQ3(:,:,3) = QR
       QQ3(:,:,4) = QS
 
-      WHERE (RI == MAPL_UNDEF)
-        RI = 36.e-6
-      END WHERE
-      WHERE (RL == MAPL_UNDEF)
-        RL = 14.e-6
-      END WHERE
-      WHERE (RR == MAPL_UNDEF)
-        RR = 50.e-6
-      END WHERE
-      WHERE (RS == MAPL_UNDEF)
-        RS = 50.e-6
-      END WHERE
-
-      RR3(:,:,1) = RI*1.e6  ! microns
+      ! Effective radii [microns]
+      WHERE (RI == MAPL_UNDEF) RI = 36.e-6
+      WHERE (RL == MAPL_UNDEF) RL = 14.e-6
+      WHERE (RR == MAPL_UNDEF) RR = 50.e-6
+      WHERE (RS == MAPL_UNDEF) RS = 50.e-6
+      RR3(:,:,1) = RI*1.e6
       RR3(:,:,2) = RL*1.e6
       RR3(:,:,3) = RR*1.e6
       RR3(:,:,4) = RS*1.e6
@@ -2902,24 +2815,18 @@ contains
       ! Begin aerosol code
       ! ------------------
 
-      ! Allocate per-band aerosol arrays for shortwave code
-      ! ---------------------------------------------------
-
       allocate(TAUA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
       allocate(SSAA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
       allocate(ASYA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
 
-      ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside the code.
-      ! --------------------------------------------------------------------------------
+      ! Zero out aerosol arrays.
+      ! If num_aero_vars == 0, these zeroes are used inside code.
+      TAUA = 0.
+      SSAA = 0.
+      ASYA = 0.
 
-      TAUA = 0.0
-      SSAA = 0.0
-      ASYA = 0.0
-
-      ! If we have aerosols, load them
-      ! ------------------------------
-
-      if (NA > 0) then
+      ! If we have aerosols, load them.
+      if (num_aero_vars > 0) then
          TAUA = BUFIMP_AEROSOL_EXT
          SSAA = BUFIMP_AEROSOL_SSA
          ASYA = BUFIMP_AEROSOL_ASY
@@ -2932,7 +2839,7 @@ contains
 
    SCHEME: if (USE_CHOU) then
       call shrtwave(                                          &
-                     PLTMP, T, Q, O3, CO2, ZT,                &
+                     PLhPa, T, Q, O3, CO2, ZT,                &
                      QQ3, RR3, CL,                            &
                      LCLDMH,LCLDLM,                           &
                      ALBVR, ALBVF, ALBNR, ALBNF,              &
@@ -2942,18 +2849,20 @@ contains
                      NIRR,NIRF,PARR,PARF,UVRR,UVRF,           &
                      FSWU,FSCU,                               &
                      FSWBAND,                                 &
-                     SOLAR_TO_OBIO .and. .not. NO_AERO,       &     
+                     SOLAR_TO_OBIO .and. include_aerosols,    &     
                      DRBAND, DFBAND,                          &
                      __RC__                                   )
 
    else if (USE_RRTMGP) then
 
+! helper for testing RRTMGP error status on return
+! allows line number reporting cf. original call method
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+
       call MAPL_TimerOn(MAPL,"-RRTMGP",__RC__)
 
       ! number of columns after load balancing
       ncol = size(Q,1)
-
-      call MAPL_TimerOn(MAPL, name="--RRTMGP_SETUP_1", __RC__)
 
       ! absorbing gas names
       error_msg = gas_concs%init([character(3) :: &
@@ -2973,10 +2882,6 @@ contains
       TEST_(gas_concs%set_vmr('o3' , real(O3      *(MAPL_AIRMW/MAPL_O3MW ),kind=wp)))
       TEST_(gas_concs%set_vmr('h2o', real(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),kind=wp)))
 
-      call MAPL_TimerOff(MAPL, name="--RRTMGP_SETUP_1", __RC__)
-
-      call MAPL_TimerOn(MAPL, name="--RRTMGP_IO_1", __RC__)
-
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
       VERIFY_(status)
@@ -2988,8 +2893,9 @@ contains
         DEFAULT='rrtmgp-data-sw.nc',__RC__)
       if (.not. rrtmgp_state%initialized) then
         ! gas_concs needed only to access required gas names
-        call load_and_init( &
-          rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
+        call MAPL_TimerOn(MAPL,"--RRTMGP_IO_GAS",__RC__)
+        call load_and_init(rrtmgp_state%k_dist,trim(k_dist_file),gas_concs)
+        call MAPL_TimerOff(MAPL,"--RRTMGP_IO_GAS",__RC__)
         if (.not. rrtmgp_state%k_dist%source_is_external()) then
           TEST_('RRTMGP-SW: does not seem to be SW')
         endif
@@ -2998,10 +2904,6 @@ contains
 
       ! access by shorter name
       k_dist => rrtmgp_state%k_dist
-
-      call MAPL_TimerOff(MAPL, name="--RRTMGP_IO_1", __RC__)
-
-      call MAPL_TimerOn(MAPL, name="--RRTMGP_SETUP_2", __RC__)
 
       ! adjust sun for current faculae and sunspots (tsi scaling done later)
       ! for the moment we are requiring MG and SB indicies from the NRLSSI2 file
@@ -3014,16 +2916,13 @@ contains
       nbnd = k_dist%get_nband()
       _ASSERT(nbnd == NB_RRTMGP, 'RRTMGP-SW: expected different number of bands')
 
-      ! note: use k_dist%get_band_lims_wavenumber()
-      !   to access band limits.
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-      ! pmn: check if same bands as RRTMG --- need code solution to make more flexible !!!!
+      ! For reference, comparison of RRTMG and RRTMGP bands:
       ! from RRTMG:
       ! wavenum1(:) = (/2600., 3250., 4000., 4650., 5150., 6150., 7700.,  8050.,12850.,16000.,22650.,29000.,38000.,  820./)
       ! wavenum2(:) = (/3250., 4000., 4650., 5150., 6150., 7700., 8050., 12850.,16000.,22650.,29000.,38000.,50000., 2600./)
       ! from RRTMGP:
-      ! write(*,*) 'band_lims_wvn(2,nbnd):', k_dist%get_band_lims_wavenumber()
-      ! output reordered as above
+      ! write(*,*) 'band_lims_wvn(2,nbnd):', k_dist%get_band_lims_wavenumber() ! reordered below
       !               820., 2680., 3250., 4000., 4650., 5150., 6150., 7700.,  8050., 12850., 16000., 22650., 29000., 38000.
       !              2680., 3250., 4000., 4650., 5150., 6150., 7700., 8050., 12850., 16000., 22650., 29000., 38000., 50000.
       ! clearly there are some differences ... so aerosol tables were redone
@@ -3033,7 +2932,9 @@ contains
       ! allocate input arrays
       allocate(tsi(ncol), mu0(ncol), __STAT__)
       allocate(sfc_alb_dir(nbnd,ncol), sfc_alb_dif(nbnd,ncol), __STAT__)
-      allocate(p_lay(ncol,LM), t_lay(ncol,LM), p_lev(ncol,LM+1), dp_wp(ncol,LM), __STAT__)
+      allocate(p_lay(ncol,LM), t_lay(ncol,LM), dp_wp(ncol,LM), __STAT__)
+      allocate(dzmid(ncol,LM-1), __STAT__)
+      allocate(p_lev(ncol,LM+1), __STAT__)
 
       ! load input arrays ...
 
@@ -3080,7 +2981,8 @@ contains
       _ASSERT(top_at_1, 'unexpected vertical ordering')
 
       ! layer pressure thicknesses used for cloud water path calculations
-      ! (better to do before any KLUGE to top pressure)
+      ! (do before any KLUGE to top pressure so optical paths wont be affected)
+      ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
       dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
 
       ! pmn: pressure KLUGE
@@ -3122,6 +3024,20 @@ contains
         endif
       endif
 
+      ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, +ve here).
+      ! dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1 is centered
+      ! on LEVEL k+1 since the LEVEL indices are one-based.
+      ! pmn: note that the dzmid calculation depends on the t_lev. Though t_lev is a temporary here, it
+      ! is an important variable in the LW, where its calculation must occur after the t_lay KLUGE. So,
+      ! for consistency with the LW, this t_lev and dzmid calculation is placed after the t_lay KLUGE.
+      allocate(t_lev(ncol),__STAT__)
+      do k = 1,LM-1
+        ! t_lev are interior interface temperatures at level k+1
+        t_lev = (t_lay(:,k) * dp_wp(:,k+1) + t_lay(:,k+1) * dp_wp(:,k)) / (dp_wp(:,k+1) + dp_wp(:,k))
+        dzmid(:,k) = t_lev * real(MAPL_RGAS/MAPL_GRAV,kind=wp) * (p_lay(:,k+1) - p_lay(:,k)) / p_lev(:,k+1)
+      end do
+      deallocate(t_lev,__STAT__)
+
       ! allocation of output arrays
       allocate(flux_up_clrsky (ncol,LM+1), flux_net_clrsky(ncol,LM+1), __STAT__)
       allocate(flux_up_allsky (ncol,LM+1), flux_net_allsky(ncol,LM+1), __STAT__)
@@ -3142,28 +3058,27 @@ contains
       ! =====================================================================================
 
       ! instantiate optical_props with desired streams
-      allocate(ty_optical_props_2str::optical_props,__STAT__)
-      nmom = 2 ! Used only if nstr, in which case must be >= 2
+      allocate(ty_optical_props_2str::optical_props,__STAT__)  ! <-- choose 2-stream SW
 
       ! initialize spectral discretiz'n and gpt mapping of optical_props
       TEST_(optical_props%init(k_dist))
 
-      call MAPL_TimerOff(MAPL, name="--RRTMGP_SETUP_2", __RC__)
+      ! Used only if nstr (and then must be >= 2)
+      nmom = 2
 
       ! get cloud optical properties (band-only)
-      ! pmn: some of this should be done only once per run ... TBD
+      ! pmn: some of this could be done only once per run ...
 
-      call MAPL_TimerOn(MAPL, name="--RRTMGP_IO_2", __RC__)
-
-      ! load and init cloud_optics from file
-      ! (gets appropriate coefficients needed to calculate
-      ! cloud optical properties from cloud physical properties)
+      ! load and init cloud_optics from file:
+      ! gets appropriate coefficients needed to calculate
+      ! cloud optical properties from cloud physical properties
       call MAPL_GetResource( &
         MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_COEFFS_SW:", &
-        DEFAULT='rrtmgp-cloud-optics-coeffs-sw.nc', __RC__)
+        DEFAULT='rrtmgp-cloud-optics-coeffs-reordered-sw.nc', __RC__)
       call MAPL_GetResource( &
         MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
         DEFAULT='LUT', __RC__)
+      call MAPL_TimerOn(MAPL,"--RRTMGP_IO_CLOUDS",__RC__)
       if (trim(cloud_optics_type)=='LUT') then
         call load_cld_lutcoeff (cloud_optics, cloud_optics_file)
       elseif (trim(cloud_optics_type)=='PADE') then
@@ -3171,8 +3086,7 @@ contains
       else
         TEST_('unknown cloud_optics_type: '//trim(cloud_optics_file))
       end if
-
-      call MAPL_TimerOff(MAPL, name="--RRTMGP_IO_2", __RC__)
+      call MAPL_TimerOff(MAPL,"--RRTMGP_IO_CLOUDS",__RC__)
 
       ! ice surface roughness category for Yang (2013) ice optics
       ! icergh: 1 = none, 2 = medium, 3 = high
@@ -3181,51 +3095,45 @@ contains
         DEFAULT=2, __RC__)
       TEST_(cloud_optics%set_ice_roughness(icergh))
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_SETUP_3",__RC__)
-
       ! cloud optics file is currently two-stream
       ! increment() will handle appropriate stream conversions
-      allocate(ty_optical_props_2str::cloud_props,__STAT__)
-      select type (cloud_props)
+      allocate(ty_optical_props_2str::cloud_props_bnd,__STAT__)
+      
+      ! band-only initialization for pre-mcICA cloud optical properties
+      TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
+            
+      ! g-point version for McICA sampled cloud optical properties
+      select type (cloud_props_bnd)
         class is (ty_optical_props_2str)
-          ! band-only initialization
-          TEST_(cloud_props%alloc_2str(ncol, LM, k_dist%get_band_lims_wavenumber()))
-          ! allocate a subset for blocking use
-          allocate(ty_optical_props_2str::cloud_props_subset,__STAT__)
-          ! allocate a gpt version for cloud sampling
           allocate(ty_optical_props_2str::cloud_props_gpt,__STAT__)
         class default
-          TEST_('cloud_props hardwired 2-stream for now')
+          TEST_('cloud optical properties hardwired 2-stream for now')
       end select
-
-      call MAPL_TimerOff(MAPL,"--RRTMGP_SETUP_3",__RC__)
-
-      call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-      ! make band in-cloud optical properties from cloud_optics
-      allocate(clwp(ncol,LM), ciwp(ncol,LM),__STAT__)
-      clwp = real(QQ3(:,:,2),kind=wp) * dp_wp * cwp_fac ! in-cloud [g/m2]
-      ciwp = real(QQ3(:,:,1),kind=wp) * dp_wp * cwp_fac ! in-cloud [g/m2]
-      error_msg = cloud_optics%cloud_optics( &
-        clwp, ciwp, &
-        real(RR3(:,:,2),kind=wp), real(RR3(:,:,1),kind=wp), &
-        cloud_props)
-      TEST_(error_msg)
-      deallocate(clwp, ciwp, __STAT__)
-
-      call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-      ! note: have made cloud_props for all ncol columns
-      !   and will subset below into blocks ... we can also
-      !   look at option of making cloud_props for each block
-      !   as its needed ... same for aer_props
+      TEST_(cloud_props_gpt%init(k_dist))
 
       ! read desired cloud overlap type
       call MAPL_GetResource( &
         MAPL, cloud_overlap_type, "RRTMGP_CLOUD_OVERLAP_TYPE_SW:", &
-        DEFAULT='MAX_RAN_OVERLAP', __RC__)
+        DEFAULT='GEN_MAX_RAN_OVERLAP', __RC__)
+        
+      ! GEN_MAX_RAN_OVERLAP uses correlation lengths
+      !   and possibly inhomogeneous condensate
+      gen_mro = (cloud_overlap_type == "GEN_MAX_RAN_OVERLAP")
+      if (gen_mro) then
+          
+        ! condensate inhomogeneous?
+        ! see RadiationGC initialization
+        cond_inhomo = condensate_inhomogeneous()
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+        ! Compute decorrelation length scales [m]
+        allocate(adl(ncol),__STAT__)
+        call correlation_length_cloud_fraction(ncol, ncol, doy, alat, adl)
+        if (cond_inhomo) then
+          allocate(rdl(ncol),__STAT__)
+          call correlation_length_condensate(ncol, ncol, doy, alat, rdl)
+        endif
+      
+      endif
 
       ! ===============================================================================
       ! Random number setup:
@@ -3287,55 +3195,21 @@ contains
       ! for SW start at counter=65,536
       seeds(3) = 65536
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
-
-      ! get aerosol optical properties
-      need_aer_optical_props = (.not. NO_AERO .and. implements_aerosol_optics)
-      if (need_aer_optical_props) then
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_AEROSOL_SETUP",__RC__)
-
+      ! set up aerosol optical properties
+      need_aer_optical_props = (include_aerosols .and. implements_aerosol_optics)
+      if (need_aer_optical_props) then 
         ! aerosol optics system is currently two-stream
-        ! increment() will handle appropriate stream conversions
+        ! increment() will handle appropriate stream conversions 
         allocate(ty_optical_props_2str::aer_props,__STAT__)
-        select type (aer_props)
-          class is (ty_optical_props_2str)
-
-            ! band-only initialization
-            TEST_(aer_props%alloc_2str(ncol, LM, k_dist%get_band_lims_wavenumber()))
-
-            ! load un-normalized optical properties from aerosol system
-            aer_props%tau = real(TAUA,kind=wp)
-            aer_props%ssa = real(SSAA,kind=wp)
-            aer_props%g   = real(ASYA,kind=wp)
-
-            ! renormalize
-            where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
-              aer_props%g   = aer_props%g   / aer_props%ssa
-              aer_props%ssa = aer_props%ssa / aer_props%tau
-            elsewhere
-              aer_props%tau = 0._wp
-              aer_props%ssa = 0._wp
-              aer_props%g   = 0._wp
-            end where
-
-            ! allocate a subset for blocking use
-            allocate(ty_optical_props_2str::aer_props_subset,__STAT__)
-
-          class default
-            TEST_('aer_props hardwired 2-stream for now')
-
-        end select
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_AEROSOL_SETUP",__RC__)
-
+        ! band-only initialization
+        TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
       end if
-
-      !--------------------------------------------------!
-      ! Loop over subsets (blocks) of blockSize columns  !
-      !  - choose rrtmgp_blockSize for efficiency        !
-      !  - one possible partial block is done at the end !
-      !--------------------------------------------------!
+      
+      !-------------------------------------------------------!
+      ! Loop over blocks of blockSize columns                 !
+      !  - choose rrtmgp_blockSize for memory/time efficiency !
+      !  - one possible partial block is done at the end      !
+      !-------------------------------------------------------!
 
       call MAPL_GetResource( MAPL, &
         rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", DEFAULT=4, __RC__)
@@ -3343,100 +3217,198 @@ contains
 
       ! for random numbers, for efficiency, reserve the maximum possible
       ! subset of columns (rrtmgp_blockSize) since column index is last
-      allocate(urand(ngpt,LM,rrtmgp_blocksize), __STAT__)
+      allocate(urand(ngpt,LM,rrtmgp_blocksize),__STAT__)
+      if (gen_mro) then
+        allocate(urand_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
+        if (cond_inhomo) then
+          allocate(urand_cond    (ngpt,LM,rrtmgp_blocksize),__STAT__)
+          allocate(urand_cond_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
+        end if
+      end if
 
-      ! number of full blocks by integer division
+      ! number of FULL blocks by integer division
       nBlocks = ncol/rrtmgp_blockSize
 
-      ! allocate intermediate arrays for full blocks
+      ! allocate intermediate arrays for FULL blocks
       if (nBlocks > 0) then
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SUBSET",__RC__)
+        ! block size UNTIL possible final partial block
+        ncols_block = rrtmgp_blockSize
 
-        ! block size until possible final partial block
-        ncols_subset = rrtmgp_blockSize
+        allocate(toa_flux(ncols_block,ngpt),__STAT__)
+        allocate(cld_mask(ncols_block,LM,ngpt),__STAT__)
+        if (gen_mro) then
+          allocate(alpha(ncols_block,LM-1),__STAT__)
+          if (cond_inhomo) then
+            allocate(rcorr(ncols_block,LM-1),__STAT__)
+            allocate(zcw(ncols_block,LM,ngpt),__STAT__)
+          endif
+        endif
 
-        ! allocate subset for block
-        select type (optical_props)
-          class is (ty_optical_props_1scl)
-            TEST_(optical_props%alloc_1scl(      ncols_subset, LM))
+        ! in-cloud cloud optical props
+        select type (cloud_props_bnd)
           class is (ty_optical_props_2str)
-            TEST_(optical_props%alloc_2str(      ncols_subset, LM))
-          class is (ty_optical_props_nstr)
-            TEST_(optical_props%alloc_nstr(nmom, ncols_subset, LM))
+            TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
+        end select
+        select type (cloud_props_gpt)
+          class is (ty_optical_props_2str)
+            TEST_(cloud_props_gpt%alloc_2str(ncols_block,LM))
         end select
 
-        if (allocated(toa_flux)) then
-          deallocate(toa_flux, __STAT__)
-        endif
-        allocate(toa_flux(ncols_subset, ngpt), __STAT__)
+        ! aerosol optical props
+        if (need_aer_optical_props) then
+          select type (aer_props)
+            class is (ty_optical_props_2str)
+              TEST_(aer_props%alloc_2str(ncols_block,LM))
+          end select
+        end if
 
-        if (allocated(cld_mask)) then
-          deallocate(cld_mask, __STAT__)
-        endif
-        allocate(cld_mask(ncols_subset, LM, ngpt), __STAT__)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SUBSET",__RC__)
+        ! gas+aer+cld optical properties
+        select type (optical_props)
+          class is (ty_optical_props_1scl)
+            TEST_(optical_props%alloc_1scl(ncols_block,LM))
+          class is (ty_optical_props_2str)
+            TEST_(optical_props%alloc_2str(ncols_block,LM))
+          class is (ty_optical_props_nstr)
+            TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
+        end select
 
       end if
 
       ! add final partial block if necessary
-      partial_block = mod(ncol, rrtmgp_blockSize) /= 0
+      partial_block = mod(ncol,rrtmgp_blockSize) /= 0
       if (partial_block) then
         partial_blockSize = ncol - nBlocks * rrtmgp_blockSize
         nBlocks = nBlocks + 1
       endif
 
       ! loop over all blocks
-      do b = 1, nBlocks
+      do b = 1,nBlocks
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SUBSET",__RC__)
-
-        ! only the final block can be partial
+        ! only the FINAL block can be partial
         if (b == nBlocks .and. partial_block) then
-          ncols_subset = partial_blockSize
+          ncols_block = partial_blockSize
 
+          if (b > 1) then
+            ! one or more full blocks already processed
+            deallocate(toa_flux,      __STAT__)
+            deallocate(cld_mask,      __STAT__)
+            if (gen_mro) then
+              deallocate(alpha,       __STAT__)
+              if (cond_inhomo) then
+                deallocate(rcorr,zcw, __STAT__)
+              endif
+            endif
+          endif
+
+          allocate(toa_flux(ncols_block,ngpt),    __STAT__)
+          allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
+          if (gen_mro) then
+            allocate(alpha(ncols_block,LM-1),     __STAT__)
+            if (cond_inhomo) then
+              allocate(rcorr(ncols_block,LM-1),   __STAT__)
+              allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
+            endif
+          endif
+
+          ! ty_optical_props routines have an internal deallocation
+          select type (cloud_props_bnd)
+            class is (ty_optical_props_2str)
+              TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
+          end select
+          select type (cloud_props_gpt)
+            class is (ty_optical_props_2str)
+              TEST_(cloud_props_gpt%alloc_2str(ncols_block,LM))
+          end select
+          if (need_aer_optical_props) then
+            select type (aer_props)
+              class is (ty_optical_props_2str)
+                TEST_(aer_props%alloc_2str(ncols_block,LM))
+            end select
+          end if
           select type (optical_props)
             class is (ty_optical_props_1scl)
-              TEST_(optical_props%alloc_1scl(      ncols_subset, LM))
+              TEST_(optical_props%alloc_1scl(ncols_block,LM))
             class is (ty_optical_props_2str)
-              TEST_(optical_props%alloc_2str(      ncols_subset, LM))
+              TEST_(optical_props%alloc_2str(ncols_block,LM))
             class is (ty_optical_props_nstr)
-              TEST_(optical_props%alloc_nstr(nmom, ncols_subset, LM))
+              TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
           end select
 
-          if (allocated(toa_flux)) then
-            deallocate(toa_flux, __STAT__)
-          endif
-          allocate(toa_flux(ncols_subset, ngpt), __STAT__)
-
-          if (allocated(cld_mask)) then
-            deallocate(cld_mask, __STAT__)
-          endif
-          allocate(cld_mask(ncols_subset, LM, ngpt), __STAT__)
-
-        endif
+        endif  ! partial block
 
         ! prepare block
         colS = (b-1) * rrtmgp_blockSize + 1
-        colE = colS + ncols_subset - 1
-        TEST_(gas_concs%get_subset(colS, ncols_subset, gas_concs_subset))
+        colE = colS + ncols_block - 1
+        TEST_(gas_concs%get_subset(colS,ncols_block,gas_concs_block))
 
-        ! get column subset of aerosol and in-cloud cloud optical props
+        ! get block of aerosol optical props
         if (need_aer_optical_props) then
-          TEST_(aer_props%get_subset(colS, ncols_subset, aer_props_subset))
+          select type (aer_props)
+            class is (ty_optical_props_2str)
+              
+              ! load un-normalized optical properties from aerosol system
+              aer_props%tau = real(TAUA(colS:colE,:,:),kind=wp)
+              aer_props%ssa = real(SSAA(colS:colE,:,:),kind=wp)
+              aer_props%g   = real(ASYA(colS:colE,:,:),kind=wp)
+          
+              ! renormalize
+              where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
+                aer_props%g   = aer_props%g   / aer_props%ssa
+                aer_props%ssa = aer_props%ssa / aer_props%tau
+              elsewhere
+                aer_props%tau = 0._wp
+                aer_props%ssa = 0._wp
+                aer_props%g   = 0._wp
+              end where
+        
+            class default
+              TEST_('aerosol optical properties hardwired 2-stream for now')
+          end select
         end if
-        TEST_(cloud_props%get_subset(colS, ncols_subset, cloud_props_subset))
 
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SUBSET",__RC__)
+        call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+
+        ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
+        ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
+        error_msg = cloud_optics%cloud_optics( &
+          real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+          real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+          min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
+            cloud_optics%get_min_radius_liq()), &
+            cloud_optics%get_max_radius_liq()), &
+          min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
+            cloud_optics%get_min_radius_ice()), &
+            cloud_optics%get_max_radius_ice()), &
+          cloud_props_bnd)
+        TEST_(error_msg)
+
+        call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
 
-        ! generate McICA random numbers for subset
-        ! Note: really only needed where cloud fraction > 0 (speedup?)
-        ! Also, perhaps later this can be parallelized?
+!!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
+
+        ! exponential inter-layer correlations
+        ! [alpha|rcorr](k) is correlation between layers k and k+1
+        ! dzmid(k) is separation between midpoints of layers k and k+1
+        if (gen_mro) then
+          do ilay = 1,LM-1
+            ! cloud fraction correlation
+            alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
+          enddo
+          if (cond_inhomo) then
+            do ilay = 1,LM-1
+              ! condensate correlation
+              rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
+            enddo
+          endif
+        endif
+
+        ! generate McICA random numbers for block
+        ! Perhaps later this can be parallelized?
 #ifdef HAVE_MKL
-        do isub = 1, ncols_subset
+        do isub = 1, ncols_block
           ! local 1d column index
           icol = colS + isub - 1
           ! initialize the Philox PRNG
@@ -3447,6 +3419,13 @@ contains
           call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
           ! draw the random numbers for the column
           urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+          if (gen_mro) then
+            urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+            if (cond_inhomo) then
+              urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+              urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+            endif
+          end if
           ! free the rng
           call rng%end()
         end do
@@ -3456,23 +3435,73 @@ contains
         select case (cloud_overlap_type)
           case ("MAX_RAN_OVERLAP")
             error_msg = sampled_mask_max_ran( &
-              urand(:,:,1:ncols_subset), real(CL(colS:colE,:),kind=wp), cld_mask)
+              urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), cld_mask)
             TEST_(error_msg)
           case ("EXP_RAN_OVERLAP")
-            TEST_('EXP_RAN_OVERLAP not yet implemented')
-            !TEST_(sampled_mask_exp_ran())
+            ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
+            ! to be provided ... it is not the same as alpha, which is a probability
+!           error_msg = sampled_mask_exp_ran( &
+!             urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), corr_coeff, cld_mask)
+!           TEST_(error_msg)
+            TEST_('EXP_RAN_OVERLAP not implemented yet')
+          case ("GEN_MAX_RAN_OVERLAP")
+            ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
+            ! cloud presence and cloud condensate are separately generalized maximum-random:
+            error_msg = sampled_urand_gen_max_ran(alpha, &
+              urand(:,:,1:ncols_block),urand_aux(:,:,1:ncols_block))
+            TEST_(error_msg)
+            if (cond_inhomo) then
+              error_msg = sampled_urand_gen_max_ran(rcorr, &
+                urand_cond(:,:,1:ncols_block),urand_cond_aux(:,:,1:ncols_block))
+              TEST_(error_msg)
+            end if
+            do isub = 1,ncols_block
+              icol = colS + isub - 1
+              do ilay = 1,LM
+                cld_frac = CL(icol,ilay)
+
+                ! if grid-box clear, no subgrid variability
+                if (cld_frac <= 0.) then
+                  cld_mask(isub,ilay,:) = .false.
+                else
+                  ! subgrid-scale cloud mask
+                  cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
+
+                  ! subgrid-scale condensate
+                  if (cond_inhomo) then
+                    ! level of condensate inhomogeneity based on cloud fraction.
+                    if (cld_frac > 0.99) then
+                      sigma_qcw = 0.5
+                    elseif (cld_frac > 0.9) then
+                      sigma_qcw = 0.71
+                    else
+                      sigma_qcw = 1.0
+                    endif
+                    do igpt = 1,ngpt
+                      if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
+                        zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
+                    end do
+                  end if
+                end if
+
+              end do
+            end do
+
           case default
-            TEST_('RRTMGP_LW: unknown cloud overlap')
+            TEST_('RRTMGP_SW: unknown cloud overlap')
         end select
 
         ! draw McICA optical property samples (band->gpt)
-        select type (cloud_props_gpt)
-          class is (ty_optical_props_2str)
-            TEST_(cloud_props_gpt%alloc_2str(ncols_subset, LM, k_dist))
-          class default
-            TEST_('cloud_props_gpt hardwired 2-stream for now')
-        end select
-        TEST_(draw_samples(cld_mask, cloud_props_subset, cloud_props_gpt))
+        TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
+
+        ! Scaling to sub-gridscale water paths:
+        ! since tau for each phase is linear in the phase's water path
+        ! and since the scaling zcw applies equally to both phases, the
+        ! total g-point optical thickness tau will scale with zcw.
+        if (gen_mro) then
+          if (cond_inhomo) &
+            where (cld_mask) cloud_props_gpt%tau = cloud_props_gpt%tau * zcw
+        end if
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
 
@@ -3481,7 +3510,7 @@ contains
         ! gas optics, including source functions
         error_msg = k_dist%gas_optics( &
           p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
-          gas_concs_subset, optical_props, toa_flux)
+          gas_concs_block, optical_props, toa_flux)
         TEST_(error_msg)
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
@@ -3494,7 +3523,7 @@ contains
 
         ! add in aerosol optical properties if requested and available
         if (need_aer_optical_props) then
-          TEST_(aer_props_subset%increment(optical_props))
+          TEST_(aer_props%increment(optical_props))
         end if
 
         ! clear-sky radiative transfer
@@ -3559,64 +3588,70 @@ contains
         FSWBAND(:,ib) = real(bnd_flux_net_allsky(:,LM+1,ib))
       end do
       ! surface downwelling direct and diffuse fluxes in bands
-      if (SOLAR_TO_OBIO .and. .not. NO_AERO) then
+      if (SOLAR_TO_OBIO .and. include_aerosols) then
          do ib = 1, nbnd
             DRBAND(:,ib) = real(bnd_flux_dir_allsky(:,LM+1,ib))
             DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
          end do
       endif
+
       ! surface direct and diffuse downward in super-bands
       ! for *diffuse* downward must subtract direct (downward) from total downward
+      ! pmn: may later do this using a flux class extension??
+
       ! NIR bands (1-9: 820-12850 cm-1, 0.778-12.195 microns)
-      NIRR(:) = 0.; NIRF(:) = 0.
+      NIRR = 0.; NIRF = 0.
       do ib=1,9
-        NIRR(:) = NIRR(:) + real(bnd_flux_dir_allsky(:,LM+1,ib))
-        NIRF(:) = NIRF(:) + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+        NIRR = NIRR + real(bnd_flux_dir_allsky(:,LM+1,ib))
+        NIRF = NIRF + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
       end do
       ! PAR bands (11-12: 16000-29000 cm-1, 0.345-0.625 micron)
-      PARR(:) = 0.; PARF(:) = 0.
+      PARR = 0.; PARF = 0.
       do ib=11,12
-        PARR(:) = PARR(:) + real(bnd_flux_dir_allsky(:,LM+1,ib))
-        PARF(:) = PARF(:) + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+        PARR = PARR + real(bnd_flux_dir_allsky(:,LM+1,ib))
+        PARF = PARF + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
       enddo
       ! UVR bands (13-14: 29000-50000 cm-1, 0.200-0.345 micron)
-      UVRR(:) = 0.; UVRF(:) = 0.
+      UVRR = 0.; UVRF = 0.
       do ib=13,14
-        UVRR(:) = UVRR(:) + real(bnd_flux_dir_allsky(:,LM+1,ib))
-        UVRF(:) = UVRF(:) + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
+        UVRR = UVRR + real(bnd_flux_dir_allsky(:,LM+1,ib))
+        UVRF = UVRF + real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
       enddo
       ! Transition band (10, 12850-16000 cm-1, 0.625-0.778 micron)
       ! split half-and-half to PAR and NIR
-      NIRR(:) = NIRR(:) + 0.5 * real(bnd_flux_dir_allsky(:,LM+1,10))
-      PARR(:) = PARR(:) + 0.5 * real(bnd_flux_dir_allsky(:,LM+1,10))
-      NIRF(:) = NIRF(:) + 0.5 * real(bnd_flux_dn_allsky (:,LM+1,10) - bnd_flux_dir_allsky(:,LM+1,10))
-      PARF(:) = PARF(:) + 0.5 * real(bnd_flux_dn_allsky (:,LM+1,10) - bnd_flux_dir_allsky(:,LM+1,10))
+      NIRR = NIRR + 0.5 * real(bnd_flux_dir_allsky(:,LM+1,10))
+      PARR = PARR + 0.5 * real(bnd_flux_dir_allsky(:,LM+1,10))
+      NIRF = NIRF + 0.5 * real(bnd_flux_dn_allsky (:,LM+1,10) - bnd_flux_dir_allsky(:,LM+1,10))
+      PARF = PARF + 0.5 * real(bnd_flux_dn_allsky (:,LM+1,10) - bnd_flux_dir_allsky(:,LM+1,10))
 
       ! clean up
-      call optical_props%finalize()
-      if (need_aer_optical_props) then
-        call aer_props_subset%finalize()
-        call aer_props%finalize()
+      deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,toa_flux,__STAT__)
+      deallocate(p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
+      deallocate(flux_up_clrsky,flux_net_clrsky,__STAT__)
+      deallocate(flux_up_allsky,flux_net_allsky,__STAT__)
+      deallocate(bnd_flux_dn_allsky,bnd_flux_net_allsky,bnd_flux_dir_allsky,__STAT__)
+      deallocate(seeds,urand,cld_mask,__STAT__)
+      if (gen_mro) then
+        deallocate(adl,alpha,urand_aux,__STAT__)
+        if (cond_inhomo) then
+          deallocate(rdl,rcorr,urand_cond,urand_cond_aux,zcw,__STAT__)
+        endif
       end if
-      call cloud_props_gpt%finalize()
-      call cloud_props_subset%finalize()
-      deallocate(seeds,__STAT__)
-      deallocate(urand, __STAT__)
-      deallocate(cld_mask, __STAT__)
-      call cloud_props%finalize()
       call cloud_optics%finalize()
-      deallocate(flux_up_clrsky, flux_net_clrsky, __STAT__)
-      deallocate(flux_up_allsky, flux_net_allsky, __STAT__)
-      deallocate(bnd_flux_dn_allsky, bnd_flux_net_allsky, bnd_flux_dir_allsky, __STAT__)
-      deallocate(p_lay, t_lay, p_lev, dp_wp, __STAT__)
-      deallocate(tsi, mu0, sfc_alb_dir, sfc_alb_dif, toa_flux, __STAT__)
+      call cloud_props_gpt%finalize()
+      call cloud_props_bnd%finalize()
+      if (need_aer_optical_props) call aer_props%finalize()
+      call optical_props%finalize()
 
       call MAPL_TimerOff(MAPL,"--RRTMGP_POST",__RC__)
 
       call MAPL_TimerOff(MAPL,"-RRTMGP",__RC__)
 
+#undef TEST_
+
    else if (USE_RRTMG) then
 
+      ! regular RRTMG
       call MAPL_TimerOn(MAPL,"-RRTMG")
 
       NCOL = size(Q,1)
@@ -3670,29 +3705,23 @@ contains
       call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,RC=STATUS)
       VERIFY_(STATUS)
 
-      ! Get number of cores per node for RRTMG GPU
-      ! ------------------------------------------
-
-      ! Reuse the COMM from above
-      CoresPerNode = MAPL_CoresPerNodeGet(COMM, RC=STATUS)
-
       ! Normalize aerosol inputs
       ! ------------------------
 
-      if (NA > 0) then
-         where (TAUA > 0.0 .and. SSAA > 0.0 )
+      if (num_aero_vars > 0) then
+         where (TAUA > 0. .and. SSAA > 0. )
             ASYA = ASYA/SSAA
             SSAA = SSAA/TAUA
          elsewhere
-            TAUA = 0.0
-            SSAA = 0.0
-            ASYA = 0.0
+            TAUA = 0.
+            SSAA = 0.
+            ASYA = 0.
          end where
       end if
 
       ! Flip in vertical, Convert units, and interpolate T, etc.
       ! --------------------------------------------------------
-      ! RRTMG index convention is that indices increase from bottom to top
+      ! RRTMG convention is that vertical indices increase from bot -> top
 
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
 
@@ -3855,7 +3884,7 @@ contains
             write (*,*) "ISOLVAR==1 is currently unsupported as we have no"
             write (*,*) "way of correctly setting solcycfrac."
          end if
-         _ASSERT(.FALSE.,'RRTMG SW: ISOLVAR==1 currently unsupported')
+         _FAIL('RRTMG SW: ISOLVAR==1 currently unsupported')
       end if
 
       ! INDSOLVAR =  Facular and sunspot amplitude
@@ -3894,7 +3923,7 @@ contains
       ! call RRTMG SW
       ! -------------
 
-      call RRTMG_SW ( &
+      call RRTMG_SW (MAPL, &
          RPART, NCOL, LM, &
          SC, ADJES, ZT, ISOLVAR, &
          PL_R, PLE_R, T_R, &
@@ -3908,8 +3937,9 @@ contains
          CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
          NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
          TAUTP, TAUHP, TAUMP, TAULP, &
-         SOLAR_TO_OBIO .and. .not. NO_AERO, DRBAND, DFBAND, &
-         BNDSOLVAR, INDSOLVAR, SOLCYCFRAC)
+         SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
+         BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+         __RC__)
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
@@ -3928,10 +3958,12 @@ contains
       ! ----------------
 
       ! convert super-layer clearCounts to cloud fractions
-      CLDTS(:) = 1. - CLEARCOUNTS(:,1)/float(NGPTSW)
-      CLDHS(:) = 1. - CLEARCOUNTS(:,2)/float(NGPTSW)
-      CLDMS(:) = 1. - CLEARCOUNTS(:,3)/float(NGPTSW)
-      CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
+      if (include_aerosols) then
+        CLDTS(:) = 1. - CLEARCOUNTS(:,1)/float(NGPTSW)
+        CLDHS(:) = 1. - CLEARCOUNTS(:,2)/float(NGPTSW)
+        CLDMS(:) = 1. - CLEARCOUNTS(:,3)/float(NGPTSW)
+        CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
+      end if
 
       FSW  = SWDFLXR  - SWUFLXR
       FSC  = SWDFLXCR - SWUFLXCR
@@ -3978,115 +4010,113 @@ contains
 
    else
 
-      _ASSERT(.FALSE.,'unknown SW radiation scheme!')
+      _FAIL('unknown SW radiation scheme!')
 
    end if SCHEME
 
       ! Deallocate the working inputs
       !------------------------------
 
-      deallocate (PL, RH, PLTMP)
+      deallocate (PL, RH, PLhPa)
       deallocate (QQ3, RR3)
       deallocate (O3)
       deallocate (TAUA, SSAA, ASYA)
 
-! Complete load balancing by retrieving work done remotely
-!---------------------------------------------------------
+      ! Complete load balancing by retrieving work done remotely
+      !---------------------------------------------------------
 
       call MAPL_TimerOn(MAPL,"-BALANCE")
 
-      call MAPL_TimerOn(MAPL,"--RETRIEVE")
+      if (size(BufOut) > 0) then
+         call MAPL_TimerOn(MAPL,"--RETRIEVE")
+         call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      end if
 
-      call MAPL_BalanceWork(BufOut, NumMax, Direction=MAPL_Retrieve, Handle=SolarBalanceHandle, __RC__)
+      if (size(BufInOut) > 0) then
+         call MAPL_TimerOn(MAPL,"--RETRIEVE")
+         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      end if
 
-      call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      ! Unpack the results. Fills "masked" (night) locations with default value from internal state
+      !--------------------------------------------------------------------------------------------
+      ! resulting internals are then contiguous versions
+      ! Note: InOut variables do not fill unmasked locations with a default,
+      ! since the unmasked locations may contain potentially useful aged data.
+               
+      i1InOut = 1; i1Out = 1
+      INT_VARS_3: do k=1,NumInt
+         if (SlicesInt(k) == 0) cycle
+               
+         if (IntInOut(k)) then
+            pi1 => i1InOut
+         else  
+            pi1 => i1Out
+            call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=def,__RC__)
+         endif
 
-! Unpack the results. ReOrder fills masked (night) locations with zero.
-!----------------------------------------------------------------------
-
-      L1 = 1
-      OUTPUT_VARS_3: do k=1,NumOut
-         if (SlicesOut(k) == 0) cycle
-
-         if (SlicesOut(k) > 1) then
-            ! internal 3D outputs
-            call ESMFL_StateGetPointerToData(INTERNAL, ptr3, NamesOut(k), __RC__)
-            call ReOrder(BufOut(L1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),UNPACKIT)
-         else if (k < NumOut-7) then
-            ! internal 2D outputs
-            call ESMFL_StateGetPointerToData(INTERNAL, ptr2, NamesOut(k), __RC__)
-            call ReOrder(BufOut(L1),ptr2,daytime,NumMax,HorzDims,1,UNPACKIT)
+         if (ugDim(k) > 0) then
+            select case(rgDim(k))
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
+                  if (IntInOut(k)) then
+                     do j=1,ugDim(k)
+                        call UnPackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
+                           daytime,NumMax,HorzDims,size(ptr4,3))
+                     end do
+                  else
+                     do j=1,ugDim(k)
+                        call UnPackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
+                           daytime,NumMax,HorzDims,size(ptr4,3),def)
+                     end do
+                  endif
+               case(MAPL_DIMSHORZONLY)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
+                  if (IntInOut(k)) then
+                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                  else
+                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),def)
+                  endif
+            end select
          else
-            ! cloud fraction outputs (2D)
-            if      (NamesOut(k) == "CLDTTSW") then
-               if (associated(CLDTTSW)) then
-                  call ReOrder(BufOut(L1),CLDTTSW,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) CLDTTSW = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "CLDHISW") then
-               if (associated(CLDHISW)) then
-                  call ReOrder(BufOut(L1),CLDHISW,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) CLDHISW = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "CLDMDSW") then
-               if (associated(CLDMDSW)) then
-                  call ReOrder(BufOut(L1),CLDMDSW,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) CLDMDSW = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "CLDLOSW") then
-               if (associated(CLDLOSW)) then
-                  call ReOrder(BufOut(L1),CLDLOSW,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) CLDLOSW = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "TAUTTPAR") then
-               if (associated(TAUTTPAR)) then
-                  call ReOrder(BufOut(L1),TAUTTPAR,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) TAUTTPAR = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "TAUHIPAR") then
-               if (associated(TAUHIPAR)) then
-                  call ReOrder(BufOut(L1),TAUHIPAR,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) TAUHIPAR = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "TAUMDPAR") then
-               if (associated(TAUMDPAR)) then
-                  call ReOrder(BufOut(L1),TAUMDPAR,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) TAUMDPAR = MAPL_UNDEF
-               end if
-            else if (NamesOut(k) == "TAULOPAR") then
-               if (associated(TAULOPAR)) then
-                  call ReOrder(BufOut(L1),TAULOPAR,daytime,NumMax,HorzDims,1,UNPACKIT)
-                  WHERE (.not.daytime) TAULOPAR = MAPL_UNDEF
-               end if
-            end if
+            select case(rgDim(k))
+               case(MAPL_DIMSHORZVERT)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
+                  if (IntInOut(k)) then
+                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
+                  else    
+                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),def)
+                  endif
+               case(MAPL_DIMSHORZONLY)
+                  call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
+                  if (IntInOut(k)) then
+                     call UnPackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
+                  else
+                     call UnPackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1,def)
+                  endif
+            end select
          end if
+         pi1 = pi1 + NumMax*SlicesInt(k)
 
-         L1 = L1 + NumMax*SlicesOut(k)
+      enddo INT_VARS_3
 
-      enddo OUTPUT_VARS_3  ! Over all output variables
-
-! These are the contiguous versions of the working inputs and internals
-!----------------------------------------------------------------------
-
-      deallocate(BufInp,BufOut,SlicesInp,SlicesOut,NamesInp,NamesOut,__STAT__)
-
+      ! clean up
+      deallocate(SlicesInp,NamesInp,__STAT__)
+      deallocate(SlicesInt,NamesInt,__STAT__)
+      deallocate(IntInOut,rgDim,ugDim,__STAT__)
+      deallocate(BufInp,BufInOut,BufOut,__STAT__)
       call MAPL_TimerOn(MAPL,"--DESTROY")
-
       call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
-
       call MAPL_TimerOff(MAPL,"--DESTROY")
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
-
-!  All done
-!-----------
 
       RETURN_(ESMF_SUCCESS)
     end subroutine SORADCORE
 
 
-
-    subroutine SHRTWAVE(PLTMP,TA,WA,OA,CO2,COSZ   , &
+    subroutine SHRTWAVE(PLhPa,TA,WA,OA,CO2,COSZ   , &
                           CWC,REFF,FCLD,ICT,ICB  , &
                           RGBUV,RGFUV,RGBIR,RGFIR, &
                           TAUA,SSAA,ASYA, &
@@ -4106,7 +4136,7 @@ contains
 !   Inlineable cover for the f77 version of SORAD.
 !   This cover works on a 1D run of soundings.
 
-      real, dimension(:,:    ), intent(IN ) :: PLTMP,TA, WA, OA, FCLD
+      real, dimension(:,:    ), intent(IN ) :: PLhPa,TA, WA, OA, FCLD
       real, dimension(:,:,:  ), intent(IN ) :: CWC, REFF
       real,                     intent(IN ) :: CO2
       integer,                  intent(IN ) :: ICT, ICB
@@ -4147,7 +4177,7 @@ contains
       call MAPL_TimerOn(MAPL,"-SORAD")
 
       call MAPL_TimerOn(MAPL,"--SORAD_RUN",__RC__)
-      call SORAD (IRUN,LN,NB_CHOU,COSZ,PLTMP,TA,WA,OA,CO2,      &
+      call SORAD (IRUN,LN,NB_CHOU,COSZ,PLhPa,TA,WA,OA,CO2,      &
            CWC,FCLD,ICT,ICB,REFF,HK_UV_TEMP,HK_IR_TEMP,         &
            TAUA,SSAA,ASYA,                                      &
            RGBUV,RGFUV, RGBIR, RGFIR,                           &
@@ -4225,7 +4255,7 @@ contains
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
 
       real, pointer, dimension(:,:,:)   :: FCLD,CLIN,RH
-      real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q, RAERO
+      real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
       real, pointer, dimension(:,:,:)   :: RRL,RRI,RRR,RRS
       real, pointer, dimension(:,:,:)   :: RQL,RQI,RQR,RQS
       real, pointer, dimension(:,:,:,:) :: TAUCLD, HYDROMETS, REFF
@@ -4345,10 +4375,6 @@ contains
       real :: swvn1, swvn2, owvn1, owvn2, sfrac
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
       logical :: sfirst, ofirst
-
-! helper for testing RRTMGP error status on return;
-! allows line number reporting cf. original call method
-#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _ASSERT(.false.,"RRTMGP Error: "//trim(error_msg)); endif
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -4610,7 +4636,7 @@ contains
                   ! *relative* distances matter, so wolog set zmid(LM) = 0.
                   zmid(LM,ncld) = 0.
                   do k = LM-1, 1, -1
-                     ! dz ~ RT/g x dp/p by hysrostatic eqn and ideal gas eqn.
+                     ! dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn.
                      ! The jump from LAYER k+1 to k is centered on LEVEL k
                      !   since the LEVEL indices are zero-based
                      zmid(k,ncld) = zmid(k+1,ncld) + MAPL_RGAS * tlev(k) / MAPL_GRAV &
@@ -4955,7 +4981,6 @@ contains
         end where
       end if
 
-
 ! Fill 3D FLuxes
 !---------------
 
@@ -5018,6 +5043,10 @@ contains
  
             if (USE_RRTMGP) then
 
+! helper for testing RRTMGP error status on return;
+! allows line number reporting cf. original call method
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+
                ! access RRTMGP internal state from the GC
                call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
                VERIFY_(status)
@@ -5049,6 +5078,8 @@ contains
 
                ! RRTMGP bands are already ordered in increasing wavenumber
                SOLAR_band_number_in_wvn_order = [(i, i=1,NUM_BANDS_SOLAR)]
+
+#undef TEST_
 
             elseif (USE_RRTMG) then 
 
@@ -5168,93 +5199,109 @@ contains
 
   end subroutine RUN
 
-subroutine PackLoc(A,B,MSK,LENA,LENB,MASKIT)
+  ! Pack masked locations into buffer
+  subroutine PackIt (Packed, UnPacked, MSK, Pdim, Udim, LM)
+    integer, intent(IN   ) :: Pdim, Udim(2), LM
+    real,    intent(INOUT) ::   Packed(Pdim,*)
+    real,    intent(IN   ) :: UnPacked(Udim(1),Udim(2),*)
+    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
 
-  implicit none
-
-  real,    intent(IN   ) :: A(LENA)
-  real,    intent(  OUT) :: B(LENB)
-  integer, intent(IN   ) :: LENA, LENB
-  logical, intent(IN   ) :: MSK(LENA), MASKIT
-
-  integer :: I, M
-
-  if (MASKIT) then
-     M = 1
-     do I = 1,LENA
-        if (MSK(I)) then
-           B(M) = A(I)
-           M = M+1
-           if (M>LENB) exit
-        end if
-     end do
-  else
-     if (LENA /= LENB) stop
-     B = A
-  end if
-
-end subroutine PackLoc
-
-subroutine UnPackLoc(A,B,MSK,F,LENA,LENB,MASKIT)
-
-   implicit none
-
-   real,    intent(IN   ) :: A(LENA), F
-   real,    intent(  OUT) :: B(LENB)
-   integer, intent(IN   ) :: LENA, LENB
-   logical, intent(IN   ) :: MSK(LENB), MASKIT
-
-   integer :: I, M
-
-   if(MASKIT) then
-      M = 1
-      do I = 1,LENB
-         if (MSK(I)) then
-            if (M>LENA) then
-               B(I) = F
-            else
-               B(I) = A(M)
-            end if
-            M = M+1
-         else
-            B(I) = F
-         end if
+    integer :: I, J, L, M
+                  
+    do L = 1,LM
+      M = 1       
+      do J = 1,Udim(2) 
+        do I = 1,Udim(1)
+          if (MSK(I,J)) then
+            Packed(M,L) = UnPacked(I,J,L)
+            M = M+1  
+          end if  
+        end do
       end do
-   else
-      if (LENA /= LENB) stop
-      B = A
-   end if
+    end do  
+               
+  end subroutine PackIt
 
-end subroutine UnPackLoc
+  ! Unpack masked locations from buffer
+  subroutine UnPackIt(Packed, UnPacked, MSK, Pdim, Udim, LM, DEFAULT)
+    integer, intent(IN   ) :: Pdim, Udim(2), LM
+    real,    intent(IN   ) ::   Packed(Pdim,*)
+    real,    intent(INOUT) :: UnPacked(Udim(1),Udim(2),*)
+    logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
+    real, optional, intent(IN) :: DEFAULT
+
+    integer :: I, J, L, M
+
+    do L = 1,LM
+      M = 1
+      do J = 1,Udim(2)
+        do I = 1,Udim(1)
+          if (MSK(I,J)) then
+            Unpacked(I,J,L) = Packed(M,L)
+            M = M+1
+          elseif (PRESENT(DEFAULT)) then
+            UnPacked(I,J,L) = DEFAULT
+          end if
+        end do
+      end do
+    end do
+
+  end subroutine UnPackIt
+
+  ! Decide which radiation to use for thermodynamics state evolution.
+  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
+  ! Chou-Suarez is the default if nothing else asked for in Resource file.
+  !----------------------------------------------------------------------
+
+  subroutine choose_solar_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    real :: RFLAG
+    integer :: STATUS
+
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+    
+    _RETURN(_SUCCESS)
+  end subroutine choose_solar_scheme 
+    
+
+  subroutine choose_irrad_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+    
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    real :: RFLAG
+    integer :: STATUS 
+    
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+
+    _RETURN(_SUCCESS)
+  end subroutine choose_irrad_scheme
 
 end module GEOS_SolarGridCompMod
-
-subroutine ReOrder(Packed, UnPacked, MSK, Pdim, Udim, LM, DIR)
-  integer, intent(IN   ) :: Pdim, Udim(2), LM, DIR
-  real,    intent(INOUT) ::   Packed(Pdim,*)
-  real,    intent(INOUT) :: UnPacked(Udim(1),Udim(2),*)
-  logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
-
-  integer :: I, J, L, M
-
-  do L = 1,LM
-     M = 1
-     do J = 1,Udim(2)
-        do I = 1,Udim(1)
-           if (MSK(I,J)) then
-              if(DIR==PACKIT) then
-                 Packed(M,L) = UnPacked(I,J,L)
-              else
-                 Unpacked(I,J,L) = Packed(M,L)
-              end if
-              M = M+1
-           else
-              if(DIR/=PACKIT) then
-                 UnPacked(I,J,L) = 0
-              end if
-           end if
-        end do
-     end do
-  end do
-
-end subroutine ReOrder
