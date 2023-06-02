@@ -2235,8 +2235,11 @@ contains
       integer :: IM_World, JM_World, Gdims(3)
       integer, dimension(IM,JM) :: Ig, Jg
 
-      ! gridcolum presence of liq and ice clouds (ncol,nlay)
+      ! gridcolum liq and ice cloud condensate (ncol,nlay)
       real(wp), dimension(:,:), allocatable :: clwp, ciwp
+
+      ! effective radii of cloud droplets and ice crystals (ncol,nlay)
+      real(wp), dimension(:,:), allocatable :: radliq, radice
 
       ! a column random number generator
 #ifdef HAVE_MKL
@@ -3202,16 +3205,25 @@ contains
 
       call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
-      ! make band in-cloud optical properties from cloud_optics
+      ! in-cloud condensate amounts [g/m2]
       allocate(clwp(ncol,LM), ciwp(ncol,LM),__STAT__)
-      clwp = real(QQ3(:,:,2),kind=wp) * dp_wp * cwp_fac ! in-cloud [g/m2]
-      ciwp = real(QQ3(:,:,1),kind=wp) * dp_wp * cwp_fac ! in-cloud [g/m2]
+      clwp = real(QQ3(:,:,2),kind=wp) * dp_wp * cwp_fac
+      ciwp = real(QQ3(:,:,1),kind=wp) * dp_wp * cwp_fac
+
+      ! effective radii [microns]
+      allocate(radliq(ncol,LM), radice(ncol,LM),__STAT__)
+      radliq = min( max( real(RR3(:,:,2),kind=wp), &
+         cloud_optics%get_min_radius_liq()), &
+         cloud_optics%get_max_radius_liq())
+      radice = min( max( real(RR3(:,:,1),kind=wp), &
+         cloud_optics%get_min_radius_ice()), &
+         cloud_optics%get_max_radius_ice())
+
+      ! make band in-cloud optical properties from cloud_optics
       error_msg = cloud_optics%cloud_optics( &
-        clwp, ciwp, &
-        real(RR3(:,:,2),kind=wp), real(RR3(:,:,1),kind=wp), &
-        cloud_props)
+        clwp, ciwp, radliq, radice, cloud_props)
       TEST_(error_msg)
-      deallocate(clwp, ciwp, __STAT__)
+      deallocate(clwp, ciwp, radliq, radice, __STAT__)
 
       call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
