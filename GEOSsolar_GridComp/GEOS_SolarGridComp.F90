@@ -3016,7 +3016,7 @@ contains
         ! allow a small increase of tmin
         call MAPL_GetResource (MAPL, &
            tmin_increase_OK_Kelvin, 'RRTMGP_SW_TMIN_INC_OK_K:', &
-           DEFAULT = 10., __RC__)
+           DEFAULT = 10._wp, __RC__)
         if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
           where (t_lay < temp_ref_min) t_lay = temp_ref_min
         else
