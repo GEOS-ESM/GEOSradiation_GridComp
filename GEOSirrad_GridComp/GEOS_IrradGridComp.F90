@@ -241,6 +241,11 @@ contains
     character*2 :: bb
     character*9 :: wvn_rng  ! xxxx-yyyy
 
+! <<>> MSL
+    integer      :: i,n
+    character(len=ESMF_MAXSTR) :: gen_str !i.e. generic_string variable <<>> MSL
+    character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
+
 !=============================================================================
 
 ! Get my name and set-up traceback handle
@@ -296,6 +301,14 @@ contains
 !BOS
 
 !  !IMPORT STATE:
+
+     call MAPL_AddImportSpec(GC,                           &
+        SHORT_NAME = 'AREA',                               &
+        LONG_NAME  = '',                                   &
+        UNITS      = 'm^2',                                &
+        DIMS       = MAPL_DimsHorzOnly,                    &
+        VLOCATION  = MAPL_VLocationNone,                   &
+        RESTART    = MAPL_RestartSkip,    __RC__)
 
      call MAPL_AddImportSpec(GC,                                  &
         SHORT_NAME         = 'PLE',                               &
@@ -502,6 +515,26 @@ contains
        VLOCATION  = MAPL_VLocationCenter,                         &
        DATATYPE   = MAPL_StateItem,                               &
        RESTART    = MAPL_RestartSkip,                      __RC__ )
+
+! If CO2 is provided as a RAT, import a CO2 field <<>> MSL
+!---------------------------------------------------------
+    ! Using DT below since it is already declared, and avoids adding an additional var - MSL
+    call ESMF_ConfigGetAttribute(CF, DT, Label='CO2:', default=-1.0, RC=STATUS)
+    VERIFY_(STATUS)
+    
+    ! If using 3-D CO2, set up the import
+    if (DT.eq.-2.0) then
+       call MAPL_AddImportSpec(GC,                                  &
+            SHORT_NAME         = 'CO2',                               &
+            LONG_NAME          = 'carbondioxide_concentration',       &
+            UNITS              = 'pppv',                              &
+            DIMS               = MAPL_DimsHorzVert,                   &
+            VLOCATION          = MAPL_VLocationCenter,                &
+            AVERAGING_INTERVAL = ACCUMINT,                            &
+            REFRESH_INTERVAL   = MY_STEP,                             &
+            RC=STATUS  )
+       VERIFY_(STATUS)
+    endif
 
 !  !EXPORT STATE:
 
@@ -975,6 +1008,148 @@ contains
        end do
     end if
 
+! Settings for RATS-specific radiation diagnostics
+! -- these will cause RRTMG_LW to be called multiple times toggling the named species
+!    on/off. Outputs the specific radiative impacts of that species (e.g. CO2)
+! -- the code below simply adds the diagnostic exports
+! -- Need to test if a given input has an import. Not sure how to do this within SetServices. In
+!    case it's possible, this code block is placed -after- all the imports are added so the
+!    imports can be queried.
+! <<>> MSL
+!--------------------------------------------------------------------------------------
+    call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS) ! Use STATUS to test if label was found
+
+    ! No error thrown. Just go around this if nothing learnable from config.
+    IF (STATUS .eq. ESMF_SUCCESS) THEN ! if the label was found...
+
+       ! Get number of words in config line
+       n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
+       VERIFY_(STATUS)
+
+       allocate(nameRATS(n), STAT=STATUS)
+       VERIFY_(STATUS)
+
+       ! Put the cursor at the label
+       call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS)
+       VERIFY_(STATUS)
+
+       ! Loop over RATS in list
+       DO i=1,n
+          call ESMF_ConfigGetAttribute(CF,gen_str,RC=STATUS)
+          VERIFY_(STATUS)
+          
+          nameRATS(i) = trim(gen_str)
+
+          ! Test if label 'gen_str' has an import
+          ! Otherwise throw error. (This could be done in GEOS_Physics GC)
+          ! <<TBD>> MSL
+          ! O3 CO2 CH4 N2O CFC11 CFC12 CFC22 CCl4
+
+       ENDDO
+
+       DO i=1,n
+          ! Can't read the CF list in the loop above if MAPL_AddExportSpec() is
+          ! called within it. Not sure why. So...
+
+          ! Create exports for this RAT
+          ! -- OLR
+          !          gen_str = 'OLR_'//trim(gen_str)
+          call MAPL_AddExportSpec(GC,                                            &
+               SHORT_NAME = 'dOLR_'//trim(nameRATS(i)),                          &
+               LONG_NAME  = 'chg_in_upwell_LW_flx_at_toa_from_'//trim(nameRATS(i)), &
+               UNITS      = 'W m-2',                                             &
+               DIMS       = MAPL_DimsHorzOnly,                                   &
+               VLOCATION  = MAPL_VLocationNone,                       RC=STATUS  )
+          VERIFY_(STATUS)
+          call MAPL_AddExportSpec(GC,                                    &
+               SHORT_NAME = 'dLWS_'//trim(nameRATS(i)),                  &
+               LONG_NAME  = 'chg_in_surface_absorbed_LW_rad_from_'//trim(nameRATS(i)), &
+               UNITS      = 'W m-2',                                     &
+               DIMS       = MAPL_DimsHorzOnly,                           &
+               VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
+          VERIFY_(STATUS)
+          call MAPL_AddExportSpec(GC,                                    &
+               SHORT_NAME = 'dFLNS_'//trim(nameRATS(i)),                 &
+               LONG_NAME  = 'chg_in_sfc_net_downward_LW_flux_from_'//trim(nameRATS(i)),&
+               UNITS      = 'W m-2',                                     &
+               DIMS       = MAPL_DimsHorzOnly,                           &
+               VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
+          VERIFY_(STATUS)
+          call MAPL_AddExportSpec(GC,                                  &
+               SHORT_NAME = 'dSFCEM_'//trim(nameRATS(i)),                &
+               LONG_NAME  = 'LW_flux_emitted_from_sfc_from_'//trim(nameRATS(i)), &
+               UNITS      = 'W m-2',                                     &
+               DIMS       = MAPL_DimsHorzOnly,                           &
+               VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
+          VERIFY_(STATUS)
+          call MAPL_AddExportSpec(GC,                                    &
+               SHORT_NAME = 'NETTRAP_'//trim(nameRATS(i)),                 &
+               LONG_NAME  = 'Net_Heat_trapping_due_to_'//trim(nameRATS(i)),&
+               UNITS      = 'W m-2',                                     &
+               DIMS       = MAPL_DimsHorzOnly,                           &
+               VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
+          VERIFY_(STATUS)
+          call MAPL_AddExportSpec(GC,                                    &
+               SHORT_NAME = 'COLTRAP_'//trim(nameRATS(i)),                 &
+               LONG_NAME  = 'Heat_trapping_due_to_'//trim(nameRATS(i)),&
+               UNITS      = 'W m-2',                                     &
+               DIMS       = MAPL_DimsHorzVert,                           &
+               VLOCATION  = MAPL_VLocationCenter,             RC=STATUS  )
+          VERIFY_(STATUS)
+       ENDDO
+       call MAPL_AddExportSpec(GC,                                       &
+            SHORT_NAME = 'CO2_FIXED',                                    &
+            LONG_NAME  = 'lol',                                          &
+            UNITS      = 'mol/mol',                                      &
+            DIMS       = MAPL_DimsHorzVert,                              &
+            VLOCATION  = MAPL_VLocationCenter,               RC=STATUS  )
+          VERIFY_(STATUS)
+       if (allocated(nameRATS)) deallocate(nameRATS, STAT=STATUS)
+       VERIFY_(STATUS)
+! end rats code <<>> MSL
+
+       ! Add necessary internal fields
+              call MAPL_AddInternalSpec(GC,                             &
+              SHORT_NAME = 'FLXU_RAT',                                  &
+              LONG_NAME  = 'upward_longwave_flux_in_air',               &
+              UNITS      = 'W m-2',                                     &
+              UNGRIDDED_DIMS     = (/N/),                               &
+              DIMS       = MAPL_DimsHorzVert,                           &
+              VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
+         
+              call MAPL_AddInternalSpec(GC,                             &
+              SHORT_NAME = 'FLXD_RAT',                                  &
+              LONG_NAME  = 'upward_longwave_flux_in_air',               &
+              UNITS      = 'W m-2',                                     &
+              UNGRIDDED_DIMS     = (/N/),                               &
+              DIMS       = MAPL_DimsHorzVert,                           &
+              VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
+         
+              call MAPL_AddInternalSpec(GC,                             &
+              SHORT_NAME = 'FLX_RAT',                                   &
+              LONG_NAME  = 'net_downward_longwave_flux_in_air',         &
+              UNITS      = 'W m-2',                                     &
+              UNGRIDDED_DIMS     = (/N/),                               &
+              DIMS       = MAPL_DimsHorzVert,                           &
+              VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
+
+              call MAPL_AddInternalSpec(GC,                             &
+              SHORT_NAME = 'DFDTS_RAT',                                 &
+              LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature', &
+              UNITS      = 'W m-2 K-1',                                 &
+              UNGRIDDED_DIMS     = (/N/),                               &
+              DIMS       = MAPL_DimsHorzVert,                           &
+              VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
+
+              call MAPL_AddInternalSpec(GC,                             &
+              SHORT_NAME = 'SFCEM_RAT',                                 &
+              LONG_NAME  = 'longwave_flux_emitted_from_surface',        &
+              UNITS      = 'W m-2',                                     &
+              UNGRIDDED_DIMS     = (/N/),                               &
+              DIMS       = MAPL_DimsHorzOnly,                           &
+              VLOCATION  = MAPL_VLocationNone,                   __RC__ )
+    ENDIF
+
 !EOS
 
 ! Set the Profiling timers
@@ -1108,6 +1283,18 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
    integer :: ibnd
    character*2 :: bb
 
+! For RATS <<>> MSL
+   type (ESMF_Config)              :: CF
+   logical, save                   :: first = .true. ! I don't wanna do this, but there's no Initialize() method. This prevents repeating unneeded ops
+   integer, save                   :: nRATS ! Number of active RATs to toggle
+   character(len=6), dimension(8)  :: RATNAMES = (/'O3    ','N2O   ','CFC11 ','CFC12 ','CH4   ','HCFC22','H2O   ','CO2   '/)
+   character(len=128)              :: gen_str
+   character(len=128), allocatable, save :: nameRATS(:) ! Current toggles read from AGCM.rc
+   real, allocatable, dimension(:,:)     :: TMP_R
+   real, allocatable, dimension(:,:,:)   :: UFLXRAT, DFLXRAT, DUFLX_DT_RAT
+   real,     pointer, dimension(:,:,:)   :: SFCEM_INT_RAT
+   real,     pointer, dimension(:,:,:,:) :: DFDTS_RAT, FLX_INT_RAT, FLXU_INT_RAT, FLXD_INT_RAT
+
 !=============================================================================
 
 ! Begin... 
@@ -1116,7 +1303,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 ! -----------------------------------------------------------
 
    Iam = "Run"
-   call ESMF_GridCompGet( GC, name=COMP_NAME, GRID=ESMFGRID, RC=STATUS )
+   call ESMF_GridCompGet( GC, name=COMP_NAME, GRID=ESMFGRID, CONFIG=CF, RC=STATUS )
    VERIFY_(STATUS)
    Iam = trim(COMP_NAME) // Iam
 
@@ -1329,7 +1516,7 @@ contains
    integer, parameter :: KRAIN    = 3
    integer, parameter :: KSNOW    = 4
 
-   real    :: CO2
+   real    :: CO2_FIXED    ! Formerly called CO2 -- <<>> MSL
 
    real    :: TAUCRIT                       ! pressure separating low and middle clouds
    real    :: PRS_LOW_MID                   ! pressure separating low and middle clouds
@@ -1343,6 +1530,7 @@ contains
    character(len=ESMF_MAXSTR), pointer :: AEROSOLS(:)
 
    integer :: i, j, K, L, YY, DOY
+   integer :: N !<<>> MSL
 
    real, dimension (IM,JM)         :: T2M   !  fractional cover of sub-grid regions
    real, dimension (IM,JM,NS)      :: FS    !  fractional cover of sub-grid regions
@@ -1536,6 +1724,7 @@ contains
    real, pointer, dimension(:,:,:)   :: RI,  RL, RR, RS, FCLD
    real, pointer, dimension(:,:,:,:) :: RAERO
    real, pointer, dimension(:,:,:)   :: QAERO
+   real, pointer, dimension(:,:,:)   :: CO2_3d, tmp_3d ! <<>> MSL
 
 ! pointers to exports
 !--------------------
@@ -1608,15 +1797,34 @@ contains
 ! Get trace gases concentrations by volume (pppv) from configuration
 !-------------------------------------------------------------------
 
-   call MAPL_GetResource( MAPL, CO2, 'CO2:', RC=STATUS)
+   call MAPL_GetResource( MAPL, CO2_FIXED, 'CO2:', RC=STATUS)
    VERIFY_(STATUS)
 
-   if(CO2<0.0) then
+   ! <<>> MSL
+   if(CO2_FIXED.eq.-2.0) then ! 3D CO2
+      if (USE_CHOU) then ! No 3D CO2 if USE_CHOU
+         CO2_FIXED = -1.0
+      else
+         call MAPL_GetPointer(IMPORT, CO2_3d, 'CO2', RC=STATUS); VERIFY_(STATUS)
+         call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME, RC=STATUS)
+         VERIFY_(STATUS)
+         call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, RC=STATUS)
+         VERIFY_(STATUS)
+         CO2_FIXED = GETCO2(YY,DOY)
+         call MAPL_GetPointer(EXPORT, tmp_3d, 'CO2_FIXED', NotFoundOK=.true., RC=STATUS)
+         if (associated(tmp_3d)) then
+            tmp_3d = CO2_FIXED
+            tmp_3d => null()
+         endif
+      endif
+   endif
+
+   if(CO2_FIXED.eq.-1.0) then
       call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME, RC=STATUS)
       VERIFY_(STATUS)
       call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, RC=STATUS)
       VERIFY_(STATUS)
-      CO2 = GETCO2(YY,DOY)
+      CO2_FIXED = GETCO2(YY,DOY)
    endif
 
    call MAPL_GetResource( MAPL, PRS_LOW_MID,  'PRS_LOW_MID_CLOUDS:',  DEFAULT=70000., &
@@ -1626,6 +1834,45 @@ contains
    call MAPL_GetResource( MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', DEFAULT=40000., &
         RC=STATUS)
    VERIFY_(STATUS)
+
+! Set up the RATS toggles  <<>> MSL
+! -- these fields will be turn on/off to eval flux impacts
+! -- ideally, we could query the exports to find if any actually -need- computing
+!    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
+!    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
+! -- This is done every call to Run(), when it really only needs to be done once
+!----------------------------------------------------------------------------------------
+   IF (first) then
+   
+   call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS) ! Use STATUS to test if label was found
+   
+   nRATS = 0 ! Default, no RAT diags
+   
+   ! No error thrown. Just go around this if nothing learnable from config.
+   IF (STATUS .eq. ESMF_SUCCESS) THEN ! if the label was found...
+
+      ! Get number of words in config line
+      nRATS = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
+      VERIFY_(STATUS)
+
+      allocate(nameRATS(nRATS), STAT=STATUS)
+      VERIFY_(STATUS)
+
+      ! Put the cursor at the label
+      call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS)
+      VERIFY_(STATUS)
+
+      DO i=1,nRATS
+         call ESMF_ConfigGetAttribute(CF,gen_str,RC=STATUS)
+         VERIFY_(STATUS)
+         nameRATS(i) = trim(gen_str)
+      ENDDO
+
+      ! Only allocate this if needed
+      allocate(TMP_R(IM*JM,LM),__STAT__)
+   ENDIF
+   first = .false. ! Don't repeat this.
+   ENDIF ! first
 
 ! Prepare for aerosol optics calculations
 !_---------------------------------------
@@ -2279,7 +2526,7 @@ contains
       VERIFY_(STATUS)
 
       call IRRAD( IM*JM, LM,       PLE,                           &
-       T,        Q,      O3,    T2M,    CO2,                      &
+       T,        Q,      O3,    T2M,    CO2_FIXED,                &
        TRACE,    N2O,   CH4,    CFC11,     CFC12, HCFC22,         &
        CWC,    FCLD,  LCLDMH, LCLDLM,    REFF,                    &
        NS,       FS,     TG,    EG,     TV,        EV,    RV,     &
@@ -2321,7 +2568,7 @@ contains
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
       TEST_(gas_concs%set_vmr('o2' , real(O2 ,kind=wp)))
-      TEST_(gas_concs%set_vmr('co2', real(CO2,kind=wp)))
+      if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
@@ -2329,6 +2576,7 @@ contains
       TEST_(gas_concs%set_vmr('n2o', real(reshape(N2O                             ,(/ncol,LM/)),kind=wp)))
       TEST_(gas_concs%set_vmr('o3' , real(reshape(O3      *(MAPL_AIRMW/MAPL_O3MW ),(/ncol,LM/)),kind=wp)))
       TEST_(gas_concs%set_vmr('h2o', real(reshape(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),(/ncol,LM/)),kind=wp)))
+      if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d  ,(/ncol,LM/)),kind=wp))) !<<>> MSL
 
       call MAPL_TimerOff(MAPL,"---RRTMGP_SETUP_1",__RC__)
 
@@ -3281,7 +3529,11 @@ contains
             O3_R   (IJ,K) = O3(I,J,LV) * (MAPL_AIRMW/MAPL_O3MW)
             CH4_R  (IJ,K) = CH4(I,J,LV)
             N2O_R  (IJ,K) = N2O(I,J,LV)
-            CO2_R  (IJ,K) = CO2
+            if (associated(CO2_3d)) then ! <<>> MSL
+               CO2_R  (IJ,k) = CO2_3d(I,J,LV)
+            else
+               CO2_R  (IJ,k) = CO2_FIXED
+            endif
             O2_R   (IJ,K) = O2
             CCL4_R (IJ,K) = CCL4
             CFC11_R(IJ,K) = CFC11(I,J,LV)
@@ -3339,6 +3591,92 @@ contains
       call MAPL_TimerOn(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
 
+      if (nRATS .gt. 0) then !<<>> MSL
+         allocate(UFLXRAT(IM*JM,LM+1,nRATS),      __STAT__)
+         allocate(DFLXRAT(IM*JM,LM+1,nRATS),      __STAT__)
+         allocate(DUFLX_DT_RAT(IM*JM,LM+1,nRATS), __STAT__)
+!         allocate(DFDTS_RAT(IM,JM,LM+1,nRATS),    __STAT__)
+!         allocate(FLXU_INT_RAT(IM,JM,LM+1,nRATS),    __STAT__)
+!         allocate(FLXD_INT_RAT(IM,JM,LM+1,nRATS),    __STAT__)
+!         allocate(FLX_INT_RAT(IM,JM,LM+1,nRATS) ,    __STAT__)
+         call MAPL_GetPointer(INTERNAL, DFDTS_RAT,     'DFDTS_RAT',  RC=STATUS)
+         call MAPL_GetPointer(INTERNAL, FLX_INT_RAT,   'FLX_RAT',    RC=STATUS)
+         call MAPL_GetPointer(INTERNAL, FLXU_INT_RAT,  'FLXU_RAT',   RC=STATUS)
+         call MAPL_GetPointer(INTERNAL, FLXD_INT_RAT,  'FLXD_RAT',   RC=STATUS)
+         call MAPL_GetPointer(INTERNAL, SFCEM_INT_RAT, 'SFCEM_RAT',  RC=STATUS)
+      endif
+
+      do n = 1,nRATS !<<>> MSL
+
+         ! Zero out the correct RAT gas field
+          ! O3 CO2 CH4 N2O CFC11 CFC12 CFC22 CCl4
+         select case(nameRATS(n))
+         case('O3')
+            TMP_R = O3_R
+            O3_R = 0.e0
+         case('CO2')
+            TMP_R = CO2_R
+!            CO2_R = CO2_FIXED! Testing
+            CO2_R = 0.e0
+         case('CH4')
+            TMP_R = CH4_R
+            CH4_R = 0.e0
+         case('N2O')
+            TMP_R = N2O_R
+            N2O_R = 0.e0
+         case('CFC11')
+            TMP_R = CFC11_R
+            CFC11_R = 0.e0
+         case('CFC12')
+            TMP_R = CFC12_R
+            CFC12_R = 0.e0
+         case('HCFC22_R')
+            TMP_R = CFC22_R
+            CFC22_R = 0.e0
+         end select
+
+!<<>>         call RRTMG_LW (IM*JM     ,LM    ,ICLD    ,    IDRV, &
+!<<>>              PL_R    ,PLE_R    ,T_R    ,TLEV_R    ,TSFC    , &
+!<<>>              Q_R  ,O3_R   ,CO2_R  ,CH4_R  ,N2O_R  ,O2_R, &
+!<<>>              CFC11_R, CFC12_R, CFC22_R, CCL4_R , EMISS, &
+!<<>>              INFLGLW ,ICEFLGLW, LIQFLGLW, FCLD_R  , &
+!<<>>              TAUCLD ,CICEWP ,CLIQWP ,REICE ,RELIQ , &
+!<<>>              TAUAER  , ZL_R, LCLDLM, LCLDMH, &
+!<<>>              UFLXRAT(:,:,n), DFLXRAT(:,:,n), HR, UFLXC, DFLXC, HRC, DUFLX_DT_RAT(:,:,n), &
+!<<>>              DUFLXC_DT, CLOUDFLAG, &
+!<<>>              OLRB06RG_1D, DOLRB06RG_DT_1D, OLRB09RG_1D, DOLRB09RG_DT_1D, &
+!<<>>              OLRB10RG_1D, DOLRB10RG_DT_1D, OLRB11RG_1D, DOLRB11RG_DT_1D, &
+!<<>>              DOY, ALAT, CoresPerNode, PARTITION_SIZE)
+
+         call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
+              PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
+              Q_R, O3_R, CO2_R, CH4_R, N2O_R, O2_R, &
+              CFC11_R, CFC12_R, CFC22_R, CCL4_R, &
+              FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, ICEFLGLW, LIQFLGLW, &
+              TAUAER, ZM_R, ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
+              UFLXRAT(:,:,n), DFLXRAT(:,:,n), UFLXC, DFLXC, DUFLX_DT_RAT(:,:,n), DUFLXC_DTS, &
+              BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+
+         ! Make sure to set the RAT gas column back to correct vals
+         select case(nameRATS(n))
+         case('O3')
+            O3_R = TMP_R
+         case('CO2')
+            CO2_R = TMP_R
+         case('CH4')
+            CH4_R = TMP_R
+         case('N2O')
+            N2O_R = TMP_R
+         case('CFC11')
+            CFC11_R = TMP_R
+         case('CFC12')
+            CFC12_R = TMP_R
+         case('HCFC22')
+            CFC22_R = TMP_R
+         end select
+
+      enddo
+
       call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
               PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
               Q_R, O3_R, CO2_R, CH4_R, N2O_R, O2_R, &
@@ -3389,6 +3727,16 @@ contains
          ! surface emitted is positive downwards consistent with Chou-Suarez.
          ! (Note: All bands use the same emissivity)
          SFCEM_INT(I,J) = -( UFLX(IJ,1) - DFLX(IJ,1)*(1.-EMIS(I,J)) )
+
+         if (nRATS .gt. 0) then !<<>> MSL
+            do k=0,LM
+               LV = LM-k+1
+               FLXU_INT_RAT(i,j,k,:) =-UFLXRAT     (IJ,LV,:)
+               FLXD_INT_RAT(i,j,k,:) = DFLXRAT     (IJ,LV,:)
+               DFDTS_RAT   (i,j,k,:) =-DUFLX_DT_RAT(IJ,LV,:)
+            enddo
+            SFCEM_INT_RAT(i,j,:) = UFLXRAT(IJ,1,:) - DFLXRAT(IJ,1,:)*(1.0-EMISS(IJ,1))
+         endif
 
       enddo ! IM
       enddo ! JM
@@ -3450,6 +3798,11 @@ contains
       deallocate(OLRBRG,__STAT__)
       deallocate(DOLRBRG_DTS,__STAT__)
 
+      if (allocated(TMP_R))        deallocate(TMP_R,   __STAT__) !<<>> MSL
+      if (allocated(UFLXRAT))      deallocate(UFLXRAT, __STAT__)
+      if (allocated(DFLXRAT))      deallocate(DFLXRAT, __STAT__)
+      if (allocated(DUFLX_DT_RAT)) deallocate(DUFLX_DT_RAT, __STAT__)
+
       call MAPL_TimerOff(MAPL,"--RRTMG",RC=STATUS)
       VERIFY_(STATUS)
 
@@ -3470,6 +3823,9 @@ contains
    ! Revert to SFCEM to a positive quantity.
    ! Earlier surface emitted positive downwards per Chou-Suarez.
    SFCEM_INT = -SFCEM_INT
+
+   ! RATS Diagnostic <<>> MSL
+   if (nRATS .gt. 0) FLX_INT_RAT = FLXD_INT_RAT + FLXU_INT_RAT
 
 ! Save surface temperature in internal state
 !-------------------------------------------
@@ -3550,6 +3906,7 @@ contains
 
    real,          dimension(IM,JM)   :: DELT
    integer                           :: K
+   integer                           :: N !<<>> MSL
    integer                           :: LEV_LOW_MID
    integer                           :: LEV_MID_HIGH
    real                              :: PRS_LOW_MID                   ! pressure separating low and middle clouds
@@ -3582,7 +3939,7 @@ contains
    real, pointer, dimension(:,:  )   :: SFCEM0
    real, pointer, dimension(:,:  )   :: DSFDTS0
    real, pointer, dimension(:,:  )   :: OLR
-   real, pointer, dimension(:,:  )   :: OLRA
+   real, pointer, dimension(:,:  )   :: OLRA, AREA
    real, pointer, dimension(:,:  )   :: OLC
    real, pointer, dimension(:,:  )   :: OLCC5
    real, pointer, dimension(:,:  )   :: OLA
@@ -3602,6 +3959,10 @@ contains
    real, pointer, dimension(:    )   :: PREF
 
    real, allocatable, dimension(:,:) :: DUMTT, OLRB
+
+   ! RATS diagnostics <<>> MSL
+   real, pointer, dimension(:,:  )   :: RAT_2D, EMIS
+   real, pointer, dimension(:,:,:)   :: RAT_3D
 
 !  Begin...
 !----------
@@ -3885,6 +4246,74 @@ contains
    if(associated(DSFDTS0)) DSFDTS0 =           - DFDTS(:,:,LM)
    if(associated(SFCEM0 )) SFCEM0  = SFCEM_INT - DFDTS(:,:,LM) * DELT
    if(associated(TSREFF )) TSREFF  = TSINST
+
+   ! Process RAT diagnostics <<>> MSL
+   if (nRATS .gt. 0) then
+      call MAPL_GetPointer(INTERNAL, DFDTS_RAT,     'DFDTS_RAT',  RC=STATUS)
+      call MAPL_GetPointer(INTERNAL, FLX_INT_RAT,   'FLX_RAT',    RC=STATUS)
+      call MAPL_GetPointer(INTERNAL, SFCEM_INT_RAT, 'SFCEM_RAT',  RC=STATUS)
+      call MAPL_GetPointer(INTERNAL, FLXU_INT_RAT,  'FLXU_RAT',   RC=STATUS)
+      call MAPL_GetPointer(IMPORT, EMIS,   'EMIS',   RC=STATUS); VERIFY_(STATUS)
+      do n=1,nRATS
+         ! OLR
+!<<>>         if (MAPL_am_I_root()) then
+!<<>>            write(*,*) '<<>> alloc? ', allocated(nameRATS), ' n: ', n, ' nRATS: ', nRATS
+!<<>>            if (allocated(nameRATS)) write(*,*) '<<>> nameRATS: ', trim(nameRATS(n)) 
+!<<>>         endif
+         gen_str = 'dOLR_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_2d)) then
+            RAT_2d = -( FLX_INT_RAT(:,:,0,n) + DFDTS_RAT (:,:,0,n) * DELT )
+            RAT_2d = (-( FLX_INT(:,:, 0) + DFDTS (:,:, 0) * DELT)) - RAT_2d
+            RAT_2d => null()
+         endif
+         gen_str = 'dLWS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_2d)) then
+            RAT_2d   = (FLX_INT(:,:,LM) + SFCEM_INT)-(FLX_INT_RAT(:,:,LM,n) + SFCEM_INT_RAT(:,:,n))
+            RAT_2d => null()
+         endif
+         gen_str = 'dFLNS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_2d)) then
+            RAT_2d = (FLX_INT(:,:,LM) + DFDTS(:,:,LM)*DELT) - (FLX_INT_RAT(:,:,LM,n) + DFDTS_RAT(:,:,LM,n)*DELT) 
+            RAT_2d => null()
+         endif
+         gen_str = 'dSFCEM_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_2d)) then
+            RAT_2d = SFCEM_INT - DFDTS(:,:,LM) * DELT
+            RAT_2d = RAT_2d - (SFCEM_INT_RAT(:,:,n) - DFDTS_RAT(:,:,LM,n) * DELT)
+            RAT_2d => null()
+         endif
+         gen_str = 'NETTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_2d)) then
+            RAT_2d = (FLXU_INT(:,:,LM) + DFDTS(:,:,LM) * DELT) - &
+                     (FLXU_INT(:,:, 0) + DFDTS(:,:,0 ) * DELT)
+            RAT_2d = RAT_2d - &
+                    ((FLXU_INT_RAT(:,:,LM,n) + DFDTS_RAT(:,:,LM,n) * DELT) - &
+                     (FLXU_INT_RAT(:,:, 0,n) + DFDTS_RAT(:,:,0 ,n) * DELT))
+            RAT_2d => null()
+         endif
+         gen_str = 'COLTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+         call MAPL_GetPointer(IMPORT, AREA,   'AREA',   RC=STATUS); VERIFY_(STATUS)
+         call MAPL_GetPointer(EXPORT,   RAT_3d, trim(gen_str),   RC=STATUS) ! Don't verify.
+         if (associated(RAT_3d)) then
+            do K = 1, LM
+               RAT_3d(:,:,K) = &
+                     (FLXU_INT(:,:,K  ) + DFDTS(:,:,K  ) * DELT) - &
+                     (FLXU_INT(:,:,K-1) + DFDTS(:,:,K-1) * DELT)
+               RAT_3d(:,:,K) = AREA(:,:) * ( &
+                    RAT_3d(:,:,K) - &
+                    ((FLXU_INT_RAT(:,:,K  ,n) + DFDTS_RAT(:,:,K  ,n) * DELT) - &
+                     (FLXU_INT_RAT(:,:,K-1,n) + DFDTS_RAT(:,:,K-1,n) * DELT)))
+            enddo
+            RAT_3d => null()
+            AREA => null()
+      endif
+      enddo
+   endif
 
 !  All done
 !-----------
