@@ -1943,7 +1943,8 @@ contains
       ! pmn: temperature KLUGE
       ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
       ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen is so far 151K). Consequently we will limit min(t_lay) to 160K.
+      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
+      ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
       ! lower minimum temperature.
       ! note: add 0.01K to lower limit so that t_lev calculated below will
