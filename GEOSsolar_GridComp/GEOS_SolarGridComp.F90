@@ -1491,6 +1491,7 @@ contains
     character(len=ESMF_MAXSTR) :: DYCORE
     integer                    :: SOLAR_LOAD_BALANCE
     integer                    :: SolarBalanceHandle
+    integer                    :: MaxPasses
 
     character(len=ESMF_MAXPATHLEN) :: SolCycFileName
     logical                        :: USE_NRLSSI2
@@ -1550,6 +1551,10 @@ contains
     else
        LoadBalance = .TRUE.
     end if
+
+    ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
+    ! would have been used if not passed in
+    call MAPL_GetResource (MAPL, MaxPasses, 'SOLAR_LB_MAX_PASSES:', DEFAULT=100, __RC__)
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
@@ -1891,6 +1896,7 @@ contains
           call SORADCORE(IM,JM,LM,           &
                include_aerosols = .false.,   &
                CURRTIME = CURRENTTIME+INTDT, &
+               MaxPasses = MaxPasses,        &
                LoadBalance = LoadBalance,    &
                __RC__)
        else
@@ -1910,6 +1916,7 @@ contains
        call SORADCORE(IM,JM,LM,                    &
                       include_aerosols = .true.,   &
                       CURRTIME = CURRENTTIME+INTDT,&
+                      MaxPasses = MaxPasses,       &
                       LoadBalance = LoadBalance,   &
                       __RC__)
 
@@ -1939,7 +1946,7 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,LoadBalance,RC)
+    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,MaxPasses,LoadBalance,RC)
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
@@ -1979,6 +1986,7 @@ contains
       integer,           intent(IN ) :: IM, JM, LM
       logical,           intent(IN ) :: include_aerosols
       type (ESMF_Time),  intent(IN ) :: CURRTIME
+      integer,           intent(IN ) :: MaxPasses
       logical,           intent(IN ) :: LoadBalance
       integer, optional, intent(OUT) :: RC
 
@@ -2263,7 +2271,7 @@ contains
 
       if (LoadBalance) then
          call MAPL_BalanceCreate( &
-            OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
+            OrgLen=NumLit, Comm=COMM, MaxPasses=MaxPasses, Handle=SolarBalanceHandle, &
             BalLen=Num2do, BufLen=NumMax, __RC__)
       else
          Num2do = NumLit
