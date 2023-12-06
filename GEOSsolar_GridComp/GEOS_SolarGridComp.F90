@@ -1313,40 +1313,6 @@ contains
 
 !EOS
 
-    ! Set the Profiling timers
-
-    call MAPL_TimerAdd(GC, name="PRELIMS"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="REFRESH"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="-AEROSOLS"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-SORAD"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_PART"           , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_FLIP"            , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMGP"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_GAS"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_POST"           , __RC__)
-    call MAPL_TimerAdd(GC, name="-BALANCE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--CREATE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--DISTRIBUTE"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RETRIEVE"              , __RC__)
-    call MAPL_TimerAdd(GC, name="--DESTROY"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
-    call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
-
     ! Set Run method and use generic Initalize and Finalize methods
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
@@ -2233,24 +2199,16 @@ contains
 !  Identify lit soundings with the daytime mask
 !----------------------------------------------
 
-      if (LoadBalance) then
-         daytime = ZTH > 0.
-         NumLit  = count(daytime)
-
 !  The load balancer does not work if there are no lit points. This is only
 !  important model-wise with the single-column model. Note we must protect
 !  ZTH since in solar, we divide by ZTH and, thus, we will get a divide-by-
 !  zero if not protected.
 !--------------------------------------------------------------------------
 
-      else
-         ! This is the single-column model case. We *must* have lit points
-         if (adjustl(DYCORE)=="DATMO") then
-            ZTH     = max(.0001,ZTH)
-         end if
-         daytime = .true.
-         NumLit  = size(ZTH)
-      end if
+      if (adjustl(DYCORE)=="DATMO") ZTH = max(.0001,ZTH)
+
+      daytime = ZTH > 0.
+      NumLit  = count(daytime)
 
 !  Create a balancing strategy. This is a collective call on the communicator
 !  of the current VM. The original, unbalanced local work consists of (OrgLen)
@@ -2749,11 +2707,11 @@ contains
 
       ! Load balance the InOuts for Input
       !----------------------------------
+      call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
          if (LoadBalance) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
       end if
+      call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
@@ -4046,17 +4004,12 @@ contains
 
       call MAPL_TimerOn(MAPL,"-BALANCE")
 
-      if (size(BufOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--RETRIEVE")
-         if (LoadBalance) call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      call MAPL_TimerOn(MAPL,"--RETRIEVE")
+      if (LoadBalance) then
+         if (size(BufOut)   > 0) call MAPL_BalanceWork(BufOut,  NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
       end if
-
-      if (size(BufInOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--RETRIEVE")
-         if (LoadBalance) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
-      end if
+      call MAPL_TimerOff(MAPL,"--RETRIEVE")
 
       ! Unpack the results. Fills "masked" (night) locations with default value from internal state
       !--------------------------------------------------------------------------------------------
