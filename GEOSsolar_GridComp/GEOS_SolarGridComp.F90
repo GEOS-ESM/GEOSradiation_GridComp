@@ -185,6 +185,7 @@ module GEOS_SolarGridCompMod
   INTEGER, PARAMETER :: NB_RRTMG    = 14
   INTEGER, PARAMETER :: NB_RRTMGP   = 14
   INTEGER, PARAMETER :: NB_OBIO     = 33
+  integer            :: DO_OBIO
 
 !EOP
 
@@ -295,8 +296,14 @@ contains
     end if
 
     ! Decide if should make OBIO exports
-    call MAPL_GetResource (MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', &
-       DEFAULT=.FALSE., __RC__)
+    call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
+    VERIFY_(STATUS)
+    
+    if (DO_OBIO/=0) then
+       SOLAR_TO_OBIO = .TRUE.
+    else
+       SOLAR_TO_OBIO = .FALSE.
+    endif
 
 ! Set the state variable specs.
 ! -----------------------------
@@ -1610,8 +1617,14 @@ contains
 
    ! Decide if should make OBIO exports
    !-----------------------------------
-   call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', & 
-      DEFAULT=.FALSE., __RC__)
+    call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
+    VERIFY_(STATUS)
+
+    if (DO_OBIO/=0) then
+       SOLAR_TO_OBIO = .TRUE.
+    else
+       SOLAR_TO_OBIO = .FALSE.
+    endif
 
    ! Decide how to do solar forcing
    !-------------------------------
