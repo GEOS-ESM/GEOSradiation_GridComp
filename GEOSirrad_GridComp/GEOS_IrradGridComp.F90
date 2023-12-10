@@ -1465,8 +1465,9 @@ contains
    ! TEMP ... see below
    real(wp) :: press_ref_min, ptop
    real(wp) ::  temp_ref_min, tmin
+   real(wp) ::  temp_ref_max, tmax
    real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
-   real(wp) :: tmin_increase_OK_Kelvin
+   real(wp) :: tmin_increase_OK_Kelvin, tmax_decrease_OK_Kelvin
 
    ! block size for efficient column processing (set from resource file)
    integer :: rrtmgp_blockSize
@@ -1905,6 +1906,27 @@ contains
       t_sfc    = real(       reshape(TS  ,(/ncol/))        ,kind=wp)
       emis_sfc = real(spread(reshape(EMIS,(/ncol/)),1,nbnd),kind=wp)
 
+      ! pmn: surface temperature KLUGE
+      ! Currently k_dist%temp_ref_max = 355K ~ 82C, but GEOS-5 seems to
+      ! sometimes exceed the maximum temperature. See more comments under
+      ! layer temperature kluge below. We clip it here as a kluge.
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      tmax = maxval(t_sfc)
+      if (tmax > temp_ref_max) then
+        ! allow a small decrease of tmax
+        call MAPL_GetResource (MAPL, &
+           tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
+           DEFAULT = 15._wp, __RC__)
+        if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
+          where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
+        else
+          write(*,*) ' A ', tmax_decrease_OK_Kelvin, &
+                       'K decrease of tmax was insufficient'
+          write(*,*) ' RRTMGP, GEOS-5 t_sfc maximums (K)', temp_ref_max, tmax
+          TEST_('Found excessively warm surface temperature for RRTMGP')
+        endif
+      endif
+
       ! basic profiles
       p_lay = real(reshape(PL  ,(/ncol,LM  /)), kind=wp)
       t_lay = real(reshape(T   ,(/ncol,LM  /)), kind=wp)
@@ -1961,7 +1983,7 @@ contains
         else
           write(*,*) ' A ', tmin_increase_OK_Kelvin, &
                        'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_min (K)', temp_ref_min, tmin
+          write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
           TEST_('Found excessively cold model temperature for RRTMGP')
         endif
       endif
@@ -1973,7 +1995,7 @@ contains
       !   is an INTERPOLATION, and since the t_lay are already KLUGED to >= temp_ref_min, this should
       !   not be a problem. But this is why the t_lev calculation must occur AFTER the t_lay KLUGE.
       !   Note that t_lev(1) gets a copy of t_lev(2), so will also be in range. We are not worried
-      !   about T2M being < temp_ref_min = 160K.
+      !   about T2M being < temp_ref_min = 160K (surface values wont get that cold!)
       ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, positive
       !   here). dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1
       !   is centered on LEVEL k+1 since the LEVEL indices are one-based.
