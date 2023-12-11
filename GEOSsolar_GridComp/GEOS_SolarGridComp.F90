@@ -1336,6 +1336,7 @@ contains
     call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
+    call MAPL_TimerAdd(GC, name="--RRTMGP_DELTA_SCALE"    , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_POST"           , __RC__)
@@ -1727,6 +1728,7 @@ contains
     !    layers [LCLDLM, LM      ] are in low  pressure band
 
     ! Determine calling sequence ...
+    ! (CALLED_LAST == 1) => REFRESH called last, i.e., after UPDATE_EXPORT.
     ! This getresource is a kludge for now and needs to be fixed in the spec,
     ! because GC needs this info to know when to set the alarm, last or first
     ! step of interval. Right now it is always the last, which is only correct
@@ -1756,16 +1758,16 @@ contains
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)
 
-       ! Set offset INTDT from current time for beginning of refresh period
-       ! ------------------------------------------------------------------
+       ! Beginning of REFRESH period is current time PLUS offset intDT
+       ! -------------------------------------------------------------
        if (UPDATE_FIRST) then
-          ! The update is already done, so the refresh interval should start one
-          ! timestep beyond current time so it is constent with the NEXT update.
-          call ESMF_ClockGet(CLOCK, timeSTEP=INTDT, __RC__)
+          ! The UPDATE is already done, so the REFRESH interval should start one
+          ! timestep beyond current time so it is consistent with the NEXT update.
+          call ESMF_ClockGet(CLOCK, timeSTEP=intDT, __RC__)
        else
-          ! The update will occur after the refresh, so both update and refresh
+          ! The UPDATE will occur after the REFRESH, so both update and refresh
           ! periods should begin at the current time.
-          call ESMF_TimeIntervalSet(INTDT, s=0, __RC__)
+          call ESMF_TimeIntervalSet(intDT, s=0, __RC__)
        end if
 
        ! Get optical properties of radiatively active aerosols
@@ -1890,7 +1892,7 @@ contains
           !   the exports are derived from the internals in update_export()
           call SORADCORE(IM,JM,LM,           &
                include_aerosols = .false.,   &
-               CURRTIME = CURRENTTIME+INTDT, &
+               CURRTIME = CURRENTTIME+intDT, &
                LoadBalance = LoadBalance,    &
                __RC__)
        else
@@ -1909,7 +1911,7 @@ contains
        ! ---------------------------------
        call SORADCORE(IM,JM,LM,                    &
                       include_aerosols = .true.,   &
-                      CURRTIME = CURRENTTIME+INTDT,&
+                      CURRTIME = CURRENTTIME+intDT,&
                       LoadBalance = LoadBalance,   &
                       __RC__)
 
@@ -3508,6 +3510,13 @@ contains
         end if
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+
+        ! TODO: add TAUxxPAR outputs here BEFORE delta-scaling <<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+        ! perform delta-scaling of cloud optical properties (to account for forward scattering)
+        call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+        TEST_(cloud_props_gpt%delta_scale())
+        call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
 
