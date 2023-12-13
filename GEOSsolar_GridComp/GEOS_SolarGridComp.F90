@@ -299,11 +299,7 @@ contains
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
     VERIFY_(STATUS)
     
-    if (DO_OBIO/=0) then
-       SOLAR_TO_OBIO = .TRUE.
-    else
-       SOLAR_TO_OBIO = .FALSE.
-    endif
+    SOLAR_TO_OBIO = (DO_OBIO/=0)
 
 ! Set the state variable specs.
 ! -----------------------------
@@ -1620,11 +1616,7 @@ contains
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
     VERIFY_(STATUS)
 
-    if (DO_OBIO/=0) then
-       SOLAR_TO_OBIO = .TRUE.
-    else
-       SOLAR_TO_OBIO = .FALSE.
-    endif
+    SOLAR_TO_OBIO = (DO_OBIO/=0)
 
    ! Decide how to do solar forcing
    !-------------------------------
