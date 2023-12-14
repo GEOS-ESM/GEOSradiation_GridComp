@@ -45,7 +45,7 @@
 ! ****************************************************************************
 
 #include "MAPL_Generic.h"
-    
+
 module rrtmg_sw_rad
 
    use ESMF
@@ -92,7 +92,7 @@ contains
       ! dimensions
       ! ----------
       integer, intent(in) :: rpart                   ! Number of columns in a partition
-      integer, intent(in) :: ncol                    ! Number of horizontal columns     
+      integer, intent(in) :: ncol                    ! Number of horizontal columns
       integer, intent(in) :: nlay                    ! Number of model layers
 
       ! orbit
@@ -113,7 +113,7 @@ contains
       ! -----------------
       integer, intent(in) :: isolvar                 ! Flag for solar variability method
 
-      ! Notes: isolvar = -1 uses the Kurucz source function, while isolvar >= 0 use the NRLSSI2 
+      ! Notes: isolvar = -1 uses the Kurucz source function, while isolvar >= 0 use the NRLSSI2
       ! solar model. First, the behavior for SCON = 0: isolvar in {-1,0,3} all have a fixed solar
       ! input at 1AU. For isolvar = -1 it is the Kurucz solar constant of 1368.22 Wm-2, while for
       ! isolvar = {0,3} it is the NRLSSI2 solar constant of 1360.85 Wm-2 (for the 100-50000 cm-1
@@ -152,7 +152,7 @@ contains
       ! maximum (for 1=Mg, 2=SB respecively), and to vary linearly with solcycfrac between those
       ! extrema (see NRLSSI2 module for further details).
       !    Still discussing isolvar = 1, for SCON.eq.0 we take the hint from not explicitly
-      ! setting SCON to let an indsolvar.ne.1 choice cause a deviation from the internal solar 
+      ! setting SCON to let an indsolvar.ne.1 choice cause a deviation from the internal solar
       ! constant, because, while the svar_{f,s} average to unity over a cycle *without* a time-
       ! varying indsolvar multiplier, they do not do so with it. If, on the other hand, a value
       ! SCON > 0 is provided, we ASSUME that it is a value that we should honor as a MEAN over
@@ -272,7 +272,7 @@ contains
 
       integer :: pncol
       integer :: STATUS  ! for MAPL error reporting
-      
+
       ! ASSERTs to catch unphysical or invalid inputs
       _ASSERT(all(play   >= 0.), 'negative values in input:   play')
       _ASSERT(all(plev   >= 0.), 'negative values in input:   plev')
@@ -300,7 +300,7 @@ contains
       else
          pncol = 2
       end if
-      
+
       ! do partitions
       call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
@@ -319,9 +319,9 @@ contains
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
-                                                      
+
       _RETURN(_SUCCESS)
-   end subroutine rrtmg_sw                                                     
+   end subroutine rrtmg_sw
 
 
    subroutine rrtmg_sw_sub (MAPL, &
@@ -391,24 +391,24 @@ contains
       ! cloud optics flags
       integer, intent(in) :: iceflgsw                  ! Flag for ice particle specifn
       integer, intent(in) :: liqflgsw                  ! Flag for liquid droplet specifn
-      
+
       ! clouds
       real, intent(in) :: gcld    (gncol,nlay)         ! Cloud fraction
       real, intent(in) :: gciwp   (gncol,nlay)         ! In-cloud ice water path (g/m2)
       real, intent(in) :: gclwp   (gncol,nlay)         ! In-cloud liquid water path (g/m2)
       real, intent(in) :: grei    (gncol,nlay)         ! Cloud ice effective radius (um)
       real, intent(in) :: grel    (gncol,nlay)         ! Cloud drop effective radius (um)
-                                                      
+
       ! cloud overlap
       integer, intent(in) :: dyofyr                    ! Day of the year
       real, intent(in) :: gzm     (gncol,nlay)         ! Heights of level midpoints
       real, intent(in) :: galat   (gncol)              ! Latitudes of columns [radians]
-                                              
+
       ! aerosols (optical props, non-delta-scaled)
       integer, intent(in) :: iaer                      ! aerosol flag (0=off, 10=on)
-      real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)    
-      real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)    
-      real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)    
+      real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)
+      real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)
+      real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)
 
       ! surface albedos
       real, intent(in) :: gasdir  (gncol)              ! UV/vis  surface albedo: direct rad
@@ -416,7 +416,7 @@ contains
       real, intent(in) :: galdir  (gncol)              ! Near-IR surface albedo: direct rad
       real, intent(in) :: galdif  (gncol)              ! Near-IR surface albedo: diffuse rad
 
-      ! super-layer cloud fraction boundaries 
+      ! super-layer cloud fraction boundaries
       integer, intent(in) :: cloudLM                   ! Low-mid
       integer, intent(in) :: cloudMH                   ! Mid-high
 
@@ -473,12 +473,12 @@ contains
       ! surface albedos
       real :: albdir (nbndsw,pncol)      ! surface albedo, direct
       real :: albdif (nbndsw,pncol)      ! surface albedo, diffuse
-      
+
       ! Atmosphere - setcoef
       ! --------------------
 
       ! tropopause layer index
-      integer :: laytrop   (pncol) 
+      integer :: laytrop   (pncol)
 
       ! gasesous absorbers
       real :: colh2o  (nlay,pncol)         ! column amount (h2o)
@@ -489,17 +489,17 @@ contains
       real :: colmol  (nlay,pncol)         ! column amount (Rayleigh)
 
       ! continuum interpolation coefficients
-      integer :: indself (nlay,pncol) 
-      integer :: indfor  (nlay,pncol) 
-      real :: selffac    (nlay,pncol) 
-      real :: selffrac   (nlay,pncol) 
-      real :: forfac     (nlay,pncol) 
-      real :: forfrac    (nlay,pncol) 
+      integer :: indself (nlay,pncol)
+      integer :: indfor  (nlay,pncol)
+      real :: selffac    (nlay,pncol)
+      real :: selffrac   (nlay,pncol)
+      real :: forfac     (nlay,pncol)
+      real :: forfrac    (nlay,pncol)
 
       ! pressure and temperature interpolation coefficients
       integer, dimension (nlay,pncol) :: jp, jt, jt1
-      real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11  
-      
+      real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11
+
       ! general
       real :: play (nlay,  pncol)           ! Layer pressures (hPa)
       real :: plev (nlay+1,pncol)           ! Interface pressures (hPa)
@@ -515,10 +515,10 @@ contains
       real :: clwp (nlay,pncol)             ! In-cloud liq water path [g/m2]
       real :: rei  (nlay,pncol)             ! Cloud ice effective radius [um]
       real :: rel  (nlay,pncol)             ! Cloud drop effective radius [um]
-      
+
       real :: alat      (pncol)             ! latitude for cloud overlap
       real :: zm   (nlay,pncol)		    ! mid-layer hgt for cld overlap [m]
-                                                      
+
       logical :: cldymcl (nlay,ngptsw,pncol)   ! cloud or not? [mcica]
       real    :: ciwpmcl (nlay,ngptsw,pncol)   ! in-cloud ice water path [mcica] [g/m2]
       real    :: clwpmcl (nlay,ngptsw,pncol)   ! in-cloud liq water path [mcica] [g/m2]
@@ -528,7 +528,7 @@ contains
       real :: taormc  (nlay,ngptsw,pncol)   ! unscaled in-cloud optl depth [mcica]
       real :: ssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
       real :: asmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
-      
+
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
 
@@ -562,7 +562,7 @@ contains
 
       ! in-cloud PAR optical thicknesses
       real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
-      
+
       ! Solar variability multipliers
       ! -----------------------------
 
@@ -591,7 +591,7 @@ contains
 
       integer :: n, imol, gicol            ! Loop indices
       real :: adjflx                       ! flux adjustment for Earth/Sun distance
-      
+
       integer :: ipart, col_last, cols, cole, cc
 
       ! ncol is the actual number of gridcols in a partition, cf. pncol,
@@ -601,7 +601,7 @@ contains
       ! other solar variability locals
       ! ------------------------------
       real :: solvar (jpband)              ! solar constant scaling factor by band
-      real :: indsolvar_scl (2)            ! Adjusted facular and sunspot amplitude 
+      real :: indsolvar_scl (2)            ! Adjusted facular and sunspot amplitude
                                            !   scale factors (isolvar=1)
       real :: indsolvar_ndx (2)            ! Facular and sunspot indices (isolvar=2)
 
@@ -617,17 +617,17 @@ contains
       solvar(:) = 1.
       adjflux(:) = 1.
       svar_f = 1.
-      svar_s = 1. 
-      svar_i = 1. 
-      svar_f_bnd(:) = 1. 
-      svar_s_bnd(:) = 1. 
-      svar_i_bnd(:) = 1. 
+      svar_s = 1.
+      svar_i = 1.
+      svar_f_bnd(:) = 1.
+      svar_s_bnd(:) = 1.
+      svar_i_bnd(:) = 1.
 
       ! isolvar == 1 specifies the position in AvgCyc11 through solcycfrac
       ! and allows scaling of solar cycle amplitudes as described in notes.
       ! ------------------------------------------------------------------
 
-      if (isolvar .eq. 1) then 
+      if (isolvar .eq. 1) then
 
          ! require solcycfrac present, else what's the point of using isolvar=1 ?
          if (.not.present(solcycfrac)) then
@@ -635,10 +635,10 @@ contains
          end if
          solcycfr = solcycfrac
 
-         ! No amplitude scaling unless indsolvar is present. 
+         ! No amplitude scaling unless indsolvar is present.
          indsolvar_scl(1:2) = 1.
 
-         if (present(indsolvar)) then 
+         if (present(indsolvar)) then
 
             ! Adjust amplitude scaling of mean solar cycle to be unity at
             ! solar minimum (solcycfrac_min), to be the requested indsolvar
@@ -654,15 +654,15 @@ contains
 
       ! isolvar == 2 allows direct specification of Mg and SB via indsolvar
       ! -------------------------------------------------------------------
-      
-      if (isolvar .eq. 2) then 
+
+      if (isolvar .eq. 2) then
 
          ! default to mean indices
          indsolvar_ndx(1) = Mg_avg
          indsolvar_ndx(2) = SB_avg
 
          ! update to specified indices if provided
-         if (present(indsolvar)) then 
+         if (present(indsolvar)) then
             indsolvar_ndx(1) = indsolvar(1)
             indsolvar_ndx(2) = indsolvar(2)
          endif
@@ -675,7 +675,7 @@ contains
 
       ! Set flux adjustment for current Earth/Sun distance (two options)
       ! ----------------------------------------------------------------
-      ! (Set adjflx to 1. to use constant Earth/Sun distance of 1 AU). 
+      ! (Set adjflx to 1. to use constant Earth/Sun distance of 1 AU).
 
       ! 1) Provided by GCM via ADJES (from MAPL sun factor DIST ~ 1/r^2)
       adjflx = adjes
@@ -692,7 +692,7 @@ contains
       ! and input solar constant SCON.
       ! --------------------------------------------------------
 
-      if (scon == 0.) then 
+      if (scon == 0.) then
 
          ! For scon = 0, use internally defined solar constant, which is
          ! 1368.22 Wm-2 (for ISOLVAR=-1) and 1360.85 Wm-2 (For ISOLVAR=0,3;
@@ -718,7 +718,7 @@ contains
          elseif (isolvar .eq. 1) then
 
             ! Apply NRLSSI2 solar irradiance model at a specified solcycfr
-            ! within AvgCyc11, with the additional amplitude scalings in 
+            ! within AvgCyc11, with the additional amplitude scalings in
             ! indsolvar_scl.
 
             ! interpolate mean solar cycle to solcycfr
@@ -755,9 +755,9 @@ contains
 
          else
             _FAIL('invalid isolvar')
-         endif 
+         endif
 
-      elseif (scon > 0.) then 
+      elseif (scon > 0.) then
 
          ! Scale from internal to externally specified SCON.
 
@@ -767,7 +767,7 @@ contains
             ! Scale from internal to requested solar constant.
             ! Apply optional scaling by band if bndscl present.
 
-            solvar(jpb1:jpb2) = scon / rrsw_scon 
+            solvar(jpb1:jpb2) = scon / rrsw_scon
             if (present(bndscl)) &
                solvar(jpb1:jpb2) = solvar(jpb1:jpb2) * bndscl(:)
 
@@ -775,7 +775,7 @@ contains
 
             ! Constant sun (NRLSSI2 model)
             ! Quiet sun, facular, and sunspot terms averaged over AvgCyc11.
-            ! Scale from internal to requested solar constant. 
+            ! Scale from internal to requested solar constant.
 
             scon_int = Fint + Sint + Iint
             svar_r = scon / scon_int
@@ -815,7 +815,7 @@ contains
 
             svar_f = (indsolvar_ndx(1) - Mg_0) / (Mg_avg - Mg_0)
             svar_s = (indsolvar_ndx(2) - SB_0) / (SB_avg - SB_0)
-            svar_i = (scon - (svar_f * Fint + svar_s * Sint)) / Iint 
+            svar_i = (scon - (svar_f * Fint + svar_s * Sint)) / Iint
 
          elseif (isolvar .eq. 3) then
 
@@ -835,7 +835,7 @@ contains
 
          else
             _FAIL('invalid isolvar')
-         endif 
+         endif
 
       else
          _FAIL('scon cannot be negative!')
@@ -849,7 +849,7 @@ contains
       if (isolvar < 0) then
          adjflux(jpb1:jpb2) = adjflux(jpb1:jpb2) * solvar(jpb1:jpb2)
       endif
-      
+
       ! Build profile separation based on cloudiness, i.e., count and index
       ! clear/cloudy gridcolumns. The separation is based on whether the grid-
       ! column has cloud fraction in any layer (or not). This is based on the
@@ -858,7 +858,7 @@ contains
       ! but the converse in not true ... can easily get a clear subcolumn for a
       ! cloudy gridcolumn. So, the gicol_clr can be assumed to yield all clear
       ! subcolumns, while the gicol_cld will yield both clear and cloudy sub-
-      ! columns. 
+      ! columns.
       ncol_clr = 0
       ncol_cld = 0
       do gicol = 1,gncol
@@ -887,7 +887,7 @@ contains
 
       do cc = 1,2  ! outer loop over clear then cloudy gridcolumns
 
-         if (cc == 1) then 
+         if (cc == 1) then
             ! clear
             npart = npart_clr
             col_last = ncol_clr
@@ -897,366 +897,401 @@ contains
             col_last = ncol_cld
          end if
 
-         ! loop over partitions
-         do ipart = 0,npart-1
+         ! We need to call all the timeron/timeroff calls in the same order
+         ! so that all timers are called even if there are no lit points
+         ! (aka npart == 0) when the load balancer is off
 
+         if (npart == 0) then
             call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
-
-            ! partition dimensions
-            cols = ipart * pncol + 1
-            cole = (ipart + 1) * pncol
-            if (cole > col_last) cole = col_last
-            ncol = cole - cols + 1
-
-            ! copy inputs into partition
-            ! --------------------------
-
-            if (cc == 1) then    
-
-               ! -----------------
-               ! Clear gridcolumns
-               ! -----------------
-
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-
-                  ! assign surface albedos to bands
-
-                  ! near IR bands 14=nbndsw and 1-8
-                  ! 820-12850 cm-1, 0.778-12.2 um
-                  do ibnd=1,8
-                     albdir(ibnd,icol) = galdir(gicol)
-                     albdif(ibnd,icol) = galdif(gicol)
-                  enddo
-                  albdir(nbndsw,icol) = galdir(gicol)
-                  albdif(nbndsw,icol) = galdif(gicol)
-
-                  ! UV/Vis bands 10-13
-                  ! 16000-50000 cm-1, 0.200-0.625 um
-                  do ibnd=10,13
-                     albdir(ibnd,icol) = gasdir(gicol)
-                     albdif(ibnd,icol) = gasdif(gicol)
-                  enddo
-
-                  ! Transition band 9
-                  ! 12850-16000 cm-1, 0.625-0.778 um
-                  ! Take average, dmlee
-                  albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
-                  albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
-
-               enddo
-
-               ! copy in partition (general)
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-    
-                  play(:,icol) = gplay(gicol,1:nlay)
-                  plev(:,icol) = gplev(gicol,1:nlay+1)
-                  tlay(:,icol) = gtlay(gicol,1:nlay)
-                  coszen(icol) = gcoszen(gicol)
-
-               enddo
-
-               ! copy in partition (aerosols)
-               if (iaer == 10) then
-                  do icol = 1,ncol
-                     gicol = gicol_clr(icol + cols - 1)
-                     do ibnd = 1,nbndsw
-                        taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
-                        asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
-                        omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
-                     enddo
-                  enddo
-               endif   
-
-               ! copy in partition (gases)
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-                  colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
-                  colco2(:,icol) = gco2vmr(gicol,1:nlay)
-                  colo3 (:,icol) = go3vmr (gicol,1:nlay)
-                  colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                  colo2 (:,icol) = go2vmr (gicol,1:nlay)   
-                end do
-
-            else
-
-               ! ------------------
-               ! Cloudy gridcolumns
-               ! ------------------
-          
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-     
-                  ! assign surface albedos to bands
-
-                  ! near IR bands 14=nbndsw and 1-8
-                  ! 820-12850 cm-1, 0.778-12.2 um
-                  do ibnd=1,8
-                     albdir(ibnd,icol) = galdir(gicol)
-                     albdif(ibnd,icol) = galdif(gicol)
-                  enddo
-                  albdir(nbndsw,icol) = galdir(gicol)
-                  albdif(nbndsw,icol) = galdif(gicol)
-
-                  ! UV/Vis bands 10-13
-                  ! 16000-50000 cm-1, 0.200-0.625 um
-                  do ibnd=10,13
-                     albdir(ibnd,icol) = gasdir(gicol)
-                     albdif(ibnd,icol) = gasdif(gicol)
-                  enddo
-
-                  ! Transition band 9
-                  ! 12850-16000 cm-1, 0.625-0.778 um
-                  ! Take average, dmlee
-                  albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
-                  albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
-
-               enddo
-          
-               ! copy in partition (general and cloud physical props)
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-     
-                  play(:,icol) = gplay(gicol,1:nlay)
-                  plev(:,icol) = gplev(gicol,1:nlay+1)
-                  tlay(:,icol) = gtlay(gicol,1:nlay)
-                  cld (:,icol) = gcld (gicol,1:nlay)
-                  ciwp(:,icol) = gciwp(gicol,1:nlay)
-                  clwp(:,icol) = gclwp(gicol,1:nlay)
-                  rei (:,icol) = grei (gicol,1:nlay) 
-                  rel (:,icol) = grel (gicol,1:nlay)
-                  zm  (:,icol) = gzm  (gicol,1:nlay)
-                  alat  (icol) = galat  (gicol)
-                  coszen(icol) = gcoszen(gicol)
-               enddo
-
-               ! copy in partition (aerosols)
-               if (iaer == 10) then
-                  do icol = 1,ncol
-                     gicol = gicol_cld(icol + cols - 1)
-                     do ibnd = 1,nbndsw
-                        taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
-                        asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
-                        omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
-                     end do
-                  end do
-               endif
-
-               ! copy in partition (gases)
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
-                  colco2(:,icol) = gco2vmr(gicol,1:nlay)
-                  colo3 (:,icol) = go3vmr (gicol,1:nlay)
-                  colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                  colo2 (:,icol) = go2vmr (gicol,1:nlay)  
-               enddo
-
-            end if  ! clear or cloudy gridcolumns
-
             call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
 
-            ! limit tiny cosine zenith angles
-            do icol = 1,ncol
-               cossza(icol) = max(zepzen,coszen(icol))
-            enddo
+            call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
+            call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
 
-            ! evaluate dry air molecules/cm^2
-            ! (see details in rrtmg_lw_rad())
-            do icol = 1,ncol
-               do ilay = 1,nlay
-                  coldry(ilay,icol) = (plev(ilay,icol)-plev(ilay+1,icol)) * 1.e3 * avogad / &
-                     (1.e2 * grav * ((1.-colh2o(ilay,icol)) * amd + colh2o(ilay,icol) * amw) * &
-                     (1. + colh2o(ilay,icol)))
-               enddo
-            enddo
-
-            ! gases also to molecules/cm^2
-            do icol = 1,ncol
-               do ilay = 1,nlay
-                  colh2o(ilay,icol) = coldry(ilay,icol) * colh2o(ilay,icol)
-                  colco2(ilay,icol) = coldry(ilay,icol) * colco2(ilay,icol)
-                  colo3 (ilay,icol) = coldry(ilay,icol) * colo3 (ilay,icol)
-                  colch4(ilay,icol) = coldry(ilay,icol) * colch4(ilay,icol)
-                  colo2 (ilay,icol) = coldry(ilay,icol) * colo2 (ilay,icol)
-               end do
-            end do
-
-            ! cloudy gridcolumns
-            if (cc == 2) then
-
-               ! McICA subcolumn generation
-               call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
-               call generate_stochastic_clouds( &
-                  pncol, ncol, ngptsw, nlay, &
-                  zm, alat, dyofyr, &
-                  play, cld, ciwp, clwp, 1.e-20, &
-                  cldymcl, ciwpmcl, clwpmcl, &
-                  seed_order=[4,3,2,1]) 
-
-               ! for super-layer cloud fractions
-               call clearCounts_threeBand( &
-                  pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
-                  p_clearCounts)
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
-
-               ! cloud optical property generation
-               call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
-               call cldprmc_sw( &
-                  pncol, ncol, nlay, iceflgsw, liqflgsw,  &
-                  cldymcl, ciwpmcl, clwpmcl, rei, rel, &
-                  taormc, taucmc, ssacmc, asmcmc)
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
-            end if
-
-            ! Calculate information needed by the radiative transfer routine
-            ! that is specific to this atmosphere, especially some of the
-            ! coefficients and indices needed to compute the optical depths
-            ! by interpolating data from stored reference atmospheres.
+            call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
+            call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
 
             call MAPL_TimerOn(MAPL,"---RRTMG_SETCOEF",__RC__)
-            call setcoef_sw( &
-               pncol, ncol, nlay, play, tlay, coldry, &
-               colch4, colco2, colh2o, colmol, colo2, colo3, &
-               laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
-               selffac, selffrac, indself, forfac, forfrac, indfor)
             call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
 
-            ! compute sw radiative fluxes
-            call spcvmc_sw(MAPL, &
-               cc, pncol, ncol, nlay, &
-               albdif, albdir, &
-               cldymcl, taucmc, asmcmc, ssacmc, taormc, &
-               taua, asya, omga, cossza, adjflux, &
-               isolvar, svar_f, svar_s, svar_i, &
-               svar_f_bnd, svar_s_bnd, svar_i_bnd, &
-               laytrop, jp, jt, jt1, &
-               colch4, colco2, colh2o, colmol, colo2, colo3, &
-               fac00, fac01, fac10, fac11, &
-               cloudLM, cloudMH, & 
-               selffac, selffrac, indself, forfac, forfrac, indfor, &
-               zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
-               zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
-               znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
-               ztautp, ztauhp, ztaump, ztaulp, &
-               do_drfband, zdrband, zdfband, &
-               __RC__)
+            call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
+            call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
 
-            ! Copy out up and down, clear- and all-sky fluxes to output arrays.
-            ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
+            call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
+            call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
+            call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+         else
 
-            if (cc == 1) then  ! clear gridcolumns
+            ! loop over partitions
+            do ipart = 0,npart-1
 
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-        
-                  ! super-layer clear counts
-                  do n = 1,4
-                     clearCounts (gicol,n) = ngptsw
-                  end do
+               call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
 
-                  ! up and down fluxes
-                  do ilev = 1,nlay+1
-                     swuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-                     swdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-                     swuflx (gicol,ilev) = zbbfu(ilev,icol) 
-                     swdflx (gicol,ilev) = zbbfd(ilev,icol) 
-                  enddo
+               ! partition dimensions
+               cols = ipart * pncol + 1
+               cole = (ipart + 1) * pncol
+               if (cole > col_last) cole = col_last
+               ncol = cole - cols + 1
 
-                  ! super-layer optical thicknesses
-                  tautp(gicol) = 0.
-                  tauhp(gicol) = 0.
-                  taump(gicol) = 0.
-                  taulp(gicol) = 0.
+               ! copy inputs into partition
+               ! --------------------------
 
-               enddo
+               if (cc == 1) then
 
-               ! surface broadband fluxes
-               do icol = 1,ncol
-                  gicol = gicol_clr(icol + cols - 1)
-                  nirr(gicol) = znirr(icol)
-                  nirf(gicol) = znirf(icol) - znirr(icol)
-                  parr(gicol) = zparr(icol)
-                  parf(gicol) = zparf(icol) - zparr(icol)
-                  uvrr(gicol) = zuvrr(icol)
-                  uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
-               end do
+                  ! -----------------
+                  ! Clear gridcolumns
+                  ! -----------------
 
-               ! net downward flux at surface in bands
-               do ibnd = 1,nbndsw
                   do icol = 1,ncol
                      gicol = gicol_clr(icol + cols - 1)
-                     fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
+
+                     ! assign surface albedos to bands
+
+                     ! near IR bands 14=nbndsw and 1-8
+                     ! 820-12850 cm-1, 0.778-12.2 um
+                     do ibnd=1,8
+                        albdir(ibnd,icol) = galdir(gicol)
+                        albdif(ibnd,icol) = galdif(gicol)
+                     enddo
+                     albdir(nbndsw,icol) = galdir(gicol)
+                     albdif(nbndsw,icol) = galdif(gicol)
+
+                     ! UV/Vis bands 10-13
+                     ! 16000-50000 cm-1, 0.200-0.625 um
+                     do ibnd=10,13
+                        albdir(ibnd,icol) = gasdir(gicol)
+                        albdif(ibnd,icol) = gasdif(gicol)
+                     enddo
+
+                     ! Transition band 9
+                     ! 12850-16000 cm-1, 0.625-0.778 um
+                     ! Take average, dmlee
+                     albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
+                     albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
+
+                  enddo
+
+                  ! copy in partition (general)
+                  do icol = 1,ncol
+                     gicol = gicol_clr(icol + cols - 1)
+
+                     play(:,icol) = gplay(gicol,1:nlay)
+                     plev(:,icol) = gplev(gicol,1:nlay+1)
+                     tlay(:,icol) = gtlay(gicol,1:nlay)
+                     coszen(icol) = gcoszen(gicol)
+
+                  enddo
+
+                  ! copy in partition (aerosols)
+                  if (iaer == 10) then
+                     do icol = 1,ncol
+                        gicol = gicol_clr(icol + cols - 1)
+                        do ibnd = 1,nbndsw
+                           taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
+                           asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
+                           omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
+                        enddo
+                     enddo
+                  endif
+
+                  ! copy in partition (gases)
+                  do icol = 1,ncol
+                     gicol = gicol_clr(icol + cols - 1)
+                     colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
+                     colco2(:,icol) = gco2vmr(gicol,1:nlay)
+                     colo3 (:,icol) = go3vmr (gicol,1:nlay)
+                     colch4(:,icol) = gch4vmr(gicol,1:nlay)
+                     colo2 (:,icol) = go2vmr (gicol,1:nlay)
+                  end do
+
+               else
+
+                  ! ------------------
+                  ! Cloudy gridcolumns
+                  ! ------------------
+
+                  do icol = 1,ncol
+                     gicol = gicol_cld(icol + cols - 1)
+
+                     ! assign surface albedos to bands
+
+                     ! near IR bands 14=nbndsw and 1-8
+                     ! 820-12850 cm-1, 0.778-12.2 um
+                     do ibnd=1,8
+                        albdir(ibnd,icol) = galdir(gicol)
+                        albdif(ibnd,icol) = galdif(gicol)
+                     enddo
+                     albdir(nbndsw,icol) = galdir(gicol)
+                     albdif(nbndsw,icol) = galdif(gicol)
+
+                     ! UV/Vis bands 10-13
+                     ! 16000-50000 cm-1, 0.200-0.625 um
+                     do ibnd=10,13
+                        albdir(ibnd,icol) = gasdir(gicol)
+                        albdif(ibnd,icol) = gasdif(gicol)
+                     enddo
+
+                     ! Transition band 9
+                     ! 12850-16000 cm-1, 0.625-0.778 um
+                     ! Take average, dmlee
+                     albdir(9,icol) = (gasdir(gicol)+galdir(gicol))/2.
+                     albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
+
+                  enddo
+
+                  ! copy in partition (general and cloud physical props)
+                  do icol = 1,ncol
+                     gicol = gicol_cld(icol + cols - 1)
+
+                     play(:,icol) = gplay(gicol,1:nlay)
+                     plev(:,icol) = gplev(gicol,1:nlay+1)
+                     tlay(:,icol) = gtlay(gicol,1:nlay)
+                     cld (:,icol) = gcld (gicol,1:nlay)
+                     ciwp(:,icol) = gciwp(gicol,1:nlay)
+                     clwp(:,icol) = gclwp(gicol,1:nlay)
+                     rei (:,icol) = grei (gicol,1:nlay)
+                     rel (:,icol) = grel (gicol,1:nlay)
+                     zm  (:,icol) = gzm  (gicol,1:nlay)
+                     alat  (icol) = galat  (gicol)
+                     coszen(icol) = gcoszen(gicol)
+                  enddo
+
+                  ! copy in partition (aerosols)
+                  if (iaer == 10) then
+                     do icol = 1,ncol
+                        gicol = gicol_cld(icol + cols - 1)
+                        do ibnd = 1,nbndsw
+                           taua(1:nlay,ibnd,icol) = gtauaer(gicol,1:nlay,ibnd)
+                           asya(1:nlay,ibnd,icol) = gasmaer(gicol,1:nlay,ibnd)
+                           omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
+                        end do
+                     end do
+                  endif
+
+                  ! copy in partition (gases)
+                  do icol = 1,ncol
+                     gicol = gicol_cld(icol + cols - 1)
+                     colh2o(:,icol) = gh2ovmr(gicol,1:nlay)
+                     colco2(:,icol) = gco2vmr(gicol,1:nlay)
+                     colo3 (:,icol) = go3vmr (gicol,1:nlay)
+                     colch4(:,icol) = gch4vmr(gicol,1:nlay)
+                     colo2 (:,icol) = go2vmr (gicol,1:nlay)
+                  enddo
+
+               end if  ! clear or cloudy gridcolumns
+
+               call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
+               ! limit tiny cosine zenith angles
+               do icol = 1,ncol
+                  cossza(icol) = max(zepzen,coszen(icol))
+               enddo
+
+               ! evaluate dry air molecules/cm^2
+               ! (see details in rrtmg_lw_rad())
+               do icol = 1,ncol
+                  do ilay = 1,nlay
+                     coldry(ilay,icol) = (plev(ilay,icol)-plev(ilay+1,icol)) * 1.e3 * avogad / &
+                        (1.e2 * grav * ((1.-colh2o(ilay,icol)) * amd + colh2o(ilay,icol) * amw) * &
+                        (1. + colh2o(ilay,icol)))
+                  enddo
+               enddo
+
+               ! gases also to molecules/cm^2
+               do icol = 1,ncol
+                  do ilay = 1,nlay
+                     colh2o(ilay,icol) = coldry(ilay,icol) * colh2o(ilay,icol)
+                     colco2(ilay,icol) = coldry(ilay,icol) * colco2(ilay,icol)
+                     colo3 (ilay,icol) = coldry(ilay,icol) * colo3 (ilay,icol)
+                     colch4(ilay,icol) = coldry(ilay,icol) * colch4(ilay,icol)
+                     colo2 (ilay,icol) = coldry(ilay,icol) * colo2 (ilay,icol)
                   end do
                end do
 
-               ! downward beam and diffuse fluxes at surface in bands
-               if (do_drfband) then
+
+               ! We have separate loops here because MAPL profiling
+               ! timers must be called on all branches and all processes
+               ! and we do not want the timers in the if-block
+
+               call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
+               ! cloudy gridcolumns
+               if (cc == 2) then
+                  ! McICA subcolumn generation
+                  call generate_stochastic_clouds( &
+                     pncol, ncol, ngptsw, nlay, &
+                     zm, alat, dyofyr, &
+                     play, cld, ciwp, clwp, 1.e-20, &
+                     cldymcl, ciwpmcl, clwpmcl, &
+                     seed_order=[4,3,2,1])
+
+                  ! for super-layer cloud fractions
+                  call clearCounts_threeBand( &
+                     pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
+                     p_clearCounts)
+               end if
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
+
+               call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
+               if (cc == 2) then
+                  ! cloud optical property generation
+                  call cldprmc_sw( &
+                     pncol, ncol, nlay, iceflgsw, liqflgsw,  &
+                     cldymcl, ciwpmcl, clwpmcl, rei, rel, &
+                     taormc, taucmc, ssacmc, asmcmc)
+               end if
+               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
+
+               ! Calculate information needed by the radiative transfer routine
+               ! that is specific to this atmosphere, especially some of the
+               ! coefficients and indices needed to compute the optical depths
+               ! by interpolating data from stored reference atmospheres.
+
+               call MAPL_TimerOn(MAPL,"---RRTMG_SETCOEF",__RC__)
+               call setcoef_sw( &
+                  pncol, ncol, nlay, play, tlay, coldry, &
+                  colch4, colco2, colh2o, colmol, colo2, colo3, &
+                  laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
+                  selffac, selffrac, indself, forfac, forfrac, indfor)
+               call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+
+               ! compute sw radiative fluxes
+               call spcvmc_sw(MAPL, &
+                  cc, pncol, ncol, nlay, &
+                  albdif, albdir, &
+                  cldymcl, taucmc, asmcmc, ssacmc, taormc, &
+                  taua, asya, omga, cossza, adjflux, &
+                  isolvar, svar_f, svar_s, svar_i, &
+                  svar_f_bnd, svar_s_bnd, svar_i_bnd, &
+                  laytrop, jp, jt, jt1, &
+                  colch4, colco2, colh2o, colmol, colo2, colo3, &
+                  fac00, fac01, fac10, fac11, &
+                  cloudLM, cloudMH, &
+                  selffac, selffrac, indself, forfac, forfrac, indfor, &
+                  zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
+                  zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
+                  znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
+                  ztautp, ztauhp, ztaump, ztaulp, &
+                  do_drfband, zdrband, zdfband, &
+                  __RC__)
+
+               ! Copy out up and down, clear- and all-sky fluxes to output arrays.
+               ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
+
+               call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
+
+               if (cc == 1) then  ! clear gridcolumns
+
+                  do icol = 1,ncol
+                     gicol = gicol_clr(icol + cols - 1)
+
+                     ! super-layer clear counts
+                     do n = 1,4
+                        clearCounts (gicol,n) = ngptsw
+                     end do
+
+                     ! up and down fluxes
+                     do ilev = 1,nlay+1
+                        swuflxc(gicol,ilev) = zbbcu(ilev,icol)
+                        swdflxc(gicol,ilev) = zbbcd(ilev,icol)
+                        swuflx (gicol,ilev) = zbbfu(ilev,icol)
+                        swdflx (gicol,ilev) = zbbfd(ilev,icol)
+                     enddo
+
+                     ! super-layer optical thicknesses
+                     tautp(gicol) = 0.
+                     tauhp(gicol) = 0.
+                     taump(gicol) = 0.
+                     taulp(gicol) = 0.
+
+                  enddo
+
+                  ! surface broadband fluxes
+                  do icol = 1,ncol
+                     gicol = gicol_clr(icol + cols - 1)
+                     nirr(gicol) = znirr(icol)
+                     nirf(gicol) = znirf(icol) - znirr(icol)
+                     parr(gicol) = zparr(icol)
+                     parf(gicol) = zparf(icol) - zparr(icol)
+                     uvrr(gicol) = zuvrr(icol)
+                     uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
+                  end do
+
+                  ! net downward flux at surface in bands
                   do ibnd = 1,nbndsw
                      do icol = 1,ncol
                         gicol = gicol_clr(icol + cols - 1)
-                        drband(gicol,ibnd) = zdrband(icol,ibnd)
-                        dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                        fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
                      end do
                   end do
-               end if
 
-            else ! cloudy columns
+                  ! downward beam and diffuse fluxes at surface in bands
+                  if (do_drfband) then
+                     do ibnd = 1,nbndsw
+                        do icol = 1,ncol
+                           gicol = gicol_clr(icol + cols - 1)
+                           drband(gicol,ibnd) = zdrband(icol,ibnd)
+                           dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                        end do
+                     end do
+                  end if
 
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  do n = 1,4
-                     clearCounts (gicol,n) = p_clearCounts(n,icol)
-                  end do
-                  do ilev = 1,nlay+1
-                     swuflxc(gicol,ilev) = zbbcu(ilev,icol) 
-                     swdflxc(gicol,ilev) = zbbcd(ilev,icol) 
-                     swuflx (gicol,ilev) = zbbfu(ilev,icol) 
-                     swdflx (gicol,ilev) = zbbfd(ilev,icol) 
-                  enddo
-                  tautp(gicol) = ztautp(icol)
-                  tauhp(gicol) = ztauhp(icol)
-                  taump(gicol) = ztaump(icol)
-                  taulp(gicol) = ztaulp(icol)
-               enddo
+               else ! cloudy columns
 
-               do icol = 1,ncol
-                  gicol = gicol_cld(icol + cols - 1)
-                  nirr(gicol) = znirr(icol)
-                  nirf(gicol) = znirf(icol) - znirr(icol)
-                  parr(gicol) = zparr(icol)
-                  parf(gicol) = zparf(icol) - zparr(icol)
-                  uvrr(gicol) = zuvrr(icol)
-                  uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
-               enddo
-
-               ! net downward flux at surface in bands
-               do ibnd = 1,nbndsw
                   do icol = 1,ncol
                      gicol = gicol_cld(icol + cols - 1)
-                     fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
-                  end do
-               end do
+                     do n = 1,4
+                        clearCounts (gicol,n) = p_clearCounts(n,icol)
+                     end do
+                     do ilev = 1,nlay+1
+                        swuflxc(gicol,ilev) = zbbcu(ilev,icol)
+                        swdflxc(gicol,ilev) = zbbcd(ilev,icol)
+                        swuflx (gicol,ilev) = zbbfu(ilev,icol)
+                        swdflx (gicol,ilev) = zbbfd(ilev,icol)
+                     enddo
+                     tautp(gicol) = ztautp(icol)
+                     tauhp(gicol) = ztauhp(icol)
+                     taump(gicol) = ztaump(icol)
+                     taulp(gicol) = ztaulp(icol)
+                  enddo
 
-               ! downward beam and diffuse fluxes at surface in bands
-               if (do_drfband) then
+                  do icol = 1,ncol
+                     gicol = gicol_cld(icol + cols - 1)
+                     nirr(gicol) = znirr(icol)
+                     nirf(gicol) = znirf(icol) - znirr(icol)
+                     parr(gicol) = zparr(icol)
+                     parf(gicol) = zparf(icol) - zparr(icol)
+                     uvrr(gicol) = zuvrr(icol)
+                     uvrf(gicol) = zuvrf(icol) - zuvrr(icol)
+                  enddo
+
+                  ! net downward flux at surface in bands
                   do ibnd = 1,nbndsw
                      do icol = 1,ncol
                         gicol = gicol_cld(icol + cols - 1)
-                        drband(gicol,ibnd) = zdrband(icol,ibnd)
-                        dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                        fswband(gicol,ibnd) = fndsbnd(icol,ibnd)
                      end do
                   end do
-               end if
 
-            endif  ! clear/cloudy
+                  ! downward beam and diffuse fluxes at surface in bands
+                  if (do_drfband) then
+                     do ibnd = 1,nbndsw
+                        do icol = 1,ncol
+                           gicol = gicol_cld(icol + cols - 1)
+                           drband(gicol,ibnd) = zdrband(icol,ibnd)
+                           dfband(gicol,ibnd) = zdfband(icol,ibnd)
+                        end do
+                     end do
+                  end if
 
-            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+               endif  ! clear/cloudy
 
-         enddo  ! over partitions
+               call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+
+            enddo  ! over partitions
+
+         endif ! npart > 0
 
       enddo  ! outer loop (cc) over clear then cloudy columns
 
@@ -1305,7 +1340,7 @@ contains
    !
    !  Purpose: Function to calculate the correction factor of Earth's orbit
    !  for current day of the year
-   ! 
+   !
    !  idn        : Day of the year
    !  earth_sun  : square of the ratio of mean to actual Earth-Sun distance
    !-----------------------------------------------------------------------
@@ -1316,7 +1351,7 @@ contains
 
       real :: gamma
 
-      gamma = 2. * pi * (idn-1)/365. 
+      gamma = 2. * pi * (idn-1)/365.
 
       ! Use Iqbal's equation 1.2.1
 
