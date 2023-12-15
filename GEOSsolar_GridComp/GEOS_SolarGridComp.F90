@@ -689,7 +689,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                            &
        SHORT_NAME = 'CLDTTSW',                                               &
-       LONG_NAME  = 'total_cloud_area_fraction_rrtmg_sw_REFRESH',            &
+       LONG_NAME  = 'total_cloud_area_fraction_RRTMG_P_SW_REFRESH',          &
        UNITS      = '1',                                                     &
        DEFAULT    = MAPL_UNDEF,                                              &
        DIMS       = MAPL_DimsHorzOnly,                                       &
@@ -698,7 +698,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                            &
        SHORT_NAME = 'CLDHISW',                                               &
-       LONG_NAME  = 'high-level_cloud_area_fraction_rrtmg_sw_REFRESH',       &
+       LONG_NAME  = 'high-level_cloud_area_fraction_RRTMG_P_SW_REFRESH',     &
        UNITS      = '1',                                                     &
        DEFAULT    = MAPL_UNDEF,                                              &
        DIMS       = MAPL_DimsHorzOnly,                                       &
@@ -707,7 +707,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                            &
        SHORT_NAME = 'CLDMDSW',                                               &
-       LONG_NAME  = 'mid-level_cloud_area_fraction_rrtmg_sw_REFRESH',        &
+       LONG_NAME  = 'mid-level_cloud_area_fraction_RRTMG_P_SW_REFRESH',      &
        UNITS      = '1',                                                     &
        DEFAULT    = MAPL_UNDEF,                                              &
        DIMS       = MAPL_DimsHorzOnly,                                       &
@@ -716,7 +716,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                            &
        SHORT_NAME = 'CLDLOSW',                                               &
-       LONG_NAME  = 'low-level_cloud_area_fraction_rrtmg_sw_REFRESH',        &
+       LONG_NAME  = 'low-level_cloud_area_fraction_RRTMG_P_SW_REFRESH',       &
        UNITS      = '1',                                                     &
        DEFAULT    = MAPL_UNDEF,                                              &
        DIMS       = MAPL_DimsHorzOnly,                                       &
@@ -727,41 +727,41 @@ contains
     ! the important provisos given in the comment on CLDxxSW above apply to these
     ! fields as well. Please read those provisos.
 
-    call MAPL_AddInternalSpec(GC,                                                    &
-       SHORT_NAME = 'TAULOPAR',                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_PAR_REFRESH',    &
-       UNITS      = '1' ,                                                            &
-       DEFAULT    = MAPL_UNDEF,                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                              &
-       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'TAULOPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH',    &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                    &
-       SHORT_NAME = 'TAUMDPAR',                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_PAR_REFRESH', &
-       UNITS      = '1' ,                                                            &
-       DEFAULT    = MAPL_UNDEF,                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                              &
-       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'TAUMDPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH', &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                    &
-       SHORT_NAME = 'TAUHIPAR',                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_PAR_REFRESH',   &
-       UNITS      = '1' ,                                                            &
-       DEFAULT    = MAPL_UNDEF,                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                              &
-       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'TAUHIPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH',   &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                    &
-       SHORT_NAME = 'TAUTTPAR',                                                      &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_PAR_REFRESH',    &
-       UNITS      = '1' ,                                                            &
-       DEFAULT    = MAPL_UNDEF,                                                      &
-       DIMS       = MAPL_DimsHorzOnly,                                               &
-       VLOCATION  = MAPL_VLocationNone,                                              &
-       FRIENDLYTO = trim(COMP_NAME),                                           __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'TAUTTPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH',    &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
@@ -3250,6 +3250,8 @@ contains
             allocate(zcw(ncols_block,LM,ngpt),__STAT__)
           endif
         endif
+        if (include_aerosols) &
+          allocate(ClearCounts(4,ncols_block),__STAT__)
 
         ! in-cloud cloud optical props
         select type (cloud_props_bnd)
@@ -3305,6 +3307,8 @@ contains
                 deallocate(rcorr,zcw, __STAT__)
               endif
             endif
+            if (include_aerosols) &
+              deallocate(ClearCounts, __STAT__)
           endif
 
           allocate(toa_flux(ncols_block,ngpt),    __STAT__)
@@ -3316,6 +3320,8 @@ contains
               allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
             endif
           endif
+          if (include_aerosols) &
+            allocate(ClearCounts(4,ncols_block),__STAT__)
 
           ! ty_optical_props routines have an internal deallocation
           select type (cloud_props_bnd)
@@ -3511,7 +3517,24 @@ contains
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
 
-        ! TODO: add TAUxxPAR outputs here BEFORE delta-scaling <<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        ! REFRESH super-layer diagnostics (before delta-scaling TAUs)
+        if (include_aerosols) then
+
+          ! super-layer cloud fractions
+          call clearCounts_threeBand( &
+            ncols_block, ncol_block, ngpt, LM, LCLDLM, LCLDMH, &
+            reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
+            ClearCounts)
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+            CLDTS(icol) = 1. - ClearCounts(1,isub)/float(ngpt)
+            CLDHS(icol) = 1. - ClearCounts(2,isub)/float(ngpt)
+            CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
+            CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
+          end do
+        end if
+
+!       TAULP
 
         ! perform delta-scaling of cloud optical properties (to account for forward scattering)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
@@ -3650,6 +3673,7 @@ contains
           deallocate(rdl,rcorr,urand_cond,urand_cond_aux,zcw,__STAT__)
         endif
       end if
+      if (include_aerosols) deallocate(ClearCounts,__STAT__)
       call cloud_optics%finalize()
       call cloud_props_gpt%finalize()
       call cloud_props_bnd%finalize()
