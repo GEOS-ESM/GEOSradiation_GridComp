@@ -3522,7 +3522,7 @@ contains
 
           ! super-layer cloud fractions
           call clearCounts_threeBand( &
-            ncols_block, ncol_block, ngpt, LM, LCLDLM, LCLDMH, &
+            ncols_block, ncols_block, ngpt, LM, LCLDLM, LCLDMH, &
             reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
             ClearCounts)
           do isub = 1,ncols_block
