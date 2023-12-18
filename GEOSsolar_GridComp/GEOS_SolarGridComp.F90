@@ -1336,6 +1336,7 @@ contains
     call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
+    call MAPL_TimerAdd(GC, name="--RRTMGP_SPRLYR_DIAGS"   , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_DELTA_SCALE"    , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
     call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
@@ -2059,6 +2060,9 @@ contains
       ! conversion factor (see below)
       real(wp), parameter :: cwp_fac = real(1000./MAPL_GRAV,kind=wp)
 
+      ! gpoint limits for each band (2,nbnd)
+      integer, dimension(:,:),      allocatable         :: band_lims_gpt
+
       ! solar inputs: (ncol) and (nbnd,ncol)
       real(wp), dimension(:),       allocatable         :: tsi, mu0
       real(wp), dimension(:,:),     allocatable         :: sfc_alb_dir, sfc_alb_dif
@@ -2112,7 +2116,9 @@ contains
       character(len=128)             :: cloud_optics_type, cloud_overlap_type
       type (ESMF_Time)               :: ReferenceTime
       type (ESMF_TimeInterval)       :: RefreshInterval
-      real :: cld_frac, sigma_qcw
+      real :: cld_frac, sigma_qcw, wgt
+      real :: stautp, stauhp, staump, staulp
+      real :: wtautp, wtauhp, wtaump, wtaulp
 
       ! for global gcolumn index seeding of PRNGs
       integer :: iBeg, iEnd, jBeg, jEnd
@@ -2931,6 +2937,10 @@ contains
       !   mainly band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+      ! gpoint limits for each band
+      allocate (band_lims_gpt(2,nbnd),__STAT__)
+      band_lims_gpt = k_dist%get_band_lims_gpoint()
+
       ! allocate input arrays
       allocate(tsi(ncol), mu0(ncol), __STAT__)
       allocate(sfc_alb_dir(nbnd,ncol), sfc_alb_dif(nbnd,ncol), __STAT__)
@@ -3354,6 +3364,14 @@ contains
         colE = colS + ncols_block - 1
         TEST_(gas_concs%get_subset(colS,ncols_block,gas_concs_block))
 
+        call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+        ! gas optics, including source functions
+        error_msg = k_dist%gas_optics( &
+          p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
+          gas_concs_block, optical_props, toa_flux)
+        TEST_(error_msg)
+        call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+
         ! get block of aerosol optical props
         if (need_aer_optical_props) then
           select type (aer_props)
@@ -3517,7 +3535,10 @@ contains
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
 
-        ! REFRESH super-layer diagnostics (before delta-scaling TAUs)
+        ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
+        ! ** Calculated from subcolumn ensemble, so stochastic **
+        ! -------------------------------------------------------
+        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
         if (include_aerosols) then
 
           ! super-layer cloud fractions
@@ -3532,24 +3553,113 @@ contains
             CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
             CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
           end do
-        end if
 
-!       TAULP
+          ! in-cloud optical thicknesses (COTs) in PAR super-band
+          ! (weighted across and within bands by TOA incident flux)
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+
+            ! zero accumulators
+            TAUTP(icol) = 0.
+            TAUHP(icol) = 0.
+            TAUMP(icol) = 0.
+            TAULP(icol) = 0.
+
+            ! COTs can only be non-zero for potentially cloudy columns
+            if (any(CL(icol,:) > 0.)) then
+
+              ! zero weight accumulators
+              wtautp = 0.
+              wtauhp = 0.
+              wtaump = 0.
+              wtaulp = 0.
+      
+              ! accumulate over gpts/subcolumns
+              do ib = 1, nbnd
+                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+       
+                  ! band weights for photosynthetically active radiation (PAR)
+                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                  if (ib >= 11 .and. ib <= 12) then
+                    wgt = 1.0
+                  else if (ib == 10) then
+                    wgt = 0.5
+                  else
+                    ! no contribution to PAR
+                    cycle
+                  end if
+
+                  ! TOA flux weighting
+                  ! (note: neither the adjustment of toa_flux to our tsi
+                  ! or for zenith angle are needed yet since this weighting
+                  ! is over gpoint and is normalized for EACH icol)
+                  wgt = wgt * toa_flux(isub,igpt)
+
+                  ! low pressure layer
+                  staulp = sum(cloud_props_gpt%tau(isub,LCLDLM:LM,igpt))
+                  if (staulp > 0.) then
+                    TAULP(icol) = TAULP(icol) + wgt * staulp
+                    wtaulp      = wtaulp      + wgt
+                  end if
+
+                  ! mid pressure layer
+                  staump = sum(cloud_props_gpt%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  if (staump > 0.) then
+                    TAUMP(icol) = TAUMP(icol) + wgt * staump
+                    wtaump      = wtaump      + wgt
+                  end if
+
+                  ! high pressure layer
+                  stauhp = sum(cloud_props_gpt%tau(isub,1:LCLDMH-1,igpt))
+                  if (stauhp > 0.) then
+                    TAUHP(icol) = TAUHP(icol) + wgt * stauhp
+                    wtauhp      = wtauhp      + wgt
+                  end if
+
+                  ! whole subcolumn
+                  stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    TAUTP(icol) = TAUTP(icol) + wgt * stautp
+                    wtautp      = wtautp      + wgt
+                  end if
+
+                end do ! igpt
+              end do ! ib
+
+              ! normalize
+              if (wtautp > 0.) then
+                TAUTP(icol) = TAUTP(icol) / wtautp
+              else
+                TAUTP(icol) = 0.
+              end if
+
+              if (wtauhp > 0.) then
+                TAUHP(icol) = TAUHP(icol) / wtauhp
+              else
+                TAUHP(icol) = 0.
+              end if
+
+              if (wtaump > 0.) then
+                TAUMP(icol) = TAUMP(icol) / wtaump
+              else
+                TAUMP(icol) = 0.
+              end if
+
+              if (wtaulp > 0.) then
+                TAULP(icol) = TAULP(icol) / wtaulp
+              else
+                TAULP(icol) = 0.
+              end if
+
+            end if  ! potentially cloudy column 
+          end do  ! isub
+        end if  ! include_aerosols
+        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
         ! perform delta-scaling of cloud optical properties (to account for forward scattering)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
         TEST_(cloud_props_gpt%delta_scale())
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
-
-        ! gas optics, including source functions
-        error_msg = k_dist%gas_optics( &
-          p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
-          gas_concs_block, optical_props, toa_flux)
-        TEST_(error_msg)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
 
@@ -3661,6 +3771,7 @@ contains
       PARF = PARF + 0.5 * real(bnd_flux_dn_allsky (:,LM+1,10) - bnd_flux_dir_allsky(:,LM+1,10))
 
       ! clean up
+      deallocate(band_lims_gpt,__STAT__)
       deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,toa_flux,__STAT__)
       deallocate(p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
       deallocate(flux_up_clrsky,flux_net_clrsky,__STAT__)
