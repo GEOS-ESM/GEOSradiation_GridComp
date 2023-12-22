@@ -4703,7 +4703,7 @@ contains
       end if
 
       if (associated(CLDM) .or. associated(CLDT) .or. &
-          associated(TAUTX) . or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX)) &
       then
          allocate(aCLDM(IM,JM),__STAT__)
          aCLDM = 0.
@@ -4714,7 +4714,7 @@ contains
       end if
 
       if (associated(CLDL) .or. associated(CLDT) .or. &
-          associated(TAUTX) . or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX)) &
       then
          allocate(aCLDL(IM,JM),__STAT__)
          aCLDL = 0.
@@ -4725,7 +4725,7 @@ contains
       end if
 
       if (associated(CLDT) .or. &
-          associated(TAUTX) . or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX)) &
       then
          allocate(aCLDT(IM,JM),__STAT__)
          aCLDT = 1. - (1-aCLDH)*(1-aCLDM)*(1-aCLDL)
