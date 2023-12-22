@@ -763,6 +763,45 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                &
        FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
+    ! Note: See comments ave for TAUxxPAR. COTxxPAR are undef for clear super-layers,
+    ! whereas TAUxxPAR are zero.
+
+    call MAPL_AddInternalSpec(GC,                                                            &
+       SHORT_NAME = 'COTLOPAR',                                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_undef',    &
+       UNITS      = '1' ,                                                                    &
+       DEFAULT    = MAPL_UNDEF,                                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                                       &
+       VLOCATION  = MAPL_VLocationNone,                                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                            &
+       SHORT_NAME = 'COTMDPAR',                                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_undef', &
+       UNITS      = '1' ,                                                                    &
+       DEFAULT    = MAPL_UNDEF,                                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                                       &
+       VLOCATION  = MAPL_VLocationNone,                                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                            &
+       SHORT_NAME = 'COTHIPAR',                                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_undef',   &
+       UNITS      = '1' ,                                                                    &
+       DEFAULT    = MAPL_UNDEF,                                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                                       &
+       VLOCATION  = MAPL_VLocationNone,                                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                            &
+       SHORT_NAME = 'COTTTPAR',                                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_undef',    &
+       UNITS      = '1' ,                                                                    &
+       DEFAULT    = MAPL_UNDEF,                                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                                       &
+       VLOCATION  = MAPL_VLocationNone,                                                      &
+       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1063,7 +1102,7 @@ contains
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds',              &
        UNITS      = '1' ,                                                    &
-       SHORT_NAME = 'TAUTTX',                                                &
+       SHORT_NAME = 'TAUTX',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
@@ -2052,7 +2091,8 @@ contains
       ! REFRESH exports (via internals)
       real, pointer, dimension(:)    :: COSZSW
       real, pointer, dimension(:)    :: CLDTS, CLDHS, CLDMS, CLDLS, &
-                                        TAUTP, TAUHP, TAUMP, TAULP
+                                        TAUTP, TAUHP, TAUMP, TAULP, &
+                                        COTTP, COTHP, COTMP, COTLP
 
       ! variables for RRTMG code
       ! ------------------------
@@ -2765,6 +2805,14 @@ contains
                TAUMP     => ptr2(1:Num2do,1)
             case('TAULOPAR')
                TAULP     => ptr2(1:Num2do,1)
+            case('COTTTPAR')
+               COTTP     => ptr2(1:Num2do,1)
+            case('COTHIPAR')
+               COTHP     => ptr2(1:Num2do,1)
+            case('COTMDPAR')
+               COTMP     => ptr2(1:Num2do,1)
+            case('COTLOPAR')
+               COTLP     => ptr2(1:Num2do,1)
          end select
 
       enddo INT_VARS_2
@@ -3584,7 +3632,7 @@ contains
             CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
           end do
 
-          ! in-cloud optical thicknesses (COTs) in PAR super-band
+          ! in-cloud optical thicknesses in PAR super-band
           ! (weighted across and within bands by TOA incident flux)
           do isub = 1,ncols_block
             icol = colS + isub - 1
@@ -3595,7 +3643,13 @@ contains
             TAUMP(icol) = 0.
             TAULP(icol) = 0.
 
-            ! COTs can only be non-zero for potentially cloudy columns
+            ! default for COTx variant
+            COTTP(icol) = MAPL_UNDEF
+            COTHP(icol) = MAPL_UNDEF
+            COTMP(icol) = MAPL_UNDEF
+            COTLP(icol) = MAPL_UNDEF
+
+            ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
 
               ! zero weight accumulators
@@ -3657,26 +3711,31 @@ contains
               end do ! ib
 
               ! normalize
+              ! Note: COTx already default to MAPL_UNDEF
               if (wtautp > 0.) then
                 TAUTP(icol) = TAUTP(icol) / wtautp
+                if (TAUTP(icol) > 0.) COTTP(icol) = TAUTP(icol)
               else
                 TAUTP(icol) = 0.
               end if
 
               if (wtauhp > 0.) then
                 TAUHP(icol) = TAUHP(icol) / wtauhp
+                if (TAUHP(icol) > 0.) COTHP(icol) = TAUHP(icol)
               else
                 TAUHP(icol) = 0.
               end if
 
               if (wtaump > 0.) then
                 TAUMP(icol) = TAUMP(icol) / wtaump
+                if (TAUMP(icol) > 0.) COTMP(icol) = TAUMP(icol)
               else
                 TAUMP(icol) = 0.
               end if
 
               if (wtaulp > 0.) then
                 TAULP(icol) = TAULP(icol) / wtaulp
+                if (TAULP(icol) > 0.) COTLP(icol) = TAULP(icol)
               else
                 TAULP(icol) = 0.
               end if
@@ -4143,6 +4202,13 @@ contains
         CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
       end if
 
+      ! undef versions of cloud optical thicknesses
+      COTTP = merge(TAUTP, MAPL_UNDEF, TAUTP > 0.)
+      COTHP = merge(TAUHP, MAPL_UNDEF, TAUHP > 0.)
+      COTMP = merge(TAUMP, MAPL_UNDEF, TAUMP > 0.)
+      COTLP = merge(TAULP, MAPL_UNDEF, TAULP > 0.)
+
+      ! fluxes
       FSW  = SWDFLXR  - SWUFLXR
       FSC  = SWDFLXCR - SWUFLXCR
       FSWU = SWUFLXR
@@ -4669,7 +4735,7 @@ contains
       call MAPL_GetPointer(EXPORT  , TAUM,       'TAUMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUH,       'TAUHI',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUT,       'TAUTT',      __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUTX,      'TAUTTX',     __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUTX,      'TAUTX',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTL,       'COTLO',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTM,       'COTMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTH,       'COTHI',      __RC__)
