@@ -716,7 +716,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                            &
        SHORT_NAME = 'CLDLOSW',                                               &
-       LONG_NAME  = 'low-level_cloud_area_fraction_RRTMG_P_SW_REFRESH',       &
+       LONG_NAME  = 'low-level_cloud_area_fraction_RRTMG_P_SW_REFRESH',      &
        UNITS      = '1',                                                     &
        DEFAULT    = MAPL_UNDEF,                                              &
        DIMS       = MAPL_DimsHorzOnly,                                       &
@@ -1031,6 +1031,7 @@ contains
         DIMS       = MAPL_DimsHorzOnly,                                      &
         VLOCATION  = MAPL_VLocationNone,                              __RC__ )
 
+    ! the TAUxx variants are zero when the super-layer is clear
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds',              &
        UNITS      = '1' ,                                                    &
@@ -1060,9 +1061,38 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds__improved',    &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds',              &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'TAUTTX',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    ! the COTxx variants are undef when the super-layer is clear
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_undef',        &
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'COTLO',                                                 &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_undef',     &
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'COTMD',                                                 &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_undef',       &
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'COTHI',                                                 &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_undef',        &
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'COTTX',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
@@ -4412,7 +4442,7 @@ contains
       ! for efficiency
       real, allocatable, dimension(:,:) :: aCLDL,aCLDM,aCLDH
       real, allocatable, dimension(:,:) :: aTAUL,aTAUM,aTAUH
-      real, allocatable, dimension(:,:) :: aCLDT
+      real, allocatable, dimension(:,:) :: aCLDT,aTAUT
 
       real, dimension(LM  ) :: DUM1D
       real, dimension(LM,4) :: DUM2D
@@ -4420,6 +4450,7 @@ contains
       real, pointer, dimension(:,:)   :: TDUST,TSALT,TSO4,TBC,TOC
       real, pointer, dimension(:,:)   :: CLDH,CLDM,CLDL,CLDT, &
                                          TAUH,TAUM,TAUL,TAUT,TAUTX, &
+                                         COTH,COTM,COTL,     COTTX, &
                                          CLDTMP,CLDPRS
 
       ! super-layer RRTMG cloud fraction exports on heartbeat
@@ -4639,6 +4670,10 @@ contains
       call MAPL_GetPointer(EXPORT  , TAUH,       'TAUHI',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUT,       'TAUTT',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUTX,      'TAUTTX',     __RC__)
+      call MAPL_GetPointer(EXPORT  , COTL,       'COTLO',      __RC__)
+      call MAPL_GetPointer(EXPORT  , COTM,       'COTMD',      __RC__)
+      call MAPL_GetPointer(EXPORT  , COTH,       'COTHI',      __RC__)
+      call MAPL_GetPointer(EXPORT  , COTTX,      'COTTX',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTMP,     'CLDTMP',     __RC__)
       call MAPL_GetPointer(EXPORT  , CLDPRS,     'CLDPRS',     __RC__)
 
@@ -4656,7 +4691,9 @@ contains
 
       if (associated(FCLD)) FCLD = CLIN
 
-      if (associated(CLDH) .or. associated(CLDT) .or. associated(TAUTX)) then
+      if (associated(CLDH) .or. associated(CLDT) .or. &
+          associated(TAUTX) .or. associated(COTTX)) &
+      then
          allocate(aCLDH(IM,JM),__STAT__)
          aCLDH = 0.
          do l=1,LCLDMH-1
@@ -4665,7 +4702,9 @@ contains
          if (associated(CLDH)) CLDH = aCLDH
       end if
 
-      if (associated(CLDM) .or. associated(CLDT) .or. associated(TAUTX)) then
+      if (associated(CLDM) .or. associated(CLDT) .or. &
+          associated(TAUTX) . or. associated(COTTX)) &
+      then
          allocate(aCLDM(IM,JM),__STAT__)
          aCLDM = 0.
          do l=LCLDMH,LCLDLM-1
@@ -4674,7 +4713,9 @@ contains
          if (associated(CLDM)) CLDM = aCLDM
       end if
 
-      if (associated(CLDL) .or. associated(CLDT) .or. associated(TAUTX)) then
+      if (associated(CLDL) .or. associated(CLDT) .or. &
+          associated(TAUTX) . or. associated(COTTX)) &
+      then
          allocate(aCLDL(IM,JM),__STAT__)
          aCLDL = 0.
          do l=LCLDLM,LM
@@ -4683,7 +4724,9 @@ contains
          if (associated(CLDL)) CLDL = aCLDL
       end if
 
-      if (associated(CLDT) .or. associated(TAUTX)) then
+      if (associated(CLDT) .or. &
+          associated(TAUTX) . or. associated(COTTX)) &
+      then
          allocate(aCLDT(IM,JM),__STAT__)
          aCLDT = 1. - (1-aCLDH)*(1-aCLDM)*(1-aCLDL)
          if (associated(CLDT)) CLDT = aCLDT
@@ -4854,8 +4897,10 @@ contains
 
       if (associated(TAUI) .or. associated(TAUW) .or. associated(TAUR) .or. associated(TAUS).or. &
           associated(TAUL) .or. associated(TAUM) .or. associated(TAUH) .or. &
-          associated(TAUT) .or. associated(TAUTX) .or. &
-          associated(CLDTMP) .or. associated(CLDPRS)) then
+          associated(COTL) .or. associated(COTM) .or. associated(COTH) .or. &
+          associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(CLDTMP) .or. associated(CLDPRS)) &
+      then
 
          allocate(   TAUCLD(IM,JM,LM,4), __STAT__)
          allocate(HYDROMETS(IM,JM,LM,4), __STAT__)
@@ -4910,31 +4955,49 @@ contains
          ! 'effective clouds' extended-out and diluted to the maximum cloud fraction in each
          ! pressure super-layers [LMH].
 
-         if (associated(TAUH) .or. associated(TAUT) .or. associated(TAUTX)) then
+         if (associated(TAUH) .or. associated(COTH) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         then
             allocate(aTAUH(IM,JM),__STAT__)
             aTAUH = 0.
             do l=1,LCLDMH-1
                aTAUH = aTAUH + TAUCLD(:,:,L,1)
             end do
             if (associated(TAUH)) TAUH = aTAUH
+            if (associated(COTH)) then
+              COTH = MAPL_UNDEF
+              where (aCLDH > 0.) COTH = aTAUH
+            end if
          end if
 
-         if (associated(TAUM) .or. associated(TAUT) .or. associated(TAUTX)) then
+         if (associated(TAUM) .or. associated(COTM) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         then
             allocate(aTAUM(IM,JM),__STAT__)
             aTAUM = 0.
             do l=LCLDMH,LCLDLM-1
                aTAUM = aTAUM + TAUCLD(:,:,L,1)
             end do
             if (associated(TAUM)) TAUM = aTAUM
+            if (associated(COTM)) then
+              COTM = MAPL_UNDEF
+              where (aCLDM > 0.) COTM = aTAUM
+            end if
          end if
 
-         if (associated(TAUL) .or. associated(TAUT) .or. associated(TAUTX)) then
+         if (associated(TAUL) .or. associated(COTL) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         then
             allocate(aTAUL(IM,JM),__STAT__)
             aTAUL = 0.
             do l=LCLDLM,LM
                aTAUL = aTAUL + TAUCLD(:,:,L,1)
             end do
             if (associated(TAUL)) TAUL = aTAUL
+            if (associated(COTL)) then
+              COTL = MAPL_UNDEF
+              where (aCLDL > 0.) COTL = aTAUL
+            end if
          end if
 
          ! TAUT however is broken because the three super-layers are randomly overlapped
@@ -4961,14 +5024,21 @@ contains
          ! are non-linear in optical thickness. This is why TAUTX is approximate. But
          ! its the best we SIMPLY can do.
 
-         if (associated(TAUTX)) then
-            TAUTX = 0.
-            where (aCLDT > 0.) TAUTX = (aTAUL*aCLDL + aTAUM*aCLDM + aTAUH*aCLDH) / CLDT
+         if (associated(TAUTX) .or. associated(COTTX)) then
+            allocate(aTAUT(IM,JM),__STAT__)
+            aTAUT = 0.
+            where (aCLDT > 0.) aTAUT = (aTAUL*aCLDL + aTAUM*aCLDM + aTAUH*aCLDH) / aCLDT
+            if (associated(TAUTX)) TAUTX = aTAUT
+            if (associated(COTTX)) then
+              COTTX = MAPL_UNDEF 
+              where (aCLDT > 0.) COTTX = aTAUT
+            end if
          end if
 
          if (allocated(aTAUH)) deallocate(aTAUH,__STAT__)
          if (allocated(aTAUM)) deallocate(aTAUM,__STAT__)
          if (allocated(aTAUL)) deallocate(aTAUL,__STAT__)
+         if (allocated(aTAUT)) deallocate(aTAUT,__STAT__)
 
          if (associated(CLDTMP) .or. associated(CLDPRS)) then
             call MAPL_GetResource(MAPL,TAUCRIT,'TAUCRIT:',DEFAULT=0.10,__RC__)
