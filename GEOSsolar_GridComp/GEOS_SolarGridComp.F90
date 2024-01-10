@@ -1108,32 +1108,94 @@ contains
 
     ! the COTxx variants are undef when the super-layer is clear
     call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_undef',        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_clrundef',     &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'COTLO',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_undef',     &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_clrundef',  &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'COTMD',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_undef',       &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_clrundef',    &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'COTHI',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_undef',        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_clrundef',     &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'COTTX',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    ! COT[DEN|NUM]xx allow a true cloud-fraction-weighted in-cloud optical
+    ! thickness to be calculated via COTNUMxx / COTDENxx. Like the COTxx, clear
+    ! values make no contribution, but unlike COTxx, each COT is weighted by a
+    ! cloud fraction so that small clouds, which have a small radiative effect,
+    ! get weighted accordingly.
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_denominator',    &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTDENLO',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_denominator', &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTDENMD',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_denominator',   &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTDENHI',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_denominator',    &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTDENTX',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_numerator',      &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTNUMLO',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_numerator',   &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTNUMMD',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_numerator',     &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTNUMHI',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
+
+    call MAPL_AddExportSpec(GC,                                                &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_numerator',      &
+       UNITS      = '1' ,                                                      &
+       SHORT_NAME = 'COTNUMTX',                                                &
+       DIMS       = MAPL_DimsHorzOnly,                                         &
+       VLOCATION  = MAPL_VLocationNone,                                  __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_for_ice_clouds',             &
@@ -4518,6 +4580,8 @@ contains
                                          TAUH,TAUM,TAUL,TAUT,TAUTX, &
                                          COTH,COTM,COTL,     COTTX, &
                                          CLDTMP,CLDPRS
+      real, pointer, dimension(:,:)   :: COTDH,COTDM,COTDL,COTDTX, &
+                                         COTNH,COTNM,COTNL,COTNTX
 
       ! super-layer RRTMG cloud fraction exports on heartbeat
       real, pointer, dimension(:,:)   :: CLDTTSWHB
@@ -4742,6 +4806,14 @@ contains
       call MAPL_GetPointer(EXPORT  , COTTX,      'COTTX',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTMP,     'CLDTMP',     __RC__)
       call MAPL_GetPointer(EXPORT  , CLDPRS,     'CLDPRS',     __RC__)
+      call MAPL_GetPointer(EXPORT  , COTDL,      'COTDENLO',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTDM,      'COTDENMD',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTDH,      'COTDENHI',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTDTX,     'COTDENTX',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTNL,      'COTNUMLO',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTNM,      'COTNUMMD',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTNH,      'COTNUMHI',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTNTX,     'COTNUMTX',   __RC__)
 
       call MAPL_GetPointer(EXPORT  , CLDLOSWHB,  'CLDLOSWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDMDSWHB,  'CLDMDSWHB',  __RC__)
@@ -4758,7 +4830,9 @@ contains
       if (associated(FCLD)) FCLD = CLIN
 
       if (associated(CLDH) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(COTDH) .or. associated(COTNH) .or. &
+          associated(COTDTX) .or. associated(COTNTX)) &
       then
          allocate(aCLDH(IM,JM),__STAT__)
          aCLDH = 0.
@@ -4766,10 +4840,13 @@ contains
             aCLDH = max(aCLDH,CLIN(:,:,L))
          end do
          if (associated(CLDH)) CLDH = aCLDH
+         if (associated(COTDH)) COTDH = aCLDH
       end if
 
       if (associated(CLDM) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(COTDM) .or. associated(COTNM) .or. &
+          associated(COTDTX) .or. associated(COTNTX)) &
       then
          allocate(aCLDM(IM,JM),__STAT__)
          aCLDM = 0.
@@ -4777,10 +4854,13 @@ contains
             aCLDM = max(aCLDM,CLIN(:,:,L))
          end do
          if (associated(CLDM)) CLDM = aCLDM
+         if (associated(COTDM)) COTDM = aCLDM
       end if
 
       if (associated(CLDL) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(COTDL) .or. associated(COTNL) .or. &
+          associated(COTDTX) .or. associated(COTNTX)) &
       then
          allocate(aCLDL(IM,JM),__STAT__)
          aCLDL = 0.
@@ -4788,14 +4868,17 @@ contains
             aCLDL = max(aCLDL,CLIN(:,:,L))
          end do
          if (associated(CLDL)) CLDL = aCLDL
+         if (associated(COTDL)) COTDL = aCLDL
       end if
 
       if (associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX)) &
+          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(COTDTX) .or. associated(COTNTX)) &
       then
          allocate(aCLDT(IM,JM),__STAT__)
          aCLDT = 1. - (1-aCLDH)*(1-aCLDM)*(1-aCLDL)
          if (associated(CLDT)) CLDT = aCLDT
+         if (associated(COTDTX)) COTDTX = aCLDT
       end if
 
       ! CLD??SWHB:
@@ -4965,6 +5048,7 @@ contains
           associated(TAUL) .or. associated(TAUM) .or. associated(TAUH) .or. &
           associated(COTL) .or. associated(COTM) .or. associated(COTH) .or. &
           associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(COTNL) .or. associated(COTNM) .or. associated(COTNH) .or. associated(COTNTX) .or. &
           associated(CLDTMP) .or. associated(CLDPRS)) &
       then
 
@@ -5021,8 +5105,8 @@ contains
          ! 'effective clouds' extended-out and diluted to the maximum cloud fraction in each
          ! pressure super-layers [LMH].
 
-         if (associated(TAUH) .or. associated(COTH) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         if (associated(TAUH) .or. associated(COTH) .or. associated(COTNH) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
          then
             allocate(aTAUH(IM,JM),__STAT__)
             aTAUH = 0.
@@ -5034,10 +5118,11 @@ contains
               COTH = MAPL_UNDEF
               where (aCLDH > 0.) COTH = aTAUH
             end if
+            if (associated(COTNH)) COTNH = aCLDH * aTAUH
          end if
 
-         if (associated(TAUM) .or. associated(COTM) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         if (associated(TAUM) .or. associated(COTM) .or. associated(COTNM) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
          then
             allocate(aTAUM(IM,JM),__STAT__)
             aTAUM = 0.
@@ -5049,10 +5134,11 @@ contains
               COTM = MAPL_UNDEF
               where (aCLDM > 0.) COTM = aTAUM
             end if
+            if (associated(COTNM)) COTNM = aCLDM * aTAUM
          end if
 
-         if (associated(TAUL) .or. associated(COTL) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX)) &
+         if (associated(TAUL) .or. associated(COTL) .or. associated(COTNL) .or. &
+             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
          then
             allocate(aTAUL(IM,JM),__STAT__)
             aTAUL = 0.
@@ -5064,6 +5150,7 @@ contains
               COTL = MAPL_UNDEF
               where (aCLDL > 0.) COTL = aTAUL
             end if
+            if (associated(COTNL)) COTNL = aCLDL * aTAUL
          end if
 
          ! TAUT however is broken because the three super-layers are randomly overlapped
@@ -5090,7 +5177,7 @@ contains
          ! are non-linear in optical thickness. This is why TAUTX is approximate. But
          ! its the best we SIMPLY can do.
 
-         if (associated(TAUTX) .or. associated(COTTX)) then
+         if (associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) then
             allocate(aTAUT(IM,JM),__STAT__)
             aTAUT = 0.
             where (aCLDT > 0.) aTAUT = (aTAUL*aCLDL + aTAUM*aCLDM + aTAUH*aCLDH) / aCLDT
@@ -5099,6 +5186,7 @@ contains
               COTTX = MAPL_UNDEF 
               where (aCLDT > 0.) COTTX = aTAUT
             end if
+            if (associated(COTNTX)) COTNTX = aCLDT * aTAUT
          end if
 
          if (allocated(aTAUH)) deallocate(aTAUH,__STAT__)
