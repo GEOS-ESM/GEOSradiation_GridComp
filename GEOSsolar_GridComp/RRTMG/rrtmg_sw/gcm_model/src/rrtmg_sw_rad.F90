@@ -78,7 +78,8 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-      tautp, tauhp, taump, taulp, &
+      cotdtp, cotdhp, cotdmp, cotdlp, &
+      cotntp, cotnhp, cotnmp, cotnlp, &
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -259,7 +260,8 @@ contains
       real, intent(out) :: fswband (ncol,nbndsw)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (ncol) :: tautp, tauhp, taump, taulp
+      real, intent(out), dimension (ncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
+                                             cotntp, cotnhp, cotnmp, cotnlp
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -315,7 +317,8 @@ contains
          cloudLM, cloudMH, normFlx, &
          clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
          nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-         tautp, tauhp, taump, taulp, &
+         cotdtp, cotdhp, cotdmp, cotdlp, &
+         cotntp, cotnhp, cotnmp, cotnlp, &
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
@@ -337,7 +340,8 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-      tautp, tauhp, taump, taulp, &
+      cotdtp, cotdhp, cotdmp, cotdlp, &
+      cotntp, cotnhp, cotnmp, cotnlp, &
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -443,7 +447,8 @@ contains
       real, intent(out) :: uvrf    (gncol)             ! UV      diffuse down SW flux (w/m2)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (gncol) :: tautp, tauhp, taump, taulp
+      real, intent(out), dimension (gncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
+                                              cotntp, cotnhp, cotnmp, cotnlp
 
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
@@ -561,7 +566,8 @@ contains
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
       ! in-cloud PAR optical thicknesses
-      real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
+      real, dimension (pncol) :: zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
+                                 zcotntp, zcotnhp, zcotnmp, zcotnlp
       
       ! Solar variability multipliers
       ! -----------------------------
@@ -1139,7 +1145,8 @@ contains
                zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
                zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
-               ztautp, ztauhp, ztaump, ztaulp, &
+               zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
+               zcotntp, zcotnhp, zcotnmp, zcotnlp, &
                do_drfband, zdrband, zdfband, &
                __RC__)
 
@@ -1167,10 +1174,10 @@ contains
                   enddo
 
                   ! super-layer optical thicknesses
-                  tautp(gicol) = 0.
-                  tauhp(gicol) = 0.
-                  taump(gicol) = 0.
-                  taulp(gicol) = 0.
+                  cotdtp(gicol) = 0.; cotntp(gicol) = 0.
+                  cotdhp(gicol) = 0.; cotnhp(gicol) = 0.
+                  cotdmp(gicol) = 0.; cotnmp(gicol) = 0.
+                  cotdlp(gicol) = 0.; cotnlp(gicol) = 0.
 
                enddo
 
@@ -1217,10 +1224,14 @@ contains
                      swuflx (gicol,ilev) = zbbfu(ilev,icol) 
                      swdflx (gicol,ilev) = zbbfd(ilev,icol) 
                   enddo
-                  tautp(gicol) = ztautp(icol)
-                  tauhp(gicol) = ztauhp(icol)
-                  taump(gicol) = ztaump(icol)
-                  taulp(gicol) = ztaulp(icol)
+                  cotdtp(gicol) = zcotdtp(icol)
+                  cotdhp(gicol) = zcotdhp(icol)
+                  cotdmp(gicol) = zcotdmp(icol)
+                  cotdlp(gicol) = zcotdlp(icol)
+                  cotntp(gicol) = zcotntp(icol)
+                  cotnhp(gicol) = zcotnhp(icol)
+                  cotnmp(gicol) = zcotnmp(icol)
+                  cotnlp(gicol) = zcotnlp(icol)
                enddo
 
                do icol = 1,ncol

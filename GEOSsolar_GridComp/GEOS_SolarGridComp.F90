@@ -802,6 +802,72 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                      &
        FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
 
+    ! for COT[DEN|NUM]xxPAR see comments under COT[DEN|NUM]xx
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDENLOPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator',    &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDENMDPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDENHIPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator',   &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDENTTPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator',    &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTNUMLOPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator',      &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTNUMMDPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator',   &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTNUMHIPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator',     &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTNUMTTPAR',                                                                 &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator',      &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2154,7 +2220,9 @@ contains
       real, pointer, dimension(:)    :: COSZSW
       real, pointer, dimension(:)    :: CLDTS, CLDHS, CLDMS, CLDLS, &
                                         TAUTP, TAUHP, TAUMP, TAULP, &
-                                        COTTP, COTHP, COTMP, COTLP
+                                        COTTP, COTHP, COTMP, COTLP, &
+                                        COTDTP, COTDHP, COTDMP, COTDLP, &
+                                        COTNTP, COTNHP, COTNMP, COTNLP
 
       ! variables for RRTMG code
       ! ------------------------
@@ -2250,7 +2318,6 @@ contains
       type (ESMF_TimeInterval)       :: RefreshInterval
       real :: cld_frac, sigma_qcw, wgt
       real :: stautp, stauhp, staump, staulp
-      real :: wtautp, wtauhp, wtaump, wtaulp
 
       ! for global gcolumn index seeding of PRNGs
       integer :: iBeg, iEnd, jBeg, jEnd
@@ -2875,6 +2942,22 @@ contains
                COTMP     => ptr2(1:Num2do,1)
             case('COTLOPAR')
                COTLP     => ptr2(1:Num2do,1)
+            case('COTDENTTPAR')
+               COTDTP    => ptr2(1:Num2do,1)
+            case('COTDENHIPAR')
+               COTDHP    => ptr2(1:Num2do,1)
+            case('COTDENMDPAR')
+               COTDMP    => ptr2(1:Num2do,1)
+            case('COTDENLOPAR')
+               COTDLP    => ptr2(1:Num2do,1)
+            case('COTNUMTTPAR')
+               COTNTP    => ptr2(1:Num2do,1)
+            case('COTNUMHIPAR')
+               COTNHP    => ptr2(1:Num2do,1)
+            case('COTNUMMDPAR')
+               COTNMP    => ptr2(1:Num2do,1)
+            case('COTNUMLOPAR')
+               COTNLP    => ptr2(1:Num2do,1)
          end select
 
       enddo INT_VARS_2
@@ -3699,27 +3782,27 @@ contains
           do isub = 1,ncols_block
             icol = colS + isub - 1
 
-            ! zero accumulators
+            ! default (no cloud) for TAUx variant 
             TAUTP(icol) = 0.
             TAUHP(icol) = 0.
             TAUMP(icol) = 0.
             TAULP(icol) = 0.
 
-            ! default for COTx variant
+            ! default (no cloud) for COTx variant
             COTTP(icol) = MAPL_UNDEF
             COTHP(icol) = MAPL_UNDEF
             COTMP(icol) = MAPL_UNDEF
             COTLP(icol) = MAPL_UNDEF
 
+            ! zero denom- and numerator accumulators
+            COTDTP(icol) = 0.; COTNTP(icol) = 0.
+            COTDHP(icol) = 0.; COTNHP(icol) = 0.
+            COTDMP(icol) = 0.; COTNMP(icol) = 0.
+            COTDLP(icol) = 0.; COTNLP(icol) = 0.
+
             ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
 
-              ! zero weight accumulators
-              wtautp = 0.
-              wtauhp = 0.
-              wtaump = 0.
-              wtaulp = 0.
-      
               ! accumulate over gpts/subcolumns
               do ib = 1, nbnd
                 do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
@@ -3744,62 +3827,54 @@ contains
                   ! low pressure layer
                   staulp = sum(cloud_props_gpt%tau(isub,LCLDLM:LM,igpt))
                   if (staulp > 0.) then
-                    TAULP(icol) = TAULP(icol) + wgt * staulp
-                    wtaulp      = wtaulp      + wgt
+                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
+                    COTDLP(icol) = COTDLP(icol) + wgt
                   end if
 
                   ! mid pressure layer
                   staump = sum(cloud_props_gpt%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   if (staump > 0.) then
-                    TAUMP(icol) = TAUMP(icol) + wgt * staump
-                    wtaump      = wtaump      + wgt
+                    COTNMP(icol) = COTNMP(icol) + wgt * staump
+                    COTDMP(icol) = COTDMP(icol) + wgt
                   end if
 
                   ! high pressure layer
                   stauhp = sum(cloud_props_gpt%tau(isub,1:LCLDMH-1,igpt))
                   if (stauhp > 0.) then
-                    TAUHP(icol) = TAUHP(icol) + wgt * stauhp
-                    wtauhp      = wtauhp      + wgt
+                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
+                    COTDHP(icol) = COTDHP(icol) + wgt
                   end if
 
                   ! whole subcolumn
                   stautp = staulp + staump + stauhp
                   if (stautp > 0.) then
-                    TAUTP(icol) = TAUTP(icol) + wgt * stautp
-                    wtautp      = wtautp      + wgt
+                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
+                    COTDTP(icol) = COTDTP(icol) + wgt
                   end if
 
                 end do ! igpt
               end do ! ib
 
               ! normalize
-              ! Note: COTx already default to MAPL_UNDEF
-              if (wtautp > 0.) then
-                TAUTP(icol) = TAUTP(icol) / wtautp
+              ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
+              if (COTDTP(icol) > 0.) then
+                TAUTP(icol) = COTNTP(icol) / COTDTP(icol)
                 if (TAUTP(icol) > 0.) COTTP(icol) = TAUTP(icol)
-              else
-                TAUTP(icol) = 0.
               end if
 
-              if (wtauhp > 0.) then
-                TAUHP(icol) = TAUHP(icol) / wtauhp
+              if (COTDHP(icol) > 0.) then
+                TAUHP(icol) = COTNHP(icol) / COTDHP(icol)
                 if (TAUHP(icol) > 0.) COTHP(icol) = TAUHP(icol)
-              else
-                TAUHP(icol) = 0.
               end if
 
-              if (wtaump > 0.) then
-                TAUMP(icol) = TAUMP(icol) / wtaump
+              if (COTDMP(icol) > 0.) then
+                TAUMP(icol) = COTNMP(icol) / COTDMP(icol)
                 if (TAUMP(icol) > 0.) COTMP(icol) = TAUMP(icol)
-              else
-                TAUMP(icol) = 0.
               end if
 
-              if (wtaulp > 0.) then
-                TAULP(icol) = TAULP(icol) / wtaulp
+              if (COTDLP(icol) > 0.) then
+                TAULP(icol) = COTNLP(icol) / COTDLP(icol)
                 if (TAULP(icol) > 0.) COTLP(icol) = TAULP(icol)
-              else
-                TAULP(icol) = 0.
               end if
 
             end if  ! potentially cloudy column 
@@ -4235,7 +4310,8 @@ contains
          LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
          CLEARCOUNTS, SWUFLX, SWDFLX, SWUFLXC, SWDFLXC, &
          NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
-         TAUTP, TAUHP, TAUMP, TAULP, &
+         COTDTP, COTDHP, COTDMP, COTDLP, &
+         COTNTP, COTNHP, COTNMP, COTNLP, &
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
@@ -4263,6 +4339,12 @@ contains
         CLDMS(:) = 1. - CLEARCOUNTS(:,3)/float(NGPTSW)
         CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
       end if
+
+      ! zero versions of cloud optical thicknesses
+      TAUTP = merge(COTNTP/COTDTP, 0., COTDTP > 0.)
+      TAUHP = merge(COTNHP/COTDHP, 0., COTDHP > 0.)
+      TAUMP = merge(COTNMP/COTDMP, 0., COTDMP > 0.)
+      TAULP = merge(COTNLP/COTDLP, 0., COTDLP > 0.)
 
       ! undef versions of cloud optical thicknesses
       COTTP = merge(TAUTP, MAPL_UNDEF, TAUTP > 0.)

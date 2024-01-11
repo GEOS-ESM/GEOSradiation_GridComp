@@ -46,7 +46,8 @@ contains
       pbbfd, pbbfu, pbbcd, pbbcu, puvfd, puvcd, pnifd, pnicd, &
       pbbfddir, pbbcddir, puvfddir, puvcddir, pnifddir, pnicddir, &
       znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
-      ztautp, ztauhp, ztaump, ztaulp, &
+      zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
+      zcotntp, zcotnhp, zcotnmp, zcotnlp, &
       do_drfband, zdrband, zdfband, &
       RC)
    ! ---------------------------------------------------------------------------
@@ -176,7 +177,8 @@ contains
 
       ! in-cloud PAR optical thicknesses
       real, intent(out), dimension (pncol) :: &
-         ztautp, ztauhp, ztaump, ztaulp
+         zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
+         zcotntp, zcotnhp, zcotnmp, zcotnlp
 
       ! Surface downwelling direct and diffuse fluxes (W/m2)
       !    in each band (all-sky): Only filled if (do_drfband).
@@ -192,7 +194,6 @@ contains
 
       real :: zf, zwf, zincflx, wgt
       real :: stautp, stauhp, staump, staulp
-      real :: wtautp, wtauhp, wtaump, wtaulp
 
       real :: zgco   (nlay,ngptsw,pncol)
       real :: zomco  (nlay,ngptsw,pncol)  
@@ -541,20 +542,15 @@ contains
       ! diagnostic in-cloud optical thicknesses in PAR super-band
       ! (weighted across and within bands by TOA incident flux)
       ! -------------------------------------------------------
-      ztautp = 0.
-      ztauhp = 0.
-      ztaump = 0.
-      ztaulp = 0.
+      zcotdtp = 0.; zcotntp = 0.
+      zcotdhp = 0.; zcotnhp = 0.
+      zcotdmp = 0.; zcotnmp = 0.
+      zcotdlp = 0.; zcotnlp = 0.
 
       ! can only be non-zero for potentially cloudy columns
       if (cc == 2) then
 
          do icol = 1,ncol
-
-            wtautp = 0.
-            wtauhp = 0.
-            wtaump = 0.
-            wtaulp = 0.
 
             do iw = 1,ngptsw
                jb = ngb(iw)
@@ -584,60 +580,33 @@ contains
                ! low pressure layer
                staulp = sum(ptaormc(1:cloudLM,iw,icol),dim=1)
                if (staulp > 0.) then
-                  ztaulp(icol) = ztaulp(icol) + wgt * staulp
-                  wtaulp       = wtaulp       + wgt
+                  zcotnlp(icol) = zcotnlp(icol) + wgt * staulp
+                  zcotdlp(icol) = zcotdlp(icol) + wgt
                end if
 
                ! mid pressure layer
                staump = sum(ptaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
                if (staump > 0.) then
-                  ztaump(icol) = ztaump(icol) + wgt * staump
-                  wtaump       = wtaump       + wgt
+                  zcotnmp(icol) = zcotnmp(icol) + wgt * staump
+                  zcotdmp(icol) = zcotdmp(icol) + wgt
                end if
 
                ! high pressure layer
                stauhp = sum(ptaormc(cloudMH+1:nlay,iw,icol),dim=1)
                if (stauhp > 0.) then
-                  ztauhp(icol) = ztauhp(icol) + wgt * stauhp
-                  wtauhp       = wtauhp       + wgt
+                  zcotnhp(icol) = zcotnhp(icol) + wgt * stauhp
+                  zcotdhp(icol) = zcotdhp(icol) + wgt
                end if
 
                ! whole subcolumn
                stautp = staulp + staump + stauhp
                if (stautp > 0.) then
-                  ztautp(icol) = ztautp(icol) + wgt * stautp
-                  wtautp       = wtautp       + wgt
+                  zcotntp(icol) = zcotntp(icol) + wgt * stautp
+                  zcotdtp(icol) = zcotdtp(icol) + wgt
                end if
 
             end do ! iw
-
-            ! normalize
-            if (wtautp > 0.) then
-               ztautp(icol) = ztautp(icol) / wtautp
-            else
-               ztautp(icol) = 0.
-            end if
-
-            if (wtauhp > 0.) then
-               ztauhp(icol) = ztauhp(icol) / wtauhp
-            else
-               ztauhp(icol) = 0.
-            end if
-
-            if (wtaump > 0.) then
-               ztaump(icol) = ztaump(icol) / wtaump
-            else
-               ztaump(icol) = 0.
-            end if
-
-            if (wtaulp > 0.) then
-               ztaulp(icol) = ztaulp(icol) / wtaulp
-            else
-               ztaulp(icol) = 0.
-            end if
-
          end do  ! icol
-
       end if  ! cc==2
 
       _RETURN(_SUCCESS)
