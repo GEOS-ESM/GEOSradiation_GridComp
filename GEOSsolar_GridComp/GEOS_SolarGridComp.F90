@@ -2271,6 +2271,7 @@ contains
       real(wp), dimension(:,:),     allocatable         :: toa_flux
 
       ! input arrays: dimensions (ncol,nlay[+1]) [Pa,K]
+      real(wp), dimension(:,:),     allocatable         :: dummy_wp
       real(wp), dimension(:,:),     allocatable         :: p_lay, t_lay, dp_wp
       real(wp), dimension(:,:),     allocatable         :: p_lev
 
@@ -2293,12 +2294,19 @@ contains
       type(ty_cloud_optics)                             :: cloud_optics
       type(ty_fluxes_byband)                            :: fluxes_clrsky, fluxes_allsky
 
+      ! PMN: my earlier RRTMGP implementations used cloud_props for liq and ice combined,
+      ! but now, to allow separate delta-scaling for the two phases, we keep separate liq and
+      ! ice properties, and combine them later. There may be some speedup possible here, but 
+      ! to allow for future more independent phases (e.g., separate condensate inhomogeneity
+      ! for the phases), we keep the phase optical properties separate as long as possible.
+
       ! The band-space (ncol,nlay,nbnd) aerosol and in-cloud optical properties
       ! Polymorphic with dynamic type (#streams) defined later
-      class(ty_optical_props_arry), allocatable :: cloud_props_bnd, aer_props
+      class(ty_optical_props_arry), allocatable :: aer_props
+      class(ty_optical_props_arry), allocatable :: cloud_props_bnd_liq, cloud_props_bnd_ice
 
       ! The g-point cloud optical properties used for mcICA
-      class(ty_optical_props_arry), allocatable :: cloud_props_gpt
+      class(ty_optical_props_arry), allocatable :: cloud_props_gpt_liq, cloud_props_gpt_ice
 
       ! The g-point optical properties used in RT calculations
       ! Polymorphic with dynamic type (#streams) defined later
@@ -2346,6 +2354,10 @@ contains
       ! binomial probability of maximum overlap (cf. random overlap)
       ! for cloud presence and condensate (ncols_block,nlay-1)
       real(wp), dimension(:,:), allocatable :: alpha, rcorr
+      
+      ! forward scattering fraction for ice crystals (ncols_block,nlay,ngpt)
+      ! (the defdault gliq**2 behavior is used for liquid)
+      real(wp), dimension(:,:,:), allocatable :: forwice
       
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
@@ -3164,6 +3176,9 @@ contains
       allocate (band_lims_gpt(2,nbnd),__STAT__)
       band_lims_gpt = k_dist%get_band_lims_gpoint()
 
+      ! dummy array (see later)
+      allocate(dummy_wp(ncol,LM),source=0._wp, __STAT__)
+
       ! allocate input arrays
       allocate(tsi(ncol), mu0(ncol), __STAT__)
       allocate(sfc_alb_dir(nbnd,ncol), sfc_alb_dif(nbnd,ncol), __STAT__)
@@ -3336,19 +3351,28 @@ contains
 
       ! cloud optics file is currently two-stream
       ! increment() will handle appropriate stream conversions
-      allocate(ty_optical_props_2str::cloud_props_bnd,__STAT__)
+      allocate(ty_optical_props_2str::cloud_props_bnd_liq,__STAT__)
+      allocate(ty_optical_props_2str::cloud_props_bnd_ice,__STAT__)
       
       ! band-only initialization for pre-mcICA cloud optical properties
-      TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
+      TEST_(cloud_props_bnd_liq%init(k_dist%get_band_lims_wavenumber()))
+      TEST_(cloud_props_bnd_ice%init(k_dist%get_band_lims_wavenumber()))
             
       ! g-point version for McICA sampled cloud optical properties
-      select type (cloud_props_bnd)
+      select type (cloud_props_bnd_liq)
         class is (ty_optical_props_2str)
-          allocate(ty_optical_props_2str::cloud_props_gpt,__STAT__)
+          allocate(ty_optical_props_2str::cloud_props_gpt_liq,__STAT__)
         class default
-          TEST_('cloud optical properties hardwired 2-stream for now')
+          TEST_('cloud optical properties (liq) hardwired 2-stream for now')
       end select
-      TEST_(cloud_props_gpt%init(k_dist))
+      select type (cloud_props_bnd_ice)
+        class is (ty_optical_props_2str)
+          allocate(ty_optical_props_2str::cloud_props_gpt_ice,__STAT__)
+        class default
+          TEST_('cloud optical properties (ice) hardwired 2-stream for now')
+      end select
+      TEST_(cloud_props_gpt_liq%init(k_dist))
+      TEST_(cloud_props_gpt_ice%init(k_dist))
 
       ! read desired cloud overlap type
       call MAPL_GetResource( &
@@ -3476,6 +3500,7 @@ contains
 
         allocate(toa_flux(ncols_block,ngpt),__STAT__)
         allocate(cld_mask(ncols_block,LM,ngpt),__STAT__)
+        allocate(forwice(ncols_block,LM,ngpt),__STAT__)
         if (gen_mro) then
           allocate(alpha(ncols_block,LM-1),__STAT__)
           if (cond_inhomo) then
@@ -3487,13 +3512,21 @@ contains
           allocate(ClearCounts(4,ncols_block),__STAT__)
 
         ! in-cloud cloud optical props
-        select type (cloud_props_bnd)
+        select type (cloud_props_bnd_liq)
           class is (ty_optical_props_2str)
-            TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
+            TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
         end select
-        select type (cloud_props_gpt)
+        select type (cloud_props_bnd_ice)
           class is (ty_optical_props_2str)
-            TEST_(cloud_props_gpt%alloc_2str(ncols_block,LM))
+            TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
+        end select
+        select type (cloud_props_gpt_liq)
+          class is (ty_optical_props_2str)
+            TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
+        end select
+        select type (cloud_props_gpt_ice)
+          class is (ty_optical_props_2str)
+            TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
         end select
 
         ! aerosol optical props
@@ -3534,6 +3567,7 @@ contains
             ! one or more full blocks already processed
             deallocate(toa_flux,      __STAT__)
             deallocate(cld_mask,      __STAT__)
+            deallocate(forwice,       __STAT__)
             if (gen_mro) then
               deallocate(alpha,       __STAT__)
               if (cond_inhomo) then
@@ -3546,6 +3580,7 @@ contains
 
           allocate(toa_flux(ncols_block,ngpt),    __STAT__)
           allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
+          allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
           if (gen_mro) then
             allocate(alpha(ncols_block,LM-1),     __STAT__)
             if (cond_inhomo) then
@@ -3554,16 +3589,24 @@ contains
             endif
           endif
           if (include_aerosols) &
-            allocate(ClearCounts(4,ncols_block),__STAT__)
+            allocate(ClearCounts(4,ncols_block),  __STAT__)
 
           ! ty_optical_props routines have an internal deallocation
-          select type (cloud_props_bnd)
+          select type (cloud_props_bnd_liq)
             class is (ty_optical_props_2str)
-              TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
+              TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
           end select
-          select type (cloud_props_gpt)
+          select type (cloud_props_bnd_ice)
             class is (ty_optical_props_2str)
-              TEST_(cloud_props_gpt%alloc_2str(ncols_block,LM))
+              TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
+          end select
+          select type (cloud_props_gpt_liq)
+            class is (ty_optical_props_2str)
+              TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
+          end select
+          select type (cloud_props_gpt_ice)
+            class is (ty_optical_props_2str)
+              TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
           end select
           if (need_aer_optical_props) then
             select type (aer_props)
@@ -3624,16 +3667,26 @@ contains
 
         ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
         ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
+        ! Do phases separately to allow for different forward scattering, etc., per earlier note.
+        ! liquid ...
         error_msg = cloud_optics%cloud_optics( &
           real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+          dummy_wp(colS:colE,:), & 
           min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
             cloud_optics%get_min_radius_liq()), &
             cloud_optics%get_max_radius_liq()), &
+          dummy_wp(colS:colE,:), &
+          cloud_props_bnd_liq)
+        TEST_(error_msg)
+        ! ice ...
+        error_msg = cloud_optics%cloud_optics( &
+          dummy_wp(colS:colE,:), &
+          real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+          dummy_wp(colS:colE,:), &
           min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
             cloud_optics%get_min_radius_ice()), &
             cloud_optics%get_max_radius_ice()), &
-          cloud_props_bnd)
+          cloud_props_bnd_ice)
         TEST_(error_msg)
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
@@ -3745,7 +3798,8 @@ contains
         end select
 
         ! draw McICA optical property samples (band->gpt)
-        TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
+        TEST_(draw_samples(cld_mask, cloud_props_bnd_liq, cloud_props_gpt_liq))
+        TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
 
         ! Scaling to sub-gridscale water paths:
         ! since tau for each phase is linear in the phase's water path
@@ -3753,7 +3807,8 @@ contains
         ! total g-point optical thickness tau will scale with zcw.
         if (gen_mro) then
           if (cond_inhomo) &
-            where (cld_mask) cloud_props_gpt%tau = cloud_props_gpt%tau * zcw
+            where (cld_mask) cloud_props_gpt_liq%tau = cloud_props_gpt_liq%tau * zcw
+            where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
         end if
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
@@ -3825,21 +3880,24 @@ contains
                   wgt = wgt * toa_flux(isub,igpt)
 
                   ! low pressure layer
-                  staulp = sum(cloud_props_gpt%tau(isub,LCLDLM:LM,igpt))
+                  staulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
                   if (staulp > 0.) then
                     COTNLP(icol) = COTNLP(icol) + wgt * staulp
                     COTDLP(icol) = COTDLP(icol) + wgt
                   end if
 
                   ! mid pressure layer
-                  staump = sum(cloud_props_gpt%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  staump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   if (staump > 0.) then
                     COTNMP(icol) = COTNMP(icol) + wgt * staump
                     COTDMP(icol) = COTDMP(icol) + wgt
                   end if
 
                   ! high pressure layer
-                  stauhp = sum(cloud_props_gpt%tau(isub,1:LCLDMH-1,igpt))
+                  stauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
                   if (stauhp > 0.) then
                     COTNHP(icol) = COTNHP(icol) + wgt * stauhp
                     COTDHP(icol) = COTDHP(icol) + wgt
@@ -3882,9 +3940,16 @@ contains
         end if  ! include_aerosols
         call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
-        ! perform delta-scaling of cloud optical properties (to account for forward scattering)
+        ! perform delta-scaling of cloud optical properties (to account for forward scattering);
+        ! we follow RRTMG (liq_flag=1: "default" forwliq = gliq**2; ice_flag=3: explicit forwice)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
-        TEST_(cloud_props_gpt%delta_scale())
+! forwice(ncols_block,LM,ngpt)
+        select type(cloud_props_gpt_ice)
+        type is (ty_optical_props_2str)
+          forwice = cloud_props_gpt_ice%g ** 2 ! needs converting to RRTMG method
+        end select
+        TEST_(cloud_props_gpt_liq%delta_scale()) ! default: forwliq = gliq**2
+        TEST_(cloud_props_gpt_ice%delta_scale(forwice))
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
@@ -3908,7 +3973,9 @@ contains
         TEST_(error_msg)
 
         ! add in cloud optical properties
-        TEST_(cloud_props_gpt%increment(optical_props))
+        ! add ice first since its optical depths are usually smaller
+        TEST_(cloud_props_gpt_ice%increment(optical_props))
+        TEST_(cloud_props_gpt_liq%increment(optical_props))
 
         ! all-sky radiative transfer
         fluxes_allsky%flux_up         => flux_up_allsky(colS:colE,:)
@@ -3999,11 +4066,11 @@ contains
       ! clean up
       deallocate(band_lims_gpt,__STAT__)
       deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,toa_flux,__STAT__)
-      deallocate(p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
+      deallocate(dummy_wp,p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
       deallocate(flux_up_clrsky,flux_net_clrsky,__STAT__)
       deallocate(flux_up_allsky,flux_net_allsky,__STAT__)
       deallocate(bnd_flux_dn_allsky,bnd_flux_net_allsky,bnd_flux_dir_allsky,__STAT__)
-      deallocate(seeds,urand,cld_mask,__STAT__)
+      deallocate(seeds,urand,cld_mask,forwice,__STAT__)
       if (gen_mro) then
         deallocate(adl,alpha,urand_aux,__STAT__)
         if (cond_inhomo) then
@@ -4012,8 +4079,10 @@ contains
       end if
       if (include_aerosols) deallocate(ClearCounts,__STAT__)
       call cloud_optics%finalize()
-      call cloud_props_gpt%finalize()
-      call cloud_props_bnd%finalize()
+      call cloud_props_gpt_liq%finalize()
+      call cloud_props_gpt_ice%finalize()
+      call cloud_props_bnd_liq%finalize()
+      call cloud_props_bnd_ice%finalize()
       if (need_aer_optical_props) call aer_props%finalize()
       call optical_props%finalize()
 
