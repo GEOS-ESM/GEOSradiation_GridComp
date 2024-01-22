@@ -4125,32 +4125,40 @@ contains
         type is (ty_optical_props_2str)
           radice_lwr = cloud_optics%get_min_radius_ice()
           radice_upr = cloud_optics%get_max_radius_ice()
-!efficient order of loops ???
-!maybe depending on CL as well to avoid radice completely
           do isub = 1,ncols_block
             icol = colS + isub - 1
             do ilay = 1,LM
-              do ib = 1,nbnd
-                do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
-                  if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
-                    ! first get radice consistent with RRTMGP ice cloud optics
-                    radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
-                    ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
-                    radice = min(max(radice,5._wp),140._wp)
-                    ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
-                    ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
-                    radfac = (radice - 2._wp) / 3._wp
-                    radidx = min(max(int(radfac),1),45)
-                    rfint = radfac - real(radidx,kind=wp)
-                    fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
-                    forwice(isub,ilay,igpt) = min( &
-                       fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
-                       cloud_props_gpt_ice%g(isub,ilay,igpt))
-                  else
-                    forwice(isub,ilay,igpt) = 0.
-                  endif
-                enddo  ! g-points
-              enddo  ! bands
+              ! only if at least potentially cloudy ...
+              if (CL(icol,ilay) > 0.)) then
+
+                ! prepare for radice interpolation ...
+                ! first get radice consistent with RRTMGP ice cloud optics
+                radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
+                ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
+                radice = min(max(radice,5._wp),140._wp)
+                ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
+                ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
+                radfac = (radice - 2._wp) / 3._wp
+                radidx = min(max(int(radfac),1),45)
+                rfint = radfac - real(radidx,kind=wp)
+
+                do ib = 1,nbnd
+                  ! interpolate fdelta in radice for band ib
+                  fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
+
+                  ! forwice calc for each g-point
+                  do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
+                    if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
+                      forwice(isub,ilay,igpt) = min( &
+                         fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
+                         cloud_props_gpt_ice%g(isub,ilay,igpt))
+                    else
+                      forwice(isub,ilay,igpt) = 0.
+                    endif
+                  enddo  ! g-points
+                enddo  ! bands
+
+              endif  ! potentially cloudy
             enddo  ! layers
           enddo  ! columns
         end select
