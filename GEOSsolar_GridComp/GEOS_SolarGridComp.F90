@@ -4121,6 +4121,7 @@ contains
         TEST_(cloud_props_gpt_liq%delta_scale())
 
         ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
+        forwice = 0.  ! default
         select type(cloud_props_gpt_ice)
         type is (ty_optical_props_2str)
           radice_lwr = cloud_optics%get_min_radius_ice()
@@ -4152,8 +4153,6 @@ contains
                       forwice(isub,ilay,igpt) = min( &
                          fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
                          cloud_props_gpt_ice%g(isub,ilay,igpt))
-                    else
-                      forwice(isub,ilay,igpt) = 0.
                     endif
                   enddo  ! g-points
                 enddo  ! bands
