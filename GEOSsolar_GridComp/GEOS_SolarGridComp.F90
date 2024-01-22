@@ -4129,7 +4129,7 @@ contains
             icol = colS + isub - 1
             do ilay = 1,LM
               ! only if at least potentially cloudy ...
-              if (CL(icol,ilay) > 0.)) then
+              if (CL(icol,ilay) > 0.) then
 
                 ! prepare for radice interpolation ...
                 ! first get radice consistent with RRTMGP ice cloud optics
