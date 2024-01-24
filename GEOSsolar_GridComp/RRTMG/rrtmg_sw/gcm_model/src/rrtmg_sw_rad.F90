@@ -78,8 +78,10 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-      cotdtp, cotdhp, cotdmp, cotdlp, &
+      cotdtp, cotdhp, cotdmp, cotdlp, &  ! non-delta-scaled
       cotntp, cotnhp, cotnmp, cotnlp, &
+      cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+      cdsntp, cdsnhp, cdsnmp, cdsnlp, &
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -262,6 +264,8 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (ncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
                                              cotntp, cotnhp, cotnmp, cotnlp
+      real, intent(out), dimension (ncol) :: cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+                                             cdsntp, cdsnhp, cdsnmp, cdsnlp
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -319,6 +323,8 @@ contains
          nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
          cotdtp, cotdhp, cotdmp, cotdlp, &
          cotntp, cotnhp, cotnmp, cotnlp, &
+         cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+         cdsntp, cdsnhp, cdsnmp, cdsnlp, &
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
@@ -342,6 +348,8 @@ contains
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
       cotdtp, cotdhp, cotdmp, cotdlp, &
       cotntp, cotnhp, cotnmp, cotnlp, &
+      cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+      cdsntp, cdsnhp, cdsnmp, cdsnlp, &
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -449,6 +457,8 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension (gncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
                                               cotntp, cotnhp, cotnmp, cotnlp
+      real, intent(out), dimension (gncol) :: cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+                                              cdsntp, cdsnhp, cdsnmp, cdsnlp
 
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
@@ -568,6 +578,8 @@ contains
       ! in-cloud PAR optical thicknesses
       real, dimension (pncol) :: zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
                                  zcotntp, zcotnhp, zcotnmp, zcotnlp
+      real, dimension (pncol) :: zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
+                                 zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
       
       ! Solar variability multipliers
       ! -----------------------------
@@ -1147,6 +1159,8 @@ contains
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
                zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
                zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+               zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
+               zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
                do_drfband, zdrband, zdfband, &
                __RC__)
 
@@ -1178,6 +1192,10 @@ contains
                   cotdhp(gicol) = 0.; cotnhp(gicol) = 0.
                   cotdmp(gicol) = 0.; cotnmp(gicol) = 0.
                   cotdlp(gicol) = 0.; cotnlp(gicol) = 0.
+                  cdsdtp(gicol) = 0.; cdsntp(gicol) = 0.
+                  cdsdhp(gicol) = 0.; cdsnhp(gicol) = 0.
+                  cdsdmp(gicol) = 0.; cdsnmp(gicol) = 0.
+                  cdsdlp(gicol) = 0.; cdsnlp(gicol) = 0.
 
                enddo
 
@@ -1224,14 +1242,14 @@ contains
                      swuflx (gicol,ilev) = zbbfu(ilev,icol) 
                      swdflx (gicol,ilev) = zbbfd(ilev,icol) 
                   enddo
-                  cotdtp(gicol) = zcotdtp(icol)
-                  cotdhp(gicol) = zcotdhp(icol)
-                  cotdmp(gicol) = zcotdmp(icol)
-                  cotdlp(gicol) = zcotdlp(icol)
-                  cotntp(gicol) = zcotntp(icol)
-                  cotnhp(gicol) = zcotnhp(icol)
-                  cotnmp(gicol) = zcotnmp(icol)
-                  cotnlp(gicol) = zcotnlp(icol)
+                  cotdtp(gicol) = zcotdtp(icol); cotntp(gicol) = zcotntp(icol)
+                  cotdhp(gicol) = zcotdhp(icol); cotnhp(gicol) = zcotnhp(icol)
+                  cotdmp(gicol) = zcotdmp(icol); cotnmp(gicol) = zcotnmp(icol)
+                  cotdlp(gicol) = zcotdlp(icol); cotnlp(gicol) = zcotnlp(icol)
+                  cdsdtp(gicol) = zcdsdtp(icol); cdsntp(gicol) = zcdsntp(icol)
+                  cdsdhp(gicol) = zcdsdhp(icol); cdsnhp(gicol) = zcdsnhp(icol)
+                  cdsdmp(gicol) = zcdsdmp(icol); cdsnmp(gicol) = zcdsnmp(icol)
+                  cdsdlp(gicol) = zcdsdlp(icol); cdsnlp(gicol) = zcdsnlp(icol)
                enddo
 
                do icol = 1,ncol

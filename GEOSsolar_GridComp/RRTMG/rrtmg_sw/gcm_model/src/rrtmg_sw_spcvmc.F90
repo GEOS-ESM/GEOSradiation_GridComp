@@ -48,6 +48,8 @@ contains
       znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
       zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
       zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+      zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
+      zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
       do_drfband, zdrband, zdfband, &
       RC)
    ! ---------------------------------------------------------------------------
@@ -179,6 +181,9 @@ contains
       real, intent(out), dimension (pncol) :: &
          zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
          zcotntp, zcotnhp, zcotnmp, zcotnlp
+      real, intent(out), dimension (pncol) :: &
+         zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
+         zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
 
       ! Surface downwelling direct and diffuse fluxes (W/m2)
       !    in each band (all-sky): Only filled if (do_drfband).
@@ -193,6 +198,7 @@ contains
       integer :: iw, jb, ibm
 
       real :: zf, zwf, zincflx, wgt
+      real :: staotp, staohp, staomp, staolp
       real :: stautp, stauhp, staump, staulp
 
       real :: zgco   (nlay,ngptsw,pncol)
@@ -546,6 +552,10 @@ contains
       zcotdhp = 0.; zcotnhp = 0.
       zcotdmp = 0.; zcotnmp = 0.
       zcotdlp = 0.; zcotnlp = 0.
+      zcdsdtp = 0.; zcdsntp = 0.
+      zcdsdhp = 0.; zcdsnhp = 0.
+      zcdsdmp = 0.; zcdsnmp = 0.
+      zcdsdlp = 0.; zcdsnlp = 0.
 
       ! can only be non-zero for potentially cloudy columns
       if (cc == 2) then
@@ -578,31 +588,51 @@ contains
                wgt = wgt * zincflx
 
                ! low pressure layer
-               staulp = sum(ptaormc(1:cloudLM,iw,icol),dim=1)
-               if (staulp > 0.) then
-                  zcotnlp(icol) = zcotnlp(icol) + wgt * staulp
+               staolp = sum(ptaormc(1:cloudLM,iw,icol),dim=1)
+               if (staolp > 0.) then
+                  zcotnlp(icol) = zcotnlp(icol) + wgt * staolp
                   zcotdlp(icol) = zcotdlp(icol) + wgt
+               end if
+               staulp = sum(ptaucmc(1:cloudLM,iw,icol),dim=1)
+               if (staulp > 0.) then
+                  zcdsnlp(icol) = zcdsnlp(icol) + wgt * staulp
+                  zcdsdlp(icol) = zcdsdlp(icol) + wgt
                end if
 
                ! mid pressure layer
-               staump = sum(ptaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
-               if (staump > 0.) then
-                  zcotnmp(icol) = zcotnmp(icol) + wgt * staump
+               staomp = sum(ptaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (staomp > 0.) then
+                  zcotnmp(icol) = zcotnmp(icol) + wgt * staomp
                   zcotdmp(icol) = zcotdmp(icol) + wgt
+               end if
+               staump = sum(ptaucmc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (staump > 0.) then
+                  zcdsnmp(icol) = zcdsnmp(icol) + wgt * staump
+                  zcdsdmp(icol) = zcdsdmp(icol) + wgt
                end if
 
                ! high pressure layer
-               stauhp = sum(ptaormc(cloudMH+1:nlay,iw,icol),dim=1)
-               if (stauhp > 0.) then
-                  zcotnhp(icol) = zcotnhp(icol) + wgt * stauhp
+               staohp = sum(ptaormc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (staohp > 0.) then
+                  zcotnhp(icol) = zcotnhp(icol) + wgt * staohp
                   zcotdhp(icol) = zcotdhp(icol) + wgt
+               end if
+               stauhp = sum(ptaucmc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (stauhp > 0.) then
+                  zcdsnhp(icol) = zcdsnhp(icol) + wgt * stauhp
+                  zcdsdhp(icol) = zcdsdhp(icol) + wgt
                end if
 
                ! whole subcolumn
+               staotp = staolp + staomp + staohp
+               if (staotp > 0.) then
+                  zcotntp(icol) = zcotntp(icol) + wgt * staotp
+                  zcotdtp(icol) = zcotdtp(icol) + wgt
+               end if
                stautp = staulp + staump + stauhp
                if (stautp > 0.) then
-                  zcotntp(icol) = zcotntp(icol) + wgt * stautp
-                  zcotdtp(icol) = zcotdtp(icol) + wgt
+                  zcdsntp(icol) = zcdsntp(icol) + wgt * stautp
+                  zcdsdtp(icol) = zcdsdtp(icol) + wgt
                end if
 
             end do ! iw

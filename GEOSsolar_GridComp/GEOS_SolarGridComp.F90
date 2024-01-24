@@ -4758,6 +4758,8 @@ contains
          NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
          COTDTP, COTDHP, COTDMP, COTDLP, &
          COTNTP, COTNHP, COTNMP, COTNLP, &
+         CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+         CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
