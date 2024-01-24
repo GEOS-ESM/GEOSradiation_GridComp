@@ -1037,6 +1037,72 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
+    ! COTDS[DEN|NUM]xxPAR are like COT[DEN|NUM]xxPAR but delta-scaled
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSDENLOPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSDENMDPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSDENHIPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSDENTTPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSNUMLOPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSNUMMDPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSNUMHIPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'COTDSNUMTTPAR',                                                               &
+       LONG_NAME  = 'in_cloud_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2391,7 +2457,9 @@ contains
                                         TAUTP, TAUHP, TAUMP, TAULP, &
                                         COTTP, COTHP, COTMP, COTLP, &
                                         COTDTP, COTDHP, COTDMP, COTDLP, &
-                                        COTNTP, COTNHP, COTNMP, COTNLP
+                                        COTNTP, COTNHP, COTNMP, COTNLP, &
+                                        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+                                        CDSNTP, CDSNHP, CDSNMP, CDSNLP
 
       ! variables for RRTMG code
       ! ------------------------
@@ -3144,6 +3212,22 @@ contains
                COTNMP    => ptr2(1:Num2do,1)
             case('COTNUMLOPAR')
                COTNLP    => ptr2(1:Num2do,1)
+            case('COTDSDENTTPAR')
+               CDSDTP    => ptr2(1:Num2do,1)
+            case('COTDSDENHIPAR')
+               CDSDHP    => ptr2(1:Num2do,1)
+            case('COTDSDENMDPAR')
+               CDSDMP    => ptr2(1:Num2do,1)
+            case('COTDSDENLOPAR')
+               CDSDLP    => ptr2(1:Num2do,1)
+            case('COTDSNUMTTPAR')
+               CDSNTP    => ptr2(1:Num2do,1)
+            case('COTDSNUMHIPAR')
+               CDSNHP    => ptr2(1:Num2do,1)
+            case('COTDSNUMMDPAR')
+               CDSNMP    => ptr2(1:Num2do,1)
+            case('COTDSNUMLOPAR')
+               CDSNLP    => ptr2(1:Num2do,1)
          end select
 
       enddo INT_VARS_2
@@ -4164,6 +4248,86 @@ contains
         TEST_(cloud_props_gpt_ice%delta_scale(forwice))
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+
+        ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
+        ! ** Calculated from subcolumn ensemble, so stochastic **
+        ! -------------------------------------------------------
+        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+        if (include_aerosols) then
+
+          ! in-cloud optical thicknesses in PAR super-band
+          ! (weighted across and within bands by TOA incident flux)
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+
+            ! zero denom- and numerator accumulators
+            CDSDTP(icol) = 0.; CDSNTP(icol) = 0.
+            CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
+            CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
+            CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
+
+            ! can only be non-zero for potentially cloudy columns
+            if (any(CL(icol,:) > 0.)) then
+
+              ! accumulate over gpts/subcolumns
+              do ib = 1, nbnd
+                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+
+                  ! band weights for photosynthetically active radiation (PAR)
+                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                  if (ib >= 11 .and. ib <= 12) then
+                    wgt = 1.0
+                  else if (ib == 10) then
+                    wgt = 0.5
+                  else
+                    ! no contribution to PAR
+                    cycle
+                  end if
+
+                  ! TOA flux weighting
+                  ! (note: neither the adjustment of toa_flux to our tsi
+                  ! or for zenith angle are needed yet since this weighting
+                  ! is over gpoint and is normalized for EACH icol)
+                  wgt = wgt * toa_flux(isub,igpt)
+
+                  ! low pressure layer
+                  staulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                  if (staulp > 0.) then
+                    CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
+                    CDSDLP(icol) = CDSDLP(icol) + wgt
+                  end if
+
+                  ! mid pressure layer
+                  staump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  if (staump > 0.) then
+                    CDSNMP(icol) = CDSNMP(icol) + wgt * staump
+                    CDSDMP(icol) = CDSDMP(icol) + wgt
+                  end if
+
+                  ! high pressure layer
+                  stauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt)) + &
+                           sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                  if (stauhp > 0.) then
+                    CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
+                    CDSDHP(icol) = CDSDHP(icol) + wgt
+                  end if
+
+                  ! whole subcolumn
+                  stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
+                    CDSDTP(icol) = CDSDTP(icol) + wgt
+                  end if
+
+                end do ! igpt
+              end do ! ib
+
+            end if  ! potentially cloudy column
+          end do  ! isub
+        end if  ! include_aerosols
+        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
 
