@@ -2551,7 +2551,7 @@ contains
 
       ! RRTMGP locals
       logical :: top_at_1, partial_block, need_aer_optical_props
-      logical :: gen_mro, cond_inhomo
+      logical :: gen_mro, cond_inhomo, rrtmgp_delta_scale
       integer :: nbnd, ngpt, nmom, icergh
       integer :: ib, b, nBlocks, colS, colE, ncols_block, &
                  partial_blockSize, icol, isub, ilay, igpt
@@ -3607,6 +3607,12 @@ contains
         DEFAULT=2, __RC__)
       TEST_(cloud_optics%set_ice_roughness(icergh))
 
+      ! delta-scaling if of course applied by default
+      ! ... you can turn it off for debugging purposes
+      call MAPL_GetResource ( &
+        MAPL, rrtmgp_delta_scale, LABEL='RRTMGP_DELTA_SCALE:', &
+        DEFAULT=.TRUE., __RC__)
+
       ! cloud optics file is currently two-stream
       ! increment() will handle appropriate stream conversions
       allocate(ty_optical_props_2str::cloud_props_bnd_liq,__STAT__)
@@ -4200,53 +4206,53 @@ contains
 
         ! delta-scaling of cloud optical properties (accounts for forward scattering)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+        if (rrtmgp_delta_scale) then
+          ! default delta-scaling for liquid (i.e., forwliq = gliq**2)
+          TEST_(cloud_props_gpt_liq%delta_scale())
 
-        ! default delta-scaling for liquid (i.e., forwliq = gliq**2)
-        TEST_(cloud_props_gpt_liq%delta_scale())
+          ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
+          forwice = 0.  ! default
+          select type(cloud_props_gpt_ice)
+          type is (ty_optical_props_2str)
+            radice_lwr = cloud_optics%get_min_radius_ice()
+            radice_upr = cloud_optics%get_max_radius_ice()
+            do isub = 1,ncols_block
+              icol = colS + isub - 1
+              do ilay = 1,LM
+                ! only if at least potentially cloudy ...
+                if (CL(icol,ilay) > 0.) then
 
-        ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
-        forwice = 0.  ! default
-        select type(cloud_props_gpt_ice)
-        type is (ty_optical_props_2str)
-          radice_lwr = cloud_optics%get_min_radius_ice()
-          radice_upr = cloud_optics%get_max_radius_ice()
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-            do ilay = 1,LM
-              ! only if at least potentially cloudy ...
-              if (CL(icol,ilay) > 0.) then
+                  ! prepare for radice interpolation ...
+                  ! first get radice consistent with RRTMGP ice cloud optics
+                  radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
+                  ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
+                  radice = min(max(radice,5._wp),140._wp)
+                  ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
+                  ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
+                  radfac = (radice - 2._wp) / 3._wp
+                  radidx = min(max(int(radfac),1),45)
+                  rfint = radfac - real(radidx,kind=wp)
 
-                ! prepare for radice interpolation ...
-                ! first get radice consistent with RRTMGP ice cloud optics
-                radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
-                ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
-                radice = min(max(radice,5._wp),140._wp)
-                ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
-                ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
-                radfac = (radice - 2._wp) / 3._wp
-                radidx = min(max(int(radfac),1),45)
-                rfint = radfac - real(radidx,kind=wp)
+                  do ib = 1,nbnd
+                    ! interpolate fdelta in radice for band ib
+                    fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
 
-                do ib = 1,nbnd
-                  ! interpolate fdelta in radice for band ib
-                  fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
+                    ! forwice calc for each g-point
+                    do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
+                      if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
+                        forwice(isub,ilay,igpt) = min( &
+                           fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
+                           cloud_props_gpt_ice%g(isub,ilay,igpt))
+                      endif
+                    enddo  ! g-points
+                  enddo  ! bands
 
-                  ! forwice calc for each g-point
-                  do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
-                    if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
-                      forwice(isub,ilay,igpt) = min( &
-                         fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
-                         cloud_props_gpt_ice%g(isub,ilay,igpt))
-                    endif
-                  enddo  ! g-points
-                enddo  ! bands
-
-              endif  ! potentially cloudy
-            enddo  ! layers
-          enddo  ! columns
-        end select
-        TEST_(cloud_props_gpt_ice%delta_scale(forwice))
-
+                endif  ! potentially cloudy
+              enddo  ! layers
+            enddo  ! columns
+          end select
+          TEST_(cloud_props_gpt_ice%delta_scale(forwice))
+        endif
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
         ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
@@ -4518,12 +4524,8 @@ contains
 
       ! Set flags related to cloud properties (see RRTMG_SW)
       ! ----------------------------------------------------
-
-! Set flags related to cloud properties
-      call MAPL_GetResource(MAPL,ICEFLGSW,'RRTMG_ICEFLG:',DEFAULT=3,RC=STATUS)
-      VERIFY_(STATUS)
-      call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,RC=STATUS)
-      VERIFY_(STATUS)
+      call MAPL_GetResource(MAPL,ICEFLGSW,'RRTMG_ICEFLG:',DEFAULT=3,__RC__)
+      call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,__RC__)
 
       ! Normalize aerosol inputs
       ! ------------------------
