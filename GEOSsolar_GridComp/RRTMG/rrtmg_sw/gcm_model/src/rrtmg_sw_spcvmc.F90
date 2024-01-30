@@ -35,6 +35,7 @@ contains
       cc, pncol, ncol, nlay, &
       palbd, palbp, &
       pcldymc, ptaucmc, pasycmc, pomgcmc, ptaormc, &
+      pltaormc, pltaucmc, pitaormc, pitaucmc, &
       ptaua, pasya, pomga, prmu0, adjflux, &
       isolvar, svar_f, svar_s, svar_i, &
       svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -50,6 +51,14 @@ contains
       zcotntp, zcotnhp, zcotnmp, zcotnlp, &
       zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
       zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
+      zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+      zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
+      zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+      zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
+      zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+      zcotintp, zcotinhp, zcotinmp, zcotinlp, &
+      zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+      zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp, &
       do_drfband, zdrband, zdfband, &
       RC)
    ! ---------------------------------------------------------------------------
@@ -83,6 +92,7 @@ contains
    !           Aug 2007 
    ! Revision: Added ztau[lmht]p: PMNorris, GMAO, at some point
    ! Revision: Added zdrband, zdfband for OBIO support: PMNorris, GMAO, Nov 2022
+   ! Revision: separate phase tracking for taormc, taucmc: PMNorris, Jan 2024
    !
    ! ------------------------------------------------------------------
 
@@ -122,6 +132,11 @@ contains
       real,    intent(in) :: pomgcmc (nlay,ngptsw,pncol)  ! cloud single scattering albedo [mcica]
       real,    intent(in) :: ptaormc (nlay,ngptsw,pncol)  ! cloud optical depth, non-delta scaled [mcica]
    
+      real,    intent(in) :: pltaormc(nlay,ngptsw,pncol)  ! liq cloud optical depth, non-delta scaled [mcica]
+      real,    intent(in) :: pltaucmc(nlay,ngptsw,pncol)  ! liq cloud optical depth [mcica]
+      real,    intent(in) :: pitaormc(nlay,ngptsw,pncol)  ! ice cloud optical depth, non-delta scaled [mcica]
+      real,    intent(in) :: pitaucmc(nlay,ngptsw,pncol)  ! ice cloud optical depth [mcica]
+
       real, intent(in) :: ptaua (nlay,nbndsw,pncol)  ! aerosol optical depth
       real, intent(in) :: pasya (nlay,nbndsw,pncol)  ! aerosol asymmetry parameter
       real, intent(in) :: pomga (nlay,nbndsw,pncol)  ! aerosol single scattering albedo
@@ -184,6 +199,18 @@ contains
       real, intent(out), dimension (pncol) :: &
          zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
          zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
+      real, intent(out), dimension (pncol) :: &
+         zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+         zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp
+      real, intent(out), dimension (pncol) :: &
+         zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+         zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp
+      real, intent(out), dimension (pncol) :: &
+         zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+         zcotintp, zcotinhp, zcotinmp, zcotinlp
+      real, intent(out), dimension (pncol) :: &
+         zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+         zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
 
       ! Surface downwelling direct and diffuse fluxes (W/m2)
       !    in each band (all-sky): Only filled if (do_drfband).
@@ -200,6 +227,10 @@ contains
       real :: zf, zwf, zincflx, wgt
       real :: staotp, staohp, staomp, staolp
       real :: stautp, stauhp, staump, staulp
+      real :: sltaotp, sltaohp, sltaomp, sltaolp
+      real :: sltautp, sltauhp, sltaump, sltaulp
+      real :: sitaotp, sitaohp, sitaomp, sitaolp
+      real :: sitautp, sitauhp, sitaump, sitaulp
 
       real :: zgco   (nlay,ngptsw,pncol)
       real :: zomco  (nlay,ngptsw,pncol)  
@@ -556,6 +587,22 @@ contains
       zcdsdhp = 0.; zcdsnhp = 0.
       zcdsdmp = 0.; zcdsnmp = 0.
       zcdsdlp = 0.; zcdsnlp = 0.
+      zcotldtp = 0.; zcotlntp = 0.
+      zcotldhp = 0.; zcotlnhp = 0.
+      zcotldmp = 0.; zcotlnmp = 0.
+      zcotldlp = 0.; zcotlnlp = 0.
+      zcdsldtp = 0.; zcdslntp = 0.
+      zcdsldhp = 0.; zcdslnhp = 0.
+      zcdsldmp = 0.; zcdslnmp = 0.
+      zcdsldlp = 0.; zcdslnlp = 0.
+      zcotidtp = 0.; zcotintp = 0.
+      zcotidhp = 0.; zcotinhp = 0.
+      zcotidmp = 0.; zcotinmp = 0.
+      zcotidlp = 0.; zcotinlp = 0.
+      zcdsidtp = 0.; zcdsintp = 0.
+      zcdsidhp = 0.; zcdsinhp = 0.
+      zcdsidmp = 0.; zcdsinmp = 0.
+      zcdsidlp = 0.; zcdsinlp = 0.
 
       ! can only be non-zero for potentially cloudy columns
       if (cc == 2) then
@@ -598,6 +645,26 @@ contains
                   zcdsnlp(icol) = zcdsnlp(icol) + wgt * staulp
                   zcdsdlp(icol) = zcdsdlp(icol) + wgt
                end if
+               sltaolp = sum(pltaormc(1:cloudLM,iw,icol),dim=1)
+               if (sltaolp > 0.) then
+                  zcotlnlp(icol) = zcotlnlp(icol) + wgt * sltaolp
+                  zcotldlp(icol) = zcotldlp(icol) + wgt
+               end if
+               sltaulp = sum(pltaucmc(1:cloudLM,iw,icol),dim=1)
+               if (sltaulp > 0.) then
+                  zcdslnlp(icol) = zcdslnlp(icol) + wgt * sltaulp
+                  zcdsldlp(icol) = zcdsldlp(icol) + wgt
+               end if
+               sitaolp = sum(pitaormc(1:cloudLM,iw,icol),dim=1)
+               if (sitaolp > 0.) then
+                  zcotinlp(icol) = zcotinlp(icol) + wgt * sitaolp
+                  zcotidlp(icol) = zcotidlp(icol) + wgt
+               end if
+               sitaulp = sum(pitaucmc(1:cloudLM,iw,icol),dim=1)
+               if (sitaulp > 0.) then
+                  zcdsinlp(icol) = zcdsinlp(icol) + wgt * sitaulp
+                  zcdsidlp(icol) = zcdsidlp(icol) + wgt
+               end if
 
                ! mid pressure layer
                staomp = sum(ptaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
@@ -609,6 +676,26 @@ contains
                if (staump > 0.) then
                   zcdsnmp(icol) = zcdsnmp(icol) + wgt * staump
                   zcdsdmp(icol) = zcdsdmp(icol) + wgt
+               end if
+               sltaomp = sum(pltaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (sltaomp > 0.) then
+                  zcotlnmp(icol) = zcotlnmp(icol) + wgt * sltaomp
+                  zcotldmp(icol) = zcotldmp(icol) + wgt
+               end if
+               sltaump = sum(pltaucmc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (sltaump > 0.) then
+                  zcdslnmp(icol) = zcdslnmp(icol) + wgt * sltaump
+                  zcdsldmp(icol) = zcdsldmp(icol) + wgt
+               end if
+               sitaomp = sum(pitaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (sitaomp > 0.) then
+                  zcotinmp(icol) = zcotinmp(icol) + wgt * sitaomp
+                  zcotidmp(icol) = zcotidmp(icol) + wgt
+               end if
+               sitaump = sum(pitaucmc(cloudLM+1:cloudMH,iw,icol),dim=1)
+               if (sitaump > 0.) then
+                  zcdsinmp(icol) = zcdsinmp(icol) + wgt * sitaump
+                  zcdsidmp(icol) = zcdsidmp(icol) + wgt
                end if
 
                ! high pressure layer
@@ -622,6 +709,26 @@ contains
                   zcdsnhp(icol) = zcdsnhp(icol) + wgt * stauhp
                   zcdsdhp(icol) = zcdsdhp(icol) + wgt
                end if
+               sltaohp = sum(pltaormc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (sltaohp > 0.) then
+                  zcotlnhp(icol) = zcotlnhp(icol) + wgt * sltaohp
+                  zcotldhp(icol) = zcotldhp(icol) + wgt
+               end if
+               sltauhp = sum(pltaucmc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (sltauhp > 0.) then
+                  zcdslnhp(icol) = zcdslnhp(icol) + wgt * sltauhp
+                  zcdsldhp(icol) = zcdsldhp(icol) + wgt
+               end if
+               sitaohp = sum(pitaormc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (sitaohp > 0.) then
+                  zcotinhp(icol) = zcotinhp(icol) + wgt * sitaohp
+                  zcotidhp(icol) = zcotidhp(icol) + wgt
+               end if
+               sitauhp = sum(pitaucmc(cloudMH+1:nlay,iw,icol),dim=1)
+               if (sitauhp > 0.) then
+                  zcdsinhp(icol) = zcdsinhp(icol) + wgt * sitauhp
+                  zcdsidhp(icol) = zcdsidhp(icol) + wgt
+               end if
 
                ! whole subcolumn
                staotp = staolp + staomp + staohp
@@ -633,6 +740,26 @@ contains
                if (stautp > 0.) then
                   zcdsntp(icol) = zcdsntp(icol) + wgt * stautp
                   zcdsdtp(icol) = zcdsdtp(icol) + wgt
+               end if
+               sltaotp = sltaolp + sltaomp + sltaohp
+               if (sltaotp > 0.) then
+                  zcotlntp(icol) = zcotlntp(icol) + wgt * sltaotp
+                  zcotldtp(icol) = zcotldtp(icol) + wgt
+               end if
+               sltautp = sltaulp + sltaump + sltauhp
+               if (sltautp > 0.) then
+                  zcdslntp(icol) = zcdslntp(icol) + wgt * sltautp
+                  zcdsldtp(icol) = zcdsldtp(icol) + wgt
+               end if
+               sitaotp = sitaolp + sitaomp + sitaohp
+               if (sitaotp > 0.) then
+                  zcotintp(icol) = zcotintp(icol) + wgt * sitaotp
+                  zcotidtp(icol) = zcotidtp(icol) + wgt
+               end if
+               sitautp = sitaulp + sitaump + sitauhp
+               if (sitautp > 0.) then
+                  zcdsintp(icol) = zcdsintp(icol) + wgt * sitautp
+                  zcdsidtp(icol) = zcdsidtp(icol) + wgt
                end if
 
             end do ! iw

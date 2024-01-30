@@ -35,7 +35,8 @@ contains
    ! ----------------------------------------------------------------------
    subroutine cldprmc_sw(pncol, ncol, nlay, iceflag, liqflag, &
                          cldymc, ciwpmc, clwpmc, reicmc, relqmc, &
-                         taormc, taucmc, ssacmc, asmcmc)
+                         taormc, taucmc, ssacmc, asmcmc, &
+                         ltaormc, ltaucmc, itaormc, itaucmc)
    ! ----------------------------------------------------------------------
 
       ! Compute the cloud optical properties for each cloudy layer
@@ -71,6 +72,11 @@ contains
       real, intent(out) :: ssacmc (nlay,ngptsw,pncol)  ! single scat albedo (delta scaled)
       real, intent(out) :: asmcmc (nlay,ngptsw,pncol)  ! asymmetry param (delta scaled)
       real, intent(out) :: taormc (nlay,ngptsw,pncol)  ! cloud opt depth (non-delta scaled)
+
+      real, intent(out) :: ltaormc(nlay,ngptsw,pncol)  ! liq cloud opt depth (non-delta scaled)
+      real, intent(out) :: ltaucmc(nlay,ngptsw,pncol)  ! liq cloud opt depth (delta scaled)
+      real, intent(out) :: itaormc(nlay,ngptsw,pncol)  ! ice cloud opt depth (non-delta scaled)
+      real, intent(out) :: itaucmc(nlay,ngptsw,pncol)  ! ice cloud opt depth (delta scaled)
 
       ! ------- Local -------
 
@@ -290,7 +296,10 @@ contains
 
                   tauliqorig = clwpmc(lay,ig,icol) * extcoliq(lay,ig,icol)
                   tauiceorig = ciwpmc(lay,ig,icol) * extcoice(lay,ig,icol)
-                  taormc(lay,ig,icol) = tauliqorig + tauiceorig
+
+                  taormc (lay,ig,icol) = tauliqorig + tauiceorig
+                  ltaormc(lay,ig,icol) = tauliqorig
+                  itaormc(lay,ig,icol) = tauiceorig
 
                   ssaliq = ssacoliq(lay,ig,icol) * (1. - forwliq(lay,ig,icol)) &
                            / (1. - forwliq(lay,ig,icol) * ssacoliq(lay,ig,icol))
@@ -301,7 +310,10 @@ contains
 
                   scatliq = ssaliq * tauliq
                   scatice = ssaice * tauice
-                  taucmc(lay,ig,icol) = tauliq + tauice
+
+                  taucmc (lay,ig,icol) = tauliq + tauice
+                  ltaucmc(lay,ig,icol) = tauliq
+                  itaucmc(lay,ig,icol) = tauice
 
                   ! Ensure non-zero taucmc and scatice
 !? pmn because of normalization below?
@@ -338,10 +350,15 @@ contains
 
                else  ! not cldymc(lay,ig,icol)
 
-                  taormc(lay,ig,icol) = 0.
-                  taucmc(lay,ig,icol) = 0.
-                  ssacmc(lay,ig,icol) = 1.
-                  asmcmc(lay,ig,icol) = 0.
+                  taormc (lay,ig,icol) = 0.
+                  taucmc (lay,ig,icol) = 0.
+                  ssacmc (lay,ig,icol) = 1.
+                  asmcmc (lay,ig,icol) = 0.
+
+                  ltaormc(lay,ig,icol) = 0.
+                  ltaucmc(lay,ig,icol) = 0.
+                  itaormc(lay,ig,icol) = 0.
+                  itaucmc(lay,ig,icol) = 0.
 
                endif  ! cloud present
             enddo  ! layers
