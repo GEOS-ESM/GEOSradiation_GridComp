@@ -1,4 +1,4 @@
- "MAPL_Generic.h"
+#include "MAPL_Generic.h"
 #define LIN2_ARG1(VAR,I,J,FINT) (VAR(I,J) + FINT * (VAR(I+1,J)-VAR(I,J)))
 
 module GEOS_SolarGridCompMod
