@@ -4698,6 +4698,7 @@ contains
                   ! low pressure layer
                   sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
                   sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                  staulp = sltaulp + sitaulp
                   if (sltaulp > 0.) then
                     CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
                     CDSLDLP(icol) = CDSLDLP(icol) + wgt
@@ -4714,6 +4715,7 @@ contains
                   ! mid pressure layer
                   sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  staump = sltaump + sitaump
                   if (sltaump > 0.) then
                     CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
                     CDSLDMP(icol) = CDSLDMP(icol) + wgt
@@ -4730,6 +4732,7 @@ contains
                   ! high pressure layer
                   sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
                   sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                  stauhp = sltauhp + sitauhp
                   if (sltauhp > 0.) then
                     CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
                     CDSLDHP(icol) = CDSLDHP(icol) + wgt
