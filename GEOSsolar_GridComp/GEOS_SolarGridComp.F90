@@ -1313,40 +1313,6 @@ contains
 
 !EOS
 
-    ! Set the Profiling timers
-
-    call MAPL_TimerAdd(GC, name="PRELIMS"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="REFRESH"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="-AEROSOLS"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-SORAD"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--SORAD_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMG"                  , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_RUN"             , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_PART"           , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDSGEN"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_CLDPRMC"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_SETCOEF"        , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_TAUMOL"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_REFTRA"         , __RC__)
-    call MAPL_TimerAdd(GC, name="---RRTMG_VRTQDR"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_INIT"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMG_FLIP"            , __RC__)
-    call MAPL_TimerAdd(GC, name="-RRTMGP"                 , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_GAS"         , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_IO_CLOUDS"      , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_CLOUD_OPTICS"   , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_MCICA"          , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_GAS_OPTICS"     , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_RT"             , __RC__)
-    call MAPL_TimerAdd(GC, name="--RRTMGP_POST"           , __RC__)
-    call MAPL_TimerAdd(GC, name="-BALANCE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--CREATE"                , __RC__)
-    call MAPL_TimerAdd(GC, name="--DISTRIBUTE"            , __RC__)
-    call MAPL_TimerAdd(GC, name="--RETRIEVE"              , __RC__)
-    call MAPL_TimerAdd(GC, name="--DESTROY"               , __RC__)
-    call MAPL_TimerAdd(GC, name="-MISC"                   , __RC__)
-    call MAPL_TimerAdd(GC, name="UPDATE"                  , __RC__)
-
     ! Set Run method and use generic Initalize and Finalize methods
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
@@ -1433,7 +1399,7 @@ contains
 
     real, pointer, dimension(:,:,:) :: ptr3d
     real, pointer, dimension(:,:  ) :: ptr2d
-    
+
     type (ESMF_State)                     :: AERO
     character(len=ESMF_MAXSTR)            :: AS_FIELD_NAME
     integer                               :: AS_STATUS
@@ -1491,16 +1457,17 @@ contains
     character(len=ESMF_MAXSTR) :: DYCORE
     integer                    :: SOLAR_LOAD_BALANCE
     integer                    :: SolarBalanceHandle
+    integer                    :: MaxPasses
 
     character(len=ESMF_MAXPATHLEN) :: SolCycFileName
     logical                        :: USE_NRLSSI2
     logical                        :: PersistSolar
 
     logical :: do_no_aero_calc
-       
+
     ! list of strings facility
     integer :: i
-    type S_    
+    type S_
       character(len=:), allocatable :: str
     end type S_
     type(S_), allocatable :: list(:)
@@ -1550,6 +1517,10 @@ contains
     else
        LoadBalance = .TRUE.
     end if
+
+    ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
+    ! would have been used if not passed in
+    call MAPL_GetResource (MAPL, MaxPasses, 'SOLAR_LB_MAX_PASSES:', DEFAULT=100, __RC__)
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
@@ -1610,7 +1581,7 @@ contains
 
    ! Decide if should make OBIO exports
    !-----------------------------------
-   call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', & 
+   call MAPL_GetResource( MAPL, SOLAR_TO_OBIO, LABEL='SOLAR_TO_OBIO:', &
       DEFAULT=.FALSE., __RC__)
 
    ! Decide how to do solar forcing
@@ -1740,10 +1711,10 @@ contains
 
     ! Update the Sun position and weight the export variables
     ! -------------------------------------------------------
-    if (UPDATE_FIRST) then                             
-       call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)       
-       call UPDATE_EXPORT (IM,JM,LM,__RC__)            
-       call MAPL_TimerOff (MAPL,"UPDATE",__RC__)       
+    if (UPDATE_FIRST) then
+       call MAPL_TimerOn  (MAPL,"UPDATE",__RC__)
+       call UPDATE_EXPORT (IM,JM,LM,__RC__)
+       call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
 
     ! Periodically, refresh the internal state with a full solar calc
@@ -1821,11 +1792,13 @@ contains
                  value=(BANDS_SOLAR_OFFSET+band),__RC__)
 
               ! execute the aero provider's optics method
+              call MAPL_TimerOn(MAPL,"---AEROSOL_OPTICS")
               call ESMF_MethodExecute(AERO, &
                  label="run_aerosol_optics", &
                  userRC=AS_STATUS, RC=STATUS)
               VERIFY_(AS_STATUS)
               VERIFY_(STATUS)
+              call MAPL_TimerOff(MAPL,"---AEROSOL_OPTICS")
 
               ! EXT from AERO_PROVIDER
               call ESMF_AttributeGet(AERO, &
@@ -1864,12 +1837,12 @@ contains
 
        ! this line temporarily needed because of compiler bug
        allocate(list(1)); list(1) = S_('dummy')
-             
+
        ! are without-aerosol exports requested?
        do_no_aero_calc = .false.
        list = [S_('FSWNA'), S_('FSWUNA'), S_('FSWDNA'), &
                S_('FSCNA'), S_('FSCUNA'), S_('FSCDNA'), &
-               S_('FSWBANDNA')]           
+               S_('FSWBANDNA')]
        do i = 1, size(list)
          call MAPL_GetPointer( EXPORT, ptr3d, list(i)%str, __RC__)
          do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
@@ -1891,6 +1864,7 @@ contains
           call SORADCORE(IM,JM,LM,           &
                include_aerosols = .false.,   &
                CURRTIME = CURRENTTIME+INTDT, &
+               MaxPasses = MaxPasses,        &
                LoadBalance = LoadBalance,    &
                __RC__)
        else
@@ -1910,6 +1884,7 @@ contains
        call SORADCORE(IM,JM,LM,                    &
                       include_aerosols = .true.,   &
                       CURRTIME = CURRENTTIME+INTDT,&
+                      MaxPasses = MaxPasses,       &
                       LoadBalance = LoadBalance,   &
                       __RC__)
 
@@ -1939,7 +1914,7 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,LoadBalance,RC)
+    subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,MaxPasses,LoadBalance,RC)
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
@@ -1979,6 +1954,7 @@ contains
       integer,           intent(IN ) :: IM, JM, LM
       logical,           intent(IN ) :: include_aerosols
       type (ESMF_Time),  intent(IN ) :: CURRTIME
+      integer,           intent(IN ) :: MaxPasses
       logical,           intent(IN ) :: LoadBalance
       integer, optional, intent(OUT) :: RC
 
@@ -2132,14 +2108,14 @@ contains
 
       ! sub-gridscale condensate scaling for overlap scheme (ncols_block,nlay,ngpt)
       real(wp), dimension(:,:,:), allocatable :: zcw
-      
+
       ! correlation length scales [m] for cloud presence and condensate (ncol)
       real, dimension(:), allocatable :: adl, rdl
-      
+
       ! binomial probability of maximum overlap (cf. random overlap)
       ! for cloud presence and condensate (ncols_block,nlay-1)
       real(wp), dimension(:,:), allocatable :: alpha, rcorr
-      
+
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
       real(wp) ::  temp_ref_min, tmin
@@ -2225,21 +2201,16 @@ contains
 !  Identify lit soundings with the daytime mask
 !----------------------------------------------
 
-      if (LoadBalance) then
-         daytime = ZTH > 0.
-         NumLit  = count(daytime)
-
 !  The load balancer does not work if there are no lit points. This is only
 !  important model-wise with the single-column model. Note we must protect
 !  ZTH since in solar, we divide by ZTH and, thus, we will get a divide-by-
 !  zero if not protected.
 !--------------------------------------------------------------------------
 
-      else
-         ZTH     = max(.0001,ZTH)
-         daytime = .true.
-         NumLit  = size(ZTH)
-      end if
+      if (adjustl(DYCORE)=="DATMO") ZTH = max(.0001,ZTH)
+
+      daytime = ZTH > 0.
+      NumLit  = count(daytime)
 
 !  Create a balancing strategy. This is a collective call on the communicator
 !  of the current VM. The original, unbalanced local work consists of (OrgLen)
@@ -2258,9 +2229,14 @@ contains
 
       call MAPL_TimerOn(MAPL,"--CREATE")
 
-      call MAPL_BalanceCreate( &
-         OrgLen=NumLit, Comm=COMM, Handle=SolarBalanceHandle, &
-         BalLen=Num2do, BufLen=NumMax, __RC__)
+      if (LoadBalance) then
+         call MAPL_BalanceCreate( &
+            OrgLen=NumLit, Comm=COMM, MaxPasses=MaxPasses, Handle=SolarBalanceHandle, &
+            BalLen=Num2do, BufLen=NumMax, __RC__)
+      else
+         Num2do = NumLit
+         NumMax = NumLit
+      end if
 
       call MAPL_TimerOff(MAPL,"--CREATE")
 
@@ -2270,15 +2246,15 @@ contains
 !  column indicies Ig and Jg.
 !    The Outputs and InOuts are all INTERNAL variables.
 !--------------------------------------------------------------
-      
+
       NumImp = size(ImportSpec)
       NumInt = size(InternalSpec)
-      
+
       ! Inputs to load balancing:
       ! All imports plus Ig, Jg, LATS, SLR & ZTH.
       ! Vertical only imports (PREF) are explicitly skipped later.
       NumInp = NumImp + 5
-      
+
       allocate( &
          SlicesInp(NumInp), NamesInp(NumInp), &
          SlicesInt(NumInt), NamesInt(NumInt), &
@@ -2514,7 +2490,7 @@ contains
       ! -----------------------
 
       call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
-      call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
+      if (LoadBalance) call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
       call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
 ! @@@@@@@@@@@@@@@@@@@@@@
@@ -2525,17 +2501,17 @@ contains
       ! the required length of their 1D buffers (BufInOut/BufOut).
       ! ----------------------------------------------------------
       INT_VARS_1: do k=1,NumInt
-      
-         ! InOut or Out? 
+
+         ! InOut or Out?
          call MAPL_VarSpecGet(InternalSpec(k), &
             SHORT_NAME=short_name, DIMS=dims, UNGRIDDED_DIMS=ugdims, __RC__)
          ! later FAR variables will be InOut ... for now there are no InOut vars
          IntInOut(k) = .false.
 
-         ! save properties 
-         NamesInt(k) = short_name 
+         ! save properties
+         NamesInt(k) = short_name
          rgDim(k) = dims
-      
+
          ! Skip vertical only variables. They dont require
          ! load-balancing since they have no horizontal dimension.
          if (dims == MAPL_DIMSVERTONLY) then
@@ -2695,18 +2671,18 @@ contains
                NIRR      => ptr2(1:Num2do,1)
             case('DFNIRN')
                NIRF      => ptr2(1:Num2do,1)
-            case('DRBANDN')  
+            case('DRBANDN')
                DRBAND    => ptr2(1:Num2do,:)
-            case('DFBANDN')  
+            case('DFBANDN')
                DFBAND    => ptr2(1:Num2do,:)
-            case('FSWNAN')  
-               FSWA      => ptr2(1:Num2do,:)               
-            case('FSCNAN')  
-               FSCA      => ptr2(1:Num2do,:)               
-            case('FSWUNAN') 
-               FSWUA     => ptr2(1:Num2do,:)                              
-            case('FSCUNAN') 
-               FSCUA     => ptr2(1:Num2do,:)                              
+            case('FSWNAN')
+               FSWA      => ptr2(1:Num2do,:)
+            case('FSCNAN')
+               FSCA      => ptr2(1:Num2do,:)
+            case('FSWUNAN')
+               FSWUA     => ptr2(1:Num2do,:)
+            case('FSCUNAN')
+               FSCUA     => ptr2(1:Num2do,:)
             case('FSWBANDNAN')
                FSWBANDA  => ptr2(1:Num2do,:)
             case('COSZSW')
@@ -2733,11 +2709,11 @@ contains
 
       ! Load balance the InOuts for Input
       !----------------------------------
+      call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
       if (size(BufInOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
-         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
+         if (LoadBalance) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
       end if
+      call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
@@ -2746,7 +2722,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"-MISC")
 
-      ! report cosine solar zenith angle actually used by REFRESH     
+      ! report cosine solar zenith angle actually used by REFRESH
       COSZSW = ZT
 
       ! save soon-to-be-calculated fluxes to correct set of internals
@@ -2849,7 +2825,7 @@ contains
                      NIRR,NIRF,PARR,PARF,UVRR,UVRF,           &
                      FSWU,FSCU,                               &
                      FSWBAND,                                 &
-                     SOLAR_TO_OBIO .and. include_aerosols,    &     
+                     SOLAR_TO_OBIO .and. include_aerosols,    &
                      DRBAND, DFBAND,                          &
                      __RC__                                   )
 
@@ -3101,10 +3077,10 @@ contains
       ! cloud optics file is currently two-stream
       ! increment() will handle appropriate stream conversions
       allocate(ty_optical_props_2str::cloud_props_bnd,__STAT__)
-      
+
       ! band-only initialization for pre-mcICA cloud optical properties
       TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
-            
+
       ! g-point version for McICA sampled cloud optical properties
       select type (cloud_props_bnd)
         class is (ty_optical_props_2str)
@@ -3118,12 +3094,12 @@ contains
       call MAPL_GetResource( &
         MAPL, cloud_overlap_type, "RRTMGP_CLOUD_OVERLAP_TYPE_SW:", &
         DEFAULT='GEN_MAX_RAN_OVERLAP', __RC__)
-        
+
       ! GEN_MAX_RAN_OVERLAP uses correlation lengths
       !   and possibly inhomogeneous condensate
       gen_mro = (cloud_overlap_type == "GEN_MAX_RAN_OVERLAP")
       if (gen_mro) then
-          
+
         ! condensate inhomogeneous?
         ! see RadiationGC initialization
         cond_inhomo = condensate_inhomogeneous()
@@ -3135,7 +3111,7 @@ contains
           allocate(rdl(ncol),__STAT__)
           call correlation_length_condensate(ncol, ncol, doy, alat, rdl)
         endif
-      
+
       endif
 
       ! ===============================================================================
@@ -3200,14 +3176,14 @@ contains
 
       ! set up aerosol optical properties
       need_aer_optical_props = (include_aerosols .and. implements_aerosol_optics)
-      if (need_aer_optical_props) then 
+      if (need_aer_optical_props) then
         ! aerosol optics system is currently two-stream
-        ! increment() will handle appropriate stream conversions 
+        ! increment() will handle appropriate stream conversions
         allocate(ty_optical_props_2str::aer_props,__STAT__)
         ! band-only initialization
         TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
       end if
-      
+
       !-------------------------------------------------------!
       ! Loop over blocks of blockSize columns                 !
       !  - choose rrtmgp_blockSize for memory/time efficiency !
@@ -3349,12 +3325,12 @@ contains
         if (need_aer_optical_props) then
           select type (aer_props)
             class is (ty_optical_props_2str)
-              
+
               ! load un-normalized optical properties from aerosol system
               aer_props%tau = real(TAUA(colS:colE,:,:),kind=wp)
               aer_props%ssa = real(SSAA(colS:colE,:,:),kind=wp)
               aer_props%g   = real(ASYA(colS:colE,:,:),kind=wp)
-          
+
               ! renormalize
               where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
                 aer_props%g   = aer_props%g   / aer_props%ssa
@@ -3364,7 +3340,7 @@ contains
                 aer_props%ssa = 0._wp
                 aer_props%g   = 0._wp
               end where
-        
+
             class default
               TEST_('aerosol optical properties hardwired 2-stream for now')
           end select
@@ -4030,31 +4006,26 @@ contains
 
       call MAPL_TimerOn(MAPL,"-BALANCE")
 
-      if (size(BufOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--RETRIEVE")
-         call MAPL_BalanceWork(BufOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
+      call MAPL_TimerOn(MAPL,"--RETRIEVE")
+      if (LoadBalance) then
+         if (size(BufOut)   > 0) call MAPL_BalanceWork(BufOut,  NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
+         if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
       end if
-
-      if (size(BufInOut) > 0) then
-         call MAPL_TimerOn(MAPL,"--RETRIEVE")
-         call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         call MAPL_TimerOff(MAPL,"--RETRIEVE")
-      end if
+      call MAPL_TimerOff(MAPL,"--RETRIEVE")
 
       ! Unpack the results. Fills "masked" (night) locations with default value from internal state
       !--------------------------------------------------------------------------------------------
       ! resulting internals are then contiguous versions
       ! Note: InOut variables do not fill unmasked locations with a default,
       ! since the unmasked locations may contain potentially useful aged data.
-               
+
       i1InOut = 1; i1Out = 1
       INT_VARS_3: do k=1,NumInt
          if (SlicesInt(k) == 0) cycle
-               
+
          if (IntInOut(k)) then
             pi1 => i1InOut
-         else  
+         else
             pi1 => i1Out
             call MAPL_VarSpecGet(InternalSpec(k),DEFAULT=def,__RC__)
          endif
@@ -4088,7 +4059,7 @@ contains
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
                   if (IntInOut(k)) then
                      call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  else    
+                  else
                      call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),def)
                   endif
                case(MAPL_DIMSHORZONLY)
@@ -4110,7 +4081,7 @@ contains
       deallocate(IntInOut,rgDim,ugDim,__STAT__)
       deallocate(BufInp,BufInOut,BufOut,__STAT__)
       call MAPL_TimerOn(MAPL,"--DESTROY")
-      call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
+      if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
       call MAPL_TimerOff(MAPL,"--DESTROY")
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
@@ -5033,7 +5004,7 @@ contains
       if(associated(OSRCLR)) OSRCLR = (1.-  FSCN(:,:, 0))*SLR
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
-      
+
 ! SOLAR TO OBIO conversion ...
 ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
 ! ---------------------------------------------------------------------------------------
@@ -5043,7 +5014,7 @@ contains
 
             ! first load SOLAR_bands_wavenum and specify ordering
             !    that makes it monotonically increasing ...
- 
+
             if (USE_RRTMGP) then
 
 ! helper for testing RRTMGP error status on return;
@@ -5084,7 +5055,7 @@ contains
 
 #undef TEST_
 
-            elseif (USE_RRTMG) then 
+            elseif (USE_RRTMG) then
 
                ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
                ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
@@ -5210,19 +5181,19 @@ contains
     logical, intent(IN   ) :: MSK(Udim(1),Udim(2))
 
     integer :: I, J, L, M
-                  
+
     do L = 1,LM
-      M = 1       
-      do J = 1,Udim(2) 
+      M = 1
+      do J = 1,Udim(2)
         do I = 1,Udim(1)
           if (MSK(I,J)) then
             Packed(M,L) = UnPacked(I,J,L)
-            M = M+1  
-          end if  
+            M = M+1
+          end if
         end do
       end do
-    end do  
-               
+    end do
+
   end subroutine PackIt
 
   ! Unpack masked locations from buffer
@@ -5277,22 +5248,22 @@ contains
       USE_RRTMG = RFLAG /= 0.
       USE_CHOU  = .not.USE_RRTMG
     end if
-    
+
     _RETURN(_SUCCESS)
-  end subroutine choose_solar_scheme 
-    
+  end subroutine choose_solar_scheme
+
 
   subroutine choose_irrad_scheme (MAPL, &
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
-    
+
     type (MAPL_MetaComp), pointer, intent(in) :: MAPL
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
     real :: RFLAG
-    integer :: STATUS 
-    
+    integer :: STATUS
+
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
