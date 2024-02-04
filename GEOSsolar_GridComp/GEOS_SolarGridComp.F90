@@ -1469,8 +1469,8 @@ contains
     integer :: i
     type S_
       character(len=:), allocatable :: str
-    end type S_
-    type(S_), allocatable :: list(:)
+   end type S_
+   character(len=10), allocatable :: list(:)
 
 !=============================================================================
 
@@ -1833,26 +1833,25 @@ contains
        ! Optional without-aerosol diagnostics
        ! ------------------------------------
 
-       ! this line temporarily needed because of compiler bug
-       allocate(list(1)); list(1) = S_('dummy')
-
        ! are without-aerosol exports requested?
        do_no_aero_calc = .false.
-       list = [S_('FSWNA'), S_('FSWUNA'), S_('FSWDNA'), &
-               S_('FSCNA'), S_('FSCUNA'), S_('FSCDNA'), &
-               S_('FSWBANDNA')]
+       list = ['FSWNA    ', 'FSWUNA   ', 'FSWDNA   ', &
+               'FSCNA    ', 'FSCUNA   ', 'FSCDNA   ', &
+               'FSWBANDNA']
        do i = 1, size(list)
-         call MAPL_GetPointer( EXPORT, ptr3d, list(i)%str, __RC__)
-         do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
+          call MAPL_GetPointer( EXPORT, ptr3d, list(i), __RC__)
+          do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
        end do
-       list = [S_('RSRNA'), S_('RSRSNA'), S_('OSRNA') , &
-               S_('RSCNA'), S_('RSCSNA'), S_('OSRCNA'), &
-               S_('SLRSFNA'),  S_('SLRSUFNA'), &
-               S_('SLRSFCNA'), S_('SLRSUFCNA')]
+       deallocate(list)
+       list = ['RSRNA    ', 'RSRSNA   ', 'OSRNA    ' , &
+               'RSCNA    ', 'RSCSNA   ', 'OSRCNA   ', &
+               'SLRSFNA  ', 'SLRSUFNA ', &
+               'SLRSFCNA ', 'SLRSUFCNA']
        do i = 1, size(list)
-         call MAPL_GetPointer( EXPORT, ptr2d, list(i)%str, __RC__)
+         call MAPL_GetPointer( EXPORT, ptr2d, list(i), __RC__)
          do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
        end do
+       deallocate(list)
 
        if (do_no_aero_calc) then
 
@@ -1868,10 +1867,10 @@ contains
        else
 
           ! otherwise, zero the no-aerosol internals
-          list = [S_('FSWNAN'), S_('FSWUNAN'), &
-                  S_('FSCNAN'), S_('FSCUNAN'), S_('FSWBANDNAN')]
+          list = ['FSWNAN    ', 'FSWUNAN   ', &
+                  'FSCNAN    ', 'FSCUNAN   ', 'FSWBANDNAN']
           do i = 1, size(list)
-            call MAPL_GetPointer( INTERNAL, ptr3d, list(i)%str, __RC__)
+            call MAPL_GetPointer( INTERNAL, ptr3d, list(i), __RC__)
             ptr3d = 0.
           end do
 
