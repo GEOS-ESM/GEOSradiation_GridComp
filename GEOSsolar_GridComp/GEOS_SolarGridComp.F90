@@ -1363,6 +1363,264 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
+    ! layerized phase-split cloud SSA and ASM 
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALNUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAIDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAINUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLNUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMIDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMINUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALNUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAIDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAINUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLNUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMIDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMINUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALNUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAIDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAINUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLNUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMIDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMINUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSALNUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAIDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'SSAINUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMLNUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMIDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'ASMINUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2727,7 +2985,15 @@ contains
                                         COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
                                         COTINTP, COTINHP, COTINMP, COTINLP, &
                                         CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
-                                        CDSINTP, CDSINHP, CDSINMP, CDSINLP
+                                        CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+                                        SSALDLP, SSALNLP, SSAIDLP, SSAINLP, &
+                                        ASMLDLP, ASMLNLP, ASMIDLP, ASMINLP, &
+                                        SSALDMP, SSALNMP, SSAIDMP, SSAINMP, &
+                                        ASMLDMP, ASMLNMP, ASMIDMP, ASMINMP, &
+                                        SSALDHP, SSALNHP, SSAIDHP, SSAINHP, &
+                                        ASMLDHP, ASMLNHP, ASMIDHP, ASMINHP, &
+                                        SSALDTP, SSALNTP, SSAIDTP, SSAINTP, &
+                                        ASMLDTP, ASMLNTP, ASMIDTP, ASMINTP
 
       ! variables for RRTMG code
       ! ------------------------
@@ -2834,6 +3100,10 @@ contains
       real :: stautp, stauhp, staump, staulp
       real :: sltautp, sltauhp, sltaump, sltaulp
       real :: sitautp, sitauhp, sitaump, sitaulp
+      real :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
+      real :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
+      real :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
+      real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
 
       ! radice interpolation for forwice
       integer :: radidx
@@ -3563,6 +3833,70 @@ contains
                CDSINMP    => ptr2(1:Num2do,1)
             case('COTIDSNUMLOPAR')
                CDSINLP    => ptr2(1:Num2do,1)
+            case('SSALDENLOPAR')
+               SSALDLP    => ptr2(1:Num2do,1)
+            case('SSALNUMLOPAR')
+               SSALNLP    => ptr2(1:Num2do,1)
+            case('SSAIDENLOPAR')
+               SSAIDLP    => ptr2(1:Num2do,1)
+            case('SSAINUMLOPAR')
+               SSAINLP    => ptr2(1:Num2do,1)
+            case('ASMLDENLOPAR')
+               ASMLDLP    => ptr2(1:Num2do,1)
+            case('ASMLNUMLOPAR')
+               ASMLNLP    => ptr2(1:Num2do,1)
+            case('ASMIDENLOPAR')
+               ASMIDLP    => ptr2(1:Num2do,1)
+            case('ASMINUMLOPAR')
+               ASMINLP    => ptr2(1:Num2do,1)
+            case('SSALDENMDPAR')
+               SSALDMP    => ptr2(1:Num2do,1)
+            case('SSALNUMMDPAR')
+               SSALNMP    => ptr2(1:Num2do,1)
+            case('SSAIDENMDPAR')
+               SSAIDMP    => ptr2(1:Num2do,1)
+            case('SSAINUMMDPAR')
+               SSAINMP    => ptr2(1:Num2do,1)
+            case('ASMLDENMDPAR')
+               ASMLDMP    => ptr2(1:Num2do,1)
+            case('ASMLNUMMDPAR')
+               ASMLNMP    => ptr2(1:Num2do,1)
+            case('ASMIDENMDPAR')
+               ASMIDMP    => ptr2(1:Num2do,1)
+            case('ASMINUMMDPAR')
+               ASMINMP    => ptr2(1:Num2do,1)
+            case('SSALDENHIPAR')
+               SSALDHP    => ptr2(1:Num2do,1)
+            case('SSALNUMHIPAR')
+               SSALNHP    => ptr2(1:Num2do,1)
+            case('SSAIDENHIPAR')
+               SSAIDHP    => ptr2(1:Num2do,1)
+            case('SSAINUMHIPAR')
+               SSAINHP    => ptr2(1:Num2do,1)
+            case('ASMLDENHIPAR')
+               ASMLDHP    => ptr2(1:Num2do,1)
+            case('ASMLNUMHIPAR')
+               ASMLNHP    => ptr2(1:Num2do,1)
+            case('ASMIDENHIPAR')
+               ASMIDHP    => ptr2(1:Num2do,1)
+            case('ASMINUMHIPAR')
+               ASMINHP    => ptr2(1:Num2do,1)
+            case('SSALDENTTPAR')
+               SSALDTP    => ptr2(1:Num2do,1)
+            case('SSALNUMTTPAR')
+               SSALNTP    => ptr2(1:Num2do,1)
+            case('SSAIDENTTPAR')
+               SSAIDTP    => ptr2(1:Num2do,1)
+            case('SSAINUMTTPAR')
+               SSAINTP    => ptr2(1:Num2do,1)
+            case('ASMLDENTTPAR')
+               ASMLDTP    => ptr2(1:Num2do,1)
+            case('ASMLNUMTTPAR')
+               ASMLNTP    => ptr2(1:Num2do,1)
+            case('ASMIDENTTPAR')
+               ASMIDTP    => ptr2(1:Num2do,1)
+            case('ASMINUMTTPAR')
+               ASMINTP    => ptr2(1:Num2do,1)
          end select
 
       enddo INT_VARS_2
@@ -4468,6 +4802,14 @@ contains
             COTIDHP(icol) = 0.; COTINHP(icol) = 0.
             COTIDMP(icol) = 0.; COTINMP(icol) = 0.
             COTIDLP(icol) = 0.; COTINLP(icol) = 0.
+            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
+            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
+            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
+            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
+            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
+            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
+            SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
+            ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
 
             ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
@@ -4497,68 +4839,137 @@ contains
                   sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
                   sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
                   staulp = sltaulp + sitaulp
+                  sltaussalp = 0.; sltaussaglp = 0.; sitaussalp = 0.; sitaussaglp = 0.
                   if (sltaulp > 0.) then
-                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
+                    sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                     cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                    sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
                     COTLDLP(icol) = COTLDLP(icol) + wgt
+                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
+                    SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
+                    SSALNLP(icol) = SSALNLP(icol) + wgt * sltaussalp
+                    ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
+                    ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
                   end if
                   if (sitaulp > 0.) then
-                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
+                    sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                     cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                    sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
                     COTIDLP(icol) = COTIDLP(icol) + wgt
+                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
+                    SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
+                    SSAINLP(icol) = SSAINLP(icol) + wgt * sitaussalp
+                    ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
+                    ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
                   end if
                   if (staulp > 0.) then
-                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
                     COTDLP(icol) = COTDLP(icol) + wgt
+                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
                   end if
 
                   ! mid pressure layer
                   sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   staump = sltaump + sitaump
+                  sltaussamp = 0.; sltaussagmp = 0.; sitaussamp = 0.; sitaussagmp = 0.
                   if (sltaump > 0.) then
-                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
+                    sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                     cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
                     COTLDMP(icol) = COTLDMP(icol) + wgt
+                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
+                    SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
+                    SSALNMP(icol) = SSALNMP(icol) + wgt * sltaussamp
+                    ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
+                    ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
                   end if
                   if (sitaump > 0.) then
-                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
+                    sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                     cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
                     COTIDMP(icol) = COTIDMP(icol) + wgt
+                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
+                    SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
+                    SSAINMP(icol) = SSAINMP(icol) + wgt * sitaussamp
+                    ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
+                    ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
                   end if
                   if (staump > 0.) then
-                    COTNMP(icol) = COTNMP(icol) + wgt * staump
                     COTDMP(icol) = COTDMP(icol) + wgt
+                    COTNMP(icol) = COTNMP(icol) + wgt * staump
                   end if
 
                   ! high pressure layer
                   sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
                   sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
                   stauhp = sltauhp + sitauhp
+                  sltaussahp = 0.; sltaussaghp = 0.; sitaussahp = 0.; sitaussaghp = 0.
                   if (sltauhp > 0.) then
-                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
+                    sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                     cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                    sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
                     COTLDHP(icol) = COTLDHP(icol) + wgt
+                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
+                    SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
+                    SSALNHP(icol) = SSALNHP(icol) + wgt * sltaussahp
+                    ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
+                    ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
                   end if
                   if (sitauhp > 0.) then
-                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
+                    sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                     cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                    sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
                     COTIDHP(icol) = COTIDHP(icol) + wgt
+                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
+                    SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
+                    SSAINHP(icol) = SSAINHP(icol) + wgt * sitaussahp
+                    ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
+                    ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
                   end if
                   if (stauhp > 0.) then
-                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
                     COTDHP(icol) = COTDHP(icol) + wgt
+                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
                   end if
 
                   ! whole subcolumn
                   sltautp = sltaulp + sltaump + sltauhp
                   sitautp = sitaulp + sitaump + sitauhp
                   stautp = staulp + staump + stauhp
+                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
+                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
+                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
+                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
                   if (sltautp > 0.) then
-                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
                     COTLDTP(icol) = COTLDTP(icol) + wgt
+                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
+                    SSALDTP(icol) = SSALDTP(icol) + wgt * sltautp
+                    SSALNTP(icol) = SSALNTP(icol) + wgt * sltaussatp
+                    ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
+                    ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
                   end if
                   if (sitautp > 0.) then
-                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
                     COTIDTP(icol) = COTIDTP(icol) + wgt
+                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
+                    SSAIDTP(icol) = SSAIDTP(icol) + wgt * sitautp
+                    SSAINTP(icol) = SSAINTP(icol) + wgt * sitaussatp
+                    ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
+                    ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
                   end if
                   if (stautp > 0.) then
-                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
                     COTDTP(icol) = COTDTP(icol) + wgt
+                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
                   end if
 
                 end do ! igpt
