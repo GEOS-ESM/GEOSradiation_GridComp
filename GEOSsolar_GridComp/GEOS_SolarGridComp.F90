@@ -4841,11 +4841,14 @@ contains
                   staulp = sltaulp + sitaulp
                   sltaussalp = 0.; sltaussaglp = 0.; sitaussalp = 0.; sitaussaglp = 0.
                   if (sltaulp > 0.) then
-                    sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                     cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
-                    sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                      cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    end select
                     COTLDLP(icol) = COTLDLP(icol) + wgt
                     COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
                     SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
@@ -4854,11 +4857,14 @@ contains
                     ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
                   end if
                   if (sitaulp > 0.) then
-                    sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                     cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
-                    sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                      cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    end select
                     COTIDLP(icol) = COTIDLP(icol) + wgt
                     COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
                     SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
@@ -4877,11 +4883,14 @@ contains
                   staump = sltaump + sitaump
                   sltaussamp = 0.; sltaussagmp = 0.; sitaussamp = 0.; sitaussagmp = 0.
                   if (sltaump > 0.) then
-                    sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                     cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                    sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                      cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
                     COTLDMP(icol) = COTLDMP(icol) + wgt
                     COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
                     SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
@@ -4890,11 +4899,14 @@ contains
                     ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
                   end if
                   if (sitaump > 0.) then
-                    sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                     cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                    sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                      cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
                     COTIDMP(icol) = COTIDMP(icol) + wgt
                     COTINMP(icol) = COTINMP(icol) + wgt * sitaump
                     SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
@@ -4913,11 +4925,14 @@ contains
                   stauhp = sltauhp + sitauhp
                   sltaussahp = 0.; sltaussaghp = 0.; sitaussahp = 0.; sitaussaghp = 0.
                   if (sltauhp > 0.) then
-                    sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                     cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
-                    sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                      cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    end select
                     COTLDHP(icol) = COTLDHP(icol) + wgt
                     COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
                     SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
@@ -4926,11 +4941,14 @@ contains
                     ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
                   end if
                   if (sitauhp > 0.) then
-                    sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                     cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
-                    sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                      cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    end select
                     COTIDHP(icol) = COTIDHP(icol) + wgt
                     COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
                     SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
@@ -5012,7 +5030,7 @@ contains
             ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
             forwice = 0.  ! default
             select type(cloud_props_gpt_ice)
-            type is (ty_optical_props_2str)
+            class is (ty_optical_props_2str)
               radice_lwr = cloud_optics%get_min_radius_ice()
               radice_upr = cloud_optics%get_max_radius_ice()
               do isub = 1,ncols_block
