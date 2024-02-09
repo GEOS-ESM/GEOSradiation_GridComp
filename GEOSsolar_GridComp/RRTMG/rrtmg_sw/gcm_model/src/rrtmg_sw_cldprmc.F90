@@ -36,7 +36,10 @@ contains
    subroutine cldprmc_sw(pncol, ncol, nlay, iceflag, liqflag, &
                          cldymc, ciwpmc, clwpmc, reicmc, relqmc, &
                          taormc, taucmc, ssacmc, asmcmc, &
-                         ltaormc, ltaucmc, itaormc, itaucmc)
+                         ltaormc, lomormc, lasormc, &
+                         ltaucmc, lomgcmc, lasycmc, &
+                         itaormc, iomormc, iasormc, &
+                         itaucmc, iomgcmc, iasycmc)
    ! ----------------------------------------------------------------------
 
       ! Compute the cloud optical properties for each cloudy layer
@@ -73,10 +76,12 @@ contains
       real, intent(out) :: asmcmc (nlay,ngptsw,pncol)  ! asymmetry param (delta scaled)
       real, intent(out) :: taormc (nlay,ngptsw,pncol)  ! cloud opt depth (non-delta scaled)
 
-      real, intent(out) :: ltaormc(nlay,ngptsw,pncol)  ! liq cloud opt depth (non-delta scaled)
-      real, intent(out) :: ltaucmc(nlay,ngptsw,pncol)  ! liq cloud opt depth (delta scaled)
-      real, intent(out) :: itaormc(nlay,ngptsw,pncol)  ! ice cloud opt depth (non-delta scaled)
-      real, intent(out) :: itaucmc(nlay,ngptsw,pncol)  ! ice cloud opt depth (delta scaled)
+      ! McICA phase-split optical properties (original "ormc" and delta-scaled)
+      real, intent(out), dimension (nlay,ngptsw,pncol) :: &
+        ltaormc, lomormc, lasormc, &
+        ltaucmc, lomgcmc, lasycmc, &
+        itaormc, iomormc, iasormc, &
+        itaucmc, iomgcmc, iasycmc
 
       ! ------- Local -------
 
@@ -297,9 +302,14 @@ contains
                   tauliqorig = clwpmc(lay,ig,icol) * extcoliq(lay,ig,icol)
                   tauiceorig = ciwpmc(lay,ig,icol) * extcoice(lay,ig,icol)
 
+                  ! original (pre-delta-scaling) optical properties
                   taormc (lay,ig,icol) = tauliqorig + tauiceorig
                   ltaormc(lay,ig,icol) = tauliqorig
                   itaormc(lay,ig,icol) = tauiceorig
+                  lomormc(lay,ig,icol) = ssacoliq(lay,ig,icol)
+                  iomormc(lay,ig,icol) = ssacoice(lay,ig,icol)
+                  lasormc(lay,ig,icol) = gliq    (lay,ig,icol)
+                  iasormc(lay,ig,icol) = gice    (lay,ig,icol)
 
                   ssaliq = ssacoliq(lay,ig,icol) * (1. - forwliq(lay,ig,icol)) &
                            / (1. - forwliq(lay,ig,icol) * ssacoliq(lay,ig,icol))
@@ -311,9 +321,16 @@ contains
                   scatliq = ssaliq * tauliq
                   scatice = ssaice * tauice
 
+                  ! delta-scaled optical properties
                   taucmc (lay,ig,icol) = tauliq + tauice
                   ltaucmc(lay,ig,icol) = tauliq
                   itaucmc(lay,ig,icol) = tauice
+                  lomgcmc(lay,ig,icol) = ssaliq
+                  iomgcmc(lay,ig,icol) = ssaice
+                  lasycmc(lay,ig,icol) = &
+                    (gliq(lay,ig,icol) - forwliq(lay,ig,icol)) / (1. - forwliq(lay,ig,icol))
+                  iasycmc(lay,ig,icol) = &
+                    (gice(lay,ig,icol) - forwice(lay,ig,icol)) / (1. - forwice(lay,ig,icol))
 
                   ! Ensure non-zero taucmc and scatice
 !? pmn because of normalization below?
@@ -324,6 +341,7 @@ contains
 
                   ssacmc(lay,ig,icol) = (scatliq + scatice) / taucmc(lay,ig,icol)  
    
+!? when non-zero-diff ok, can maybe do time-saving in phase-split and combined d-Ed gliq/ice formulas
                   if (iceflag == 3) then
                      ! In accordance with the 1996 Fu paper, equation A.3, 
                      ! the moments for ice were calculated depending on whether using spheres
@@ -356,9 +374,21 @@ contains
                   asmcmc (lay,ig,icol) = 0.
 
                   ltaormc(lay,ig,icol) = 0.
+                  lomormc(lay,ig,icol) = 1.
+                  lasormc(lay,ig,icol) = 0.
+                 
                   ltaucmc(lay,ig,icol) = 0.
+                  lomgcmc(lay,ig,icol) = 1.
+                  lasycmc(lay,ig,icol) = 0.
+                 
                   itaormc(lay,ig,icol) = 0.
+                  iomormc(lay,ig,icol) = 1.
+                  iasormc(lay,ig,icol) = 0.
+                 
                   itaucmc(lay,ig,icol) = 0.
+                  iomgcmc(lay,ig,icol) = 1.
+                  iasycmc(lay,ig,icol) = 0.
+                 
 
                endif  ! cloud present
             enddo  ! layers

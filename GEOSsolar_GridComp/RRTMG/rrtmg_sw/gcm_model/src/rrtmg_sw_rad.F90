@@ -78,10 +78,12 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
+
       cotdtp, cotdhp, cotdmp, cotdlp, &  ! non-delta-scaled
       cotntp, cotnhp, cotnmp, cotnlp, &
       cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
       cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
       cotldtp, cotldhp, cotldmp, cotldlp, &
       cotlntp, cotlnhp, cotlnmp, cotlnlp, &
       cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
@@ -90,6 +92,25 @@ contains
       cotintp, cotinhp, cotinmp, cotinlp, &
       cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
       cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+      ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+      ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+      sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+      sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+      ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+      ssaintp, ssainhp, ssainmp, ssainlp, &
+      sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+      sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+      asmldtp, asmldhp, asmldmp, asmldlp, &
+      asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+      adsldtp, adsldhp, adsldmp, adsldlp, &
+      adslntp, adslnhp, adslnmp, adslnlp, &
+      asmidtp, asmidhp, asmidmp, asmidlp, &
+      asmintp, asminhp, asminmp, asminlp, &
+      adsidtp, adsidhp, adsidmp, adsidlp, &
+      adsintp, adsinhp, adsinmp, adsinlp, &
+
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -270,18 +291,44 @@ contains
       real, intent(out) :: fswband (ncol,nbndsw)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (ncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
-                                             cotntp, cotnhp, cotnmp, cotnlp
-      real, intent(out), dimension (ncol) :: cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
-                                             cdsntp, cdsnhp, cdsnmp, cdsnlp
-      real, intent(out), dimension (ncol) :: cotldtp, cotldhp, cotldmp, cotldlp, &
-                                             cotlntp, cotlnhp, cotlnmp, cotlnlp
-      real, intent(out), dimension (ncol) :: cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
-                                             cdslntp, cdslnhp, cdslnmp, cdslnlp
-      real, intent(out), dimension (ncol) :: cotidtp, cotidhp, cotidmp, cotidlp, &
-                                             cotintp, cotinhp, cotinmp, cotinlp
-      real, intent(out), dimension (ncol) :: cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
-                                             cdsintp, cdsinhp, cdsinmp, cdsinlp
+      real, intent(out), dimension(ncol) :: &
+        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
+        cotntp, cotnhp, cotnmp, cotnlp, &
+        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+        cdsntp, cdsnhp, cdsnmp, cdsnlp
+
+      ! ditto but phase-split
+      real, intent(out), dimension(ncol) :: &
+        cotldtp, cotldhp, cotldmp, cotldlp, &
+        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+        cotidtp, cotidhp, cotidmp, cotidlp, &
+        cotintp, cotinhp, cotinmp, cotinlp, &
+        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+        cdsintp, cdsinhp, cdsinmp, cdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, intent(out), dimension(ncol) :: &
+        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+        ssaintp, ssainhp, ssainmp, ssainlp, &
+        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+        sdsintp, sdsinhp, sdsinmp, sdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, intent(out), dimension(ncol) :: &
+        asmldtp, asmldhp, asmldmp, asmldlp, &
+        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+        adsldtp, adsldhp, adsldmp, adsldlp, &
+        adslntp, adslnhp, adslnmp, adslnlp, &
+        asmidtp, asmidhp, asmidmp, asmidlp, &
+        asmintp, asminhp, asminmp, asminlp, &
+        adsidtp, adsidhp, adsidmp, adsidlp, &
+        adsintp, adsinhp, adsinmp, adsinlp
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -337,10 +384,12 @@ contains
          cloudLM, cloudMH, normFlx, &
          clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
          nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
+
          cotdtp, cotdhp, cotdmp, cotdlp, &
          cotntp, cotnhp, cotnmp, cotnlp, &
          cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
          cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
          cotldtp, cotldhp, cotldmp, cotldlp, &
          cotlntp, cotlnhp, cotlnmp, cotlnlp, &
          cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
@@ -349,6 +398,25 @@ contains
          cotintp, cotinhp, cotinmp, cotinlp, &
          cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
          cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+         ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+         ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+         sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+         sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+         ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+         ssaintp, ssainhp, ssainmp, ssainlp, &
+         sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+         sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+         asmldtp, asmldhp, asmldmp, asmldlp, &
+         asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+         adsldtp, adsldhp, adsldmp, adsldlp, &
+         adslntp, adslnhp, adslnmp, adslnlp, &
+         asmidtp, asmidhp, asmidmp, asmidlp, &
+         asmintp, asminhp, asminmp, asminlp, &
+         adsidtp, adsidhp, adsidmp, adsidlp, &
+         adsintp, adsinhp, adsinmp, adsinlp, &
+
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
@@ -370,10 +438,12 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
+
       cotdtp, cotdhp, cotdmp, cotdlp, &
       cotntp, cotnhp, cotnmp, cotnlp, &
       cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
       cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
       cotldtp, cotldhp, cotldmp, cotldlp, &
       cotlntp, cotlnhp, cotlnmp, cotlnlp, &
       cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
@@ -382,6 +452,25 @@ contains
       cotintp, cotinhp, cotinmp, cotinlp, &
       cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
       cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+      ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+      ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+      sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+      sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+      ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+      ssaintp, ssainhp, ssainmp, ssainlp, &
+      sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+      sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+      asmldtp, asmldhp, asmldmp, asmldlp, &
+      asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+      adsldtp, adsldhp, adsldmp, adsldlp, &
+      adslntp, adslnhp, adslnmp, adslnlp, &
+      asmidtp, asmidhp, asmidmp, asmidlp, &
+      asmintp, asminhp, asminmp, asminlp, &
+      adsidtp, adsidhp, adsidmp, adsidlp, &
+      adsintp, adsinhp, adsinmp, adsinlp, &
+
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -486,22 +575,48 @@ contains
       real, intent(out) :: uvrr    (gncol)             ! UV      direct  down SW flux (w/m2)
       real, intent(out) :: uvrf    (gncol)             ! UV      diffuse down SW flux (w/m2)
 
-      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (gncol) :: cotdtp, cotdhp, cotdmp, cotdlp, &
-                                              cotntp, cotnhp, cotnmp, cotnlp
-      real, intent(out), dimension (gncol) :: cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
-                                              cdsntp, cdsnhp, cdsnmp, cdsnlp
-      real, intent(out), dimension (gncol) :: cotldtp, cotldhp, cotldmp, cotldlp, &
-                                              cotlntp, cotlnhp, cotlnmp, cotlnlp
-      real, intent(out), dimension (gncol) :: cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
-                                              cdslntp, cdslnhp, cdslnmp, cdslnlp
-      real, intent(out), dimension (gncol) :: cotidtp, cotidhp, cotidmp, cotidlp, &
-                                              cotintp, cotinhp, cotinmp, cotinlp
-      real, intent(out), dimension (gncol) :: cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
-                                              cdsintp, cdsinhp, cdsinmp, cdsinlp
-
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
+
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, intent(out), dimension(gncol) :: &
+        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
+        cotntp, cotnhp, cotnmp, cotnlp, &
+        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+        cdsntp, cdsnhp, cdsnmp, cdsnlp
+
+      ! ditto but phase-split
+      real, intent(out), dimension(gncol) :: &
+        cotldtp, cotldhp, cotldmp, cotldlp, &
+        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+        cotidtp, cotidhp, cotidmp, cotidlp, &
+        cotintp, cotinhp, cotinmp, cotinlp, &
+        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+        cdsintp, cdsinhp, cdsinmp, cdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, intent(out), dimension(gncol) :: &
+        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+        ssaintp, ssainhp, ssainmp, ssainlp, &
+        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+        sdsintp, sdsinhp, sdsinmp, sdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        asmldtp, asmldhp, asmldmp, asmldlp, &
+        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+        adsldtp, adsldhp, adsldmp, adsldlp, &
+        adslntp, adslnhp, adslnmp, adslnlp, &
+        asmidtp, asmidhp, asmidmp, asmidlp, &
+        asmintp, asminhp, asminmp, asminlp, &
+        adsidtp, adsidhp, adsidmp, adsidlp, &
+        adsintp, adsinhp, adsinmp, adsinlp
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -584,10 +699,12 @@ contains
       real :: ssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
       real :: asmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
 
-      real :: ltaormc (nlay,ngptsw,pncol)   ! liq unscaled in-cloud optl depth [mcica]
-      real :: ltaucmc (nlay,ngptsw,pncol)   ! liq in-cloud optical depth [mcica]
-      real :: itaormc (nlay,ngptsw,pncol)   ! ice unscaled in-cloud optl depth [mcica]
-      real :: itaucmc (nlay,ngptsw,pncol)   ! ice in-cloud optical depth [mcica]
+      ! McICA phase-split optical properties (original "ormc" and delta-scaled)
+      real, dimension (nlay,ngptsw,pncol) :: &
+        ltaormc, lomormc, lasormc, &
+        ltaucmc, lomgcmc, lasycmc, &
+        itaormc, iomormc, iasormc, &
+        itaucmc, iomgcmc, iasycmc
       
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
@@ -620,19 +737,45 @@ contains
 
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
-      ! in-cloud PAR optical thicknesses
-      real, dimension (pncol) :: zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
-                                 zcotntp, zcotnhp, zcotnmp, zcotnlp
-      real, dimension (pncol) :: zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
-                                 zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
-      real, dimension (pncol) :: zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
-                                 zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp
-      real, dimension (pncol) :: zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
-                                 zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp
-      real, dimension (pncol) :: zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
-                                 zcotintp, zcotinhp, zcotinmp, zcotinlp
-      real, dimension (pncol) :: zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
-                                 zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, dimension(pncol) :: &
+        zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
+        zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+        zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
+        zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
+
+      ! ditto but phase-split
+      real, dimension(pncol) :: &
+        zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+        zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
+        zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+        zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
+        zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+        zcotintp, zcotinhp, zcotinmp, zcotinlp, &
+        zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+        zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, dimension(pncol) :: &
+        zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
+        zssalntp, zssalnhp, zssalnmp, zssalnlp, &
+        zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
+        zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
+        zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
+        zssaintp, zssainhp, zssainmp, zssainlp, &
+        zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
+        zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
+        zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
+        zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
+        zadslntp, zadslnhp, zadslnmp, zadslnlp, &
+        zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
+        zasmintp, zasminhp, zasminmp, zasminlp, &
+        zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
+        zadsintp, zadsinhp, zadsinmp, zadsinlp
       
       ! Solar variability multipliers
       ! -----------------------------
@@ -1178,7 +1321,10 @@ contains
                   pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                   cldymcl, ciwpmcl, clwpmcl, rei, rel, &
                   taormc, taucmc, ssacmc, asmcmc, &
-                  ltaormc, ltaucmc, itaormc, itaucmc)
+                  ltaormc, lomormc, lasormc, &
+                  ltaucmc, lomgcmc, lasycmc, &
+                  itaormc, iomormc, iasormc, &
+                  itaucmc, iomgcmc, iasycmc)
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
             end if
 
@@ -1200,7 +1346,10 @@ contains
                cc, pncol, ncol, nlay, &
                albdif, albdir, &
                cldymcl, taucmc, asmcmc, ssacmc, taormc, &
-               ltaormc, ltaucmc, itaormc, itaucmc, &
+               ltaormc, lomormc, lasormc, &
+               ltaucmc, lomgcmc, lasycmc, &
+               itaormc, iomormc, iasormc, &
+               itaucmc, iomgcmc, iasycmc, &
                taua, asya, omga, cossza, adjflux, &
                isolvar, svar_f, svar_s, svar_i, &
                svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -1212,10 +1361,12 @@ contains
                zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
                zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
                znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
+
                zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
                zcotntp, zcotnhp, zcotnmp, zcotnlp, &
                zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
                zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
+
                zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
                zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
                zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
@@ -1224,6 +1375,25 @@ contains
                zcotintp, zcotinhp, zcotinmp, zcotinlp, &
                zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
                zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp, &
+
+               zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
+               zssalntp, zssalnhp, zssalnmp, zssalnlp, &
+               zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
+               zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
+               zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
+               zssaintp, zssainhp, zssainmp, zssainlp, &
+               zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
+               zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp, &
+
+               zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
+               zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
+               zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
+               zadslntp, zadslnhp, zadslnmp, zadslnlp, &
+               zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
+               zasmintp, zasminhp, zasminmp, zasminlp, &
+               zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
+               zadsintp, zadsinhp, zadsinmp, zadsinlp, &
+
                do_drfband, zdrband, zdfband, &
                __RC__)
 
@@ -1259,6 +1429,7 @@ contains
                   cdsdhp(gicol) = 0.; cdsnhp(gicol) = 0.
                   cdsdmp(gicol) = 0.; cdsnmp(gicol) = 0.
                   cdsdlp(gicol) = 0.; cdsnlp(gicol) = 0.
+
                   cotldtp(gicol) = 0.; cotlntp(gicol) = 0.
                   cotldhp(gicol) = 0.; cotlnhp(gicol) = 0.
                   cotldmp(gicol) = 0.; cotlnmp(gicol) = 0.
@@ -1275,6 +1446,40 @@ contains
                   cdsidhp(gicol) = 0.; cdsinhp(gicol) = 0.
                   cdsidmp(gicol) = 0.; cdsinmp(gicol) = 0.
                   cdsidlp(gicol) = 0.; cdsinlp(gicol) = 0.
+
+                  ssaldtp(gicol) = 0.; ssalntp(gicol) = 0.
+                  ssaldhp(gicol) = 0.; ssalnhp(gicol) = 0.
+                  ssaldmp(gicol) = 0.; ssalnmp(gicol) = 0.
+                  ssaldlp(gicol) = 0.; ssalnlp(gicol) = 0.
+                  sdsldtp(gicol) = 0.; sdslntp(gicol) = 0.
+                  sdsldhp(gicol) = 0.; sdslnhp(gicol) = 0.
+                  sdsldmp(gicol) = 0.; sdslnmp(gicol) = 0.
+                  sdsldlp(gicol) = 0.; sdslnlp(gicol) = 0.
+                  ssaidtp(gicol) = 0.; ssaintp(gicol) = 0.
+                  ssaidhp(gicol) = 0.; ssainhp(gicol) = 0.
+                  ssaidmp(gicol) = 0.; ssainmp(gicol) = 0.
+                  ssaidlp(gicol) = 0.; ssainlp(gicol) = 0.
+                  sdsidtp(gicol) = 0.; sdsintp(gicol) = 0.
+                  sdsidhp(gicol) = 0.; sdsinhp(gicol) = 0.
+                  sdsidmp(gicol) = 0.; sdsinmp(gicol) = 0.
+                  sdsidlp(gicol) = 0.; sdsinlp(gicol) = 0.
+
+                  asmldtp(gicol) = 0.; asmlntp(gicol) = 0.
+                  asmldhp(gicol) = 0.; asmlnhp(gicol) = 0.
+                  asmldmp(gicol) = 0.; asmlnmp(gicol) = 0.
+                  asmldlp(gicol) = 0.; asmlnlp(gicol) = 0.
+                  adsldtp(gicol) = 0.; adslntp(gicol) = 0.
+                  adsldhp(gicol) = 0.; adslnhp(gicol) = 0.
+                  adsldmp(gicol) = 0.; adslnmp(gicol) = 0.
+                  adsldlp(gicol) = 0.; adslnlp(gicol) = 0.
+                  asmidtp(gicol) = 0.; asmintp(gicol) = 0.
+                  asmidhp(gicol) = 0.; asminhp(gicol) = 0.
+                  asmidmp(gicol) = 0.; asminmp(gicol) = 0.
+                  asmidlp(gicol) = 0.; asminlp(gicol) = 0.
+                  adsidtp(gicol) = 0.; adsintp(gicol) = 0.
+                  adsidhp(gicol) = 0.; adsinhp(gicol) = 0.
+                  adsidmp(gicol) = 0.; adsinmp(gicol) = 0.
+                  adsidlp(gicol) = 0.; adsinlp(gicol) = 0.
 
                enddo
 
@@ -1321,6 +1526,7 @@ contains
                      swuflx (gicol,ilev) = zbbfu(ilev,icol) 
                      swdflx (gicol,ilev) = zbbfd(ilev,icol) 
                   enddo
+
                   cotdtp(gicol) = zcotdtp(icol); cotntp(gicol) = zcotntp(icol)
                   cotdhp(gicol) = zcotdhp(icol); cotnhp(gicol) = zcotnhp(icol)
                   cotdmp(gicol) = zcotdmp(icol); cotnmp(gicol) = zcotnmp(icol)
@@ -1329,6 +1535,7 @@ contains
                   cdsdhp(gicol) = zcdsdhp(icol); cdsnhp(gicol) = zcdsnhp(icol)
                   cdsdmp(gicol) = zcdsdmp(icol); cdsnmp(gicol) = zcdsnmp(icol)
                   cdsdlp(gicol) = zcdsdlp(icol); cdsnlp(gicol) = zcdsnlp(icol)
+
                   cotldtp(gicol) = zcotldtp(icol); cotlntp(gicol) = zcotlntp(icol)
                   cotldhp(gicol) = zcotldhp(icol); cotlnhp(gicol) = zcotlnhp(icol)
                   cotldmp(gicol) = zcotldmp(icol); cotlnmp(gicol) = zcotlnmp(icol)
@@ -1345,6 +1552,41 @@ contains
                   cdsidhp(gicol) = zcdsidhp(icol); cdsinhp(gicol) = zcdsinhp(icol)
                   cdsidmp(gicol) = zcdsidmp(icol); cdsinmp(gicol) = zcdsinmp(icol)
                   cdsidlp(gicol) = zcdsidlp(icol); cdsinlp(gicol) = zcdsinlp(icol)
+
+                  ssaldtp(gicol) = zssaldtp(icol); ssalntp(gicol) = zssalntp(icol)
+                  ssaldhp(gicol) = zssaldhp(icol); ssalnhp(gicol) = zssalnhp(icol)
+                  ssaldmp(gicol) = zssaldmp(icol); ssalnmp(gicol) = zssalnmp(icol)
+                  ssaldlp(gicol) = zssaldlp(icol); ssalnlp(gicol) = zssalnlp(icol)
+                  sdsldtp(gicol) = zsdsldtp(icol); sdslntp(gicol) = zsdslntp(icol)
+                  sdsldhp(gicol) = zsdsldhp(icol); sdslnhp(gicol) = zsdslnhp(icol)
+                  sdsldmp(gicol) = zsdsldmp(icol); sdslnmp(gicol) = zsdslnmp(icol)
+                  sdsldlp(gicol) = zsdsldlp(icol); sdslnlp(gicol) = zsdslnlp(icol)
+                  ssaidtp(gicol) = zssaidtp(icol); ssaintp(gicol) = zssaintp(icol)
+                  ssaidhp(gicol) = zssaidhp(icol); ssainhp(gicol) = zssainhp(icol)
+                  ssaidmp(gicol) = zssaidmp(icol); ssainmp(gicol) = zssainmp(icol)
+                  ssaidlp(gicol) = zssaidlp(icol); ssainlp(gicol) = zssainlp(icol)
+                  sdsidtp(gicol) = zsdsidtp(icol); sdsintp(gicol) = zsdsintp(icol)
+                  sdsidhp(gicol) = zsdsidhp(icol); sdsinhp(gicol) = zsdsinhp(icol)
+                  sdsidmp(gicol) = zsdsidmp(icol); sdsinmp(gicol) = zsdsinmp(icol)
+                  sdsidlp(gicol) = zsdsidlp(icol); sdsinlp(gicol) = zsdsinlp(icol)
+
+                  asmldtp(gicol) = zasmldtp(icol); asmlntp(gicol) = zasmlntp(icol)
+                  asmldhp(gicol) = zasmldhp(icol); asmlnhp(gicol) = zasmlnhp(icol)
+                  asmldmp(gicol) = zasmldmp(icol); asmlnmp(gicol) = zasmlnmp(icol)
+                  asmldlp(gicol) = zasmldlp(icol); asmlnlp(gicol) = zasmlnlp(icol)
+                  adsldtp(gicol) = zadsldtp(icol); adslntp(gicol) = zadslntp(icol)
+                  adsldhp(gicol) = zadsldhp(icol); adslnhp(gicol) = zadslnhp(icol)
+                  adsldmp(gicol) = zadsldmp(icol); adslnmp(gicol) = zadslnmp(icol)
+                  adsldlp(gicol) = zadsldlp(icol); adslnlp(gicol) = zadslnlp(icol)
+                  asmidtp(gicol) = zasmidtp(icol); asmintp(gicol) = zasmintp(icol)
+                  asmidhp(gicol) = zasmidhp(icol); asminhp(gicol) = zasminhp(icol)
+                  asmidmp(gicol) = zasmidmp(icol); asminmp(gicol) = zasminmp(icol)
+                  asmidlp(gicol) = zasmidlp(icol); asminlp(gicol) = zasminlp(icol)
+                  adsidtp(gicol) = zadsidtp(icol); adsintp(gicol) = zadsintp(icol)
+                  adsidhp(gicol) = zadsidhp(icol); adsinhp(gicol) = zadsinhp(icol)
+                  adsidmp(gicol) = zadsidmp(icol); adsinmp(gicol) = zadsinmp(icol)
+                  adsidlp(gicol) = zadsidlp(icol); adsinlp(gicol) = zadsinlp(icol)
+
                enddo
 
                do icol = 1,ncol
