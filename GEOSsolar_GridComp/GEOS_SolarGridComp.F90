@@ -5519,7 +5519,10 @@ contains
         if (rrtmgp_delta_scale) then
 
           ! default delta-scaling for liquid
-          forwliq = cloud_props_gpt_liq%g ** 2
+          select type(cloud_props_gpt_liq)
+          class is (ty_optical_props_2str)
+            forwliq = cloud_props_gpt_liq%g ** 2
+          end select
           TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
 
           if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
@@ -5566,7 +5569,10 @@ contains
             TEST_(cloud_props_gpt_ice%delta_scale(forwice))
           else
             ! default delta-scaling for ice
-            forwice = cloud_props_gpt_ice%g ** 2
+            select type(cloud_props_gpt_ice)
+            class is (ty_optical_props_2str)
+              forwice = cloud_props_gpt_ice%g ** 2
+            end select
             TEST_(cloud_props_gpt_ice%delta_scale(forwice))
           endif
         endif
