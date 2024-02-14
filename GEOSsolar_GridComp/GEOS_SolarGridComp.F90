@@ -1877,6 +1877,134 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLNUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORIDENLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORINUMLOPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLNUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORIDENMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORINUMMDPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLNUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORIDENHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORINUMHIPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORLNUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORIDENTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                                                  &
+       SHORT_NAME = 'FORINUMTTPAR',                                                                &
+       LONG_NAME  = 'in_cloud_ice_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator', &
+       UNITS      = '1' ,                                                                          &
+       DIMS       = MAPL_DimsHorzOnly,                                                             &
+       VLOCATION  = MAPL_VLocationNone,                                                            &
+       FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -3257,7 +3385,11 @@ contains
                                         SDSLDHP, SDSLNHP, SDSIDHP, SDSINHP, &
                                         ADSLDHP, ADSLNHP, ADSIDHP, ADSINHP, &
                                         SDSLDTP, SDSLNTP, SDSIDTP, SDSINTP, &
-                                        ADSLDTP, ADSLNTP, ADSIDTP, ADSINTP
+                                        ADSLDTP, ADSLNTP, ADSIDTP, ADSINTP, &
+                                        FORLDLP, FORLNLP, FORIDLP, FORINLP, &
+                                        FORLDMP, FORLNMP, FORIDMP, FORINMP, &
+                                        FORLDHP, FORLNHP, FORIDHP, FORINHP, &
+                                        FORLDTP, FORLNTP, FORIDTP, FORINTP
 
       ! variables for RRTMG code
       ! ------------------------
@@ -3368,6 +3500,8 @@ contains
       real :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
       real :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
       real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
+      real :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
+      real :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
 
       ! radice interpolation for forwice
       integer :: radidx
@@ -3402,9 +3536,8 @@ contains
       ! for cloud presence and condensate (ncols_block,nlay-1)
       real(wp), dimension(:,:), allocatable :: alpha, rcorr
       
-      ! forward scattering fraction for ice crystals (ncols_block,nlay,ngpt)
-      ! (the defdault gliq**2 behavior is used for liquid)
-      real(wp), dimension(:,:,:), allocatable :: forwice
+      ! forward scattering fraction for cloud droplets and ice crystals (ncols_block,nlay,ngpt)
+      real(wp), dimension(:,:,:), allocatable :: forwliq, forwice
       
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
@@ -4225,6 +4358,38 @@ contains
                ADSIDTP    => ptr2(1:Num2do,1)
             case('ASMIDSNUMTTPAR')
                ADSINTP    => ptr2(1:Num2do,1)
+            case('FORLDENLOPAR')
+               FORLDLP    => ptr2(1:Num2do,1)
+            case('FORLNUMLOPAR')
+               FORLNLP    => ptr2(1:Num2do,1)
+            case('FORIDENLOPAR')
+               FORIDLP    => ptr2(1:Num2do,1)
+            case('FORINUMLOPAR')
+               FORINLP    => ptr2(1:Num2do,1)
+            case('FORLDENMDPAR')
+               FORLDMP    => ptr2(1:Num2do,1)
+            case('FORLNUMMDPAR')
+               FORLNMP    => ptr2(1:Num2do,1)
+            case('FORIDENMDPAR')
+               FORIDMP    => ptr2(1:Num2do,1)
+            case('FORINUMMDPAR')
+               FORINMP    => ptr2(1:Num2do,1)
+            case('FORLDENHIPAR')
+               FORLDHP    => ptr2(1:Num2do,1)
+            case('FORLNUMHIPAR')
+               FORLNHP    => ptr2(1:Num2do,1)
+            case('FORIDENHIPAR')
+               FORIDHP    => ptr2(1:Num2do,1)
+            case('FORINUMHIPAR')
+               FORINHP    => ptr2(1:Num2do,1)
+            case('FORLDENTTPAR')
+               FORLDTP    => ptr2(1:Num2do,1)
+            case('FORLNUMTTPAR')
+               FORLNTP    => ptr2(1:Num2do,1)
+            case('FORIDENTTPAR')
+               FORIDTP    => ptr2(1:Num2do,1)
+            case('FORINUMTTPAR')
+               FORINTP    => ptr2(1:Num2do,1)
          end select
 
       enddo INT_VARS_2
@@ -4765,8 +4930,8 @@ contains
 
         allocate(toa_flux(ncols_block,ngpt),__STAT__)
         allocate(cld_mask(ncols_block,LM,ngpt),__STAT__)
-        if (rrtmgp_use_rrtmg_iceflg3_like_forwice) &
-          allocate(forwice(ncols_block,LM,ngpt),__STAT__)
+        allocate(forwliq(ncols_block,LM,ngpt),__STAT__)
+        allocate(forwice(ncols_block,LM,ngpt),__STAT__)
         if (gen_mro) then
           allocate(alpha(ncols_block,LM-1),__STAT__)
           if (cond_inhomo) then
@@ -4833,8 +4998,8 @@ contains
             ! one or more full blocks already processed
             deallocate(toa_flux,      __STAT__)
             deallocate(cld_mask,      __STAT__)
-            if (rrtmgp_use_rrtmg_iceflg3_like_forwice) &
-              deallocate(forwice,     __STAT__)
+            deallocate(forwliq,       __STAT__)
+            deallocate(forwice,       __STAT__)
             if (gen_mro) then
               deallocate(alpha,       __STAT__)
               if (cond_inhomo) then
@@ -4847,8 +5012,8 @@ contains
 
           allocate(toa_flux(ncols_block,ngpt),    __STAT__)
           allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
-          if (rrtmgp_use_rrtmg_iceflg3_like_forwice) &
-            allocate(forwice(ncols_block,LM,ngpt),__STAT__)
+          allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
+          allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
           if (gen_mro) then
             allocate(alpha(ncols_block,LM-1),     __STAT__)
             if (cond_inhomo) then
@@ -5350,13 +5515,15 @@ contains
 
         ! delta-scaling of cloud optical properties (accounts for forward scattering)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+        forwliq = 0.; forwice = 0.  ! default for no delta-scaling
         if (rrtmgp_delta_scale) then
-          ! default delta-scaling for liquid (i.e., forwliq = gliq**2)
-          TEST_(cloud_props_gpt_liq%delta_scale())
+
+          ! default delta-scaling for liquid
+          forwliq = cloud_props_gpt_liq%g ** 2
+          TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
 
           if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
             ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
-            forwice = 0.  ! default
             select type(cloud_props_gpt_ice)
             class is (ty_optical_props_2str)
               radice_lwr = cloud_optics%get_min_radius_ice()
@@ -5398,7 +5565,9 @@ contains
             end select
             TEST_(cloud_props_gpt_ice%delta_scale(forwice))
           else
-            TEST_(cloud_props_gpt_ice%delta_scale())
+            ! default delta-scaling for ice
+            forwice = cloud_props_gpt_ice%g ** 2
+            TEST_(cloud_props_gpt_ice%delta_scale(forwice))
           endif
         endif
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
@@ -5435,6 +5604,10 @@ contains
             ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
             SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
             ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
+            FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
+            FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
+            FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
+            FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
 
             ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
@@ -5464,7 +5637,8 @@ contains
                   sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
                   sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
                   staulp = sltaulp + sitaulp
-                  sltaussalp = 0.; sltaussaglp = 0.; sitaussalp = 0.; sitaussaglp = 0.
+                  sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
+                  sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
                   if (sltaulp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5473,6 +5647,9 @@ contains
                       sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
                                         cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
                                         cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                      sltaussaflp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                                        forwliq(isub,LCLDLM:LM,igpt))
                     end select
                     CDSLDLP(icol) = CDSLDLP(icol) + wgt
                     CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
@@ -5480,6 +5657,8 @@ contains
                     SDSLNLP(icol) = SDSLNLP(icol) + wgt * sltaussalp
                     ADSLDLP(icol) = ADSLDLP(icol) + wgt * sltaussalp
                     ADSLNLP(icol) = ADSLNLP(icol) + wgt * sltaussaglp
+                    FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
+                    FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
                   end if
                   if (sitaulp > 0.) then
                     select type(cloud_props_gpt_ice)
@@ -5489,6 +5668,9 @@ contains
                       sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
                                         cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
                                         cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                      sitaussaflp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                                        forwice(isub,LCLDLM:LM,igpt))
                     end select
                     CDSIDLP(icol) = CDSIDLP(icol) + wgt
                     CDSINLP(icol) = CDSINLP(icol) + wgt * sitaulp
@@ -5496,6 +5678,8 @@ contains
                     SDSINLP(icol) = SDSINLP(icol) + wgt * sitaussalp
                     ADSIDLP(icol) = ADSIDLP(icol) + wgt * sitaussalp
                     ADSINLP(icol) = ADSINLP(icol) + wgt * sitaussaglp
+                    FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
+                    FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
                   end if
                   if (staulp > 0.) then
                     CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
@@ -5506,7 +5690,8 @@ contains
                   sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   staump = sltaump + sitaump
-                  sltaussamp = 0.; sltaussagmp = 0.; sitaussamp = 0.; sitaussagmp = 0.
+                  sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
+                  sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
                   if (sltaump > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5515,6 +5700,9 @@ contains
                       sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
                                         cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
                                         cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                      sltaussafmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                        forwliq(isub,LCLDMH:LCLDLM-1,igpt))
                     end select
                     CDSLDMP(icol) = CDSLDMP(icol) + wgt
                     CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
@@ -5522,6 +5710,8 @@ contains
                     SDSLNMP(icol) = SDSLNMP(icol) + wgt * sltaussamp
                     ADSLDMP(icol) = ADSLDMP(icol) + wgt * sltaussamp
                     ADSLNMP(icol) = ADSLNMP(icol) + wgt * sltaussagmp
+                    FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
+                    FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
                   end if
                   if (sitaump > 0.) then
                     select type(cloud_props_gpt_ice)
@@ -5531,6 +5721,9 @@ contains
                       sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
                                         cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
                                         cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                      sitaussafmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                        forwice(isub,LCLDMH:LCLDLM-1,igpt))
                     end select
                     CDSIDMP(icol) = CDSIDMP(icol) + wgt
                     CDSINMP(icol) = CDSINMP(icol) + wgt * sitaump
@@ -5538,6 +5731,8 @@ contains
                     SDSINMP(icol) = SDSINMP(icol) + wgt * sitaussamp
                     ADSIDMP(icol) = ADSIDMP(icol) + wgt * sitaussamp
                     ADSINMP(icol) = ADSINMP(icol) + wgt * sitaussagmp
+                    FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
+                    FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
                   end if
                   if (staump > 0.) then
                     CDSNMP(icol) = CDSNMP(icol) + wgt * staump
@@ -5548,7 +5743,8 @@ contains
                   sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
                   sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
                   stauhp = sltauhp + sitauhp
-                  sltaussahp = 0.; sltaussaghp = 0.; sitaussahp = 0.; sitaussaghp = 0.
+                  sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
+                  sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
                   if (sltauhp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5557,6 +5753,9 @@ contains
                       sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
                                         cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
                                         cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                      sltaussafhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                        forwliq(isub,1:LCLDMH-1,igpt))
                     end select
                     CDSLDHP(icol) = CDSLDHP(icol) + wgt
                     CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
@@ -5564,6 +5763,8 @@ contains
                     SDSLNHP(icol) = SDSLNHP(icol) + wgt * sltaussahp
                     ADSLDHP(icol) = ADSLDHP(icol) + wgt * sltaussahp
                     ADSLNHP(icol) = ADSLNHP(icol) + wgt * sltaussaghp
+                    FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
+                    FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
                   end if
                   if (sitauhp > 0.) then
                     select type(cloud_props_gpt_ice)
@@ -5573,6 +5774,9 @@ contains
                       sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
                                         cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
                                         cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                      sitaussafhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                        forwice(isub,1:LCLDMH-1,igpt))
                     end select
                     CDSIDHP(icol) = CDSIDHP(icol) + wgt
                     CDSINHP(icol) = CDSINHP(icol) + wgt * sitauhp
@@ -5580,6 +5784,8 @@ contains
                     SDSINHP(icol) = SDSINHP(icol) + wgt * sitaussahp
                     ADSIDHP(icol) = ADSIDHP(icol) + wgt * sitaussahp
                     ADSINHP(icol) = ADSINHP(icol) + wgt * sitaussaghp
+                    FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
+                    FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
                   end if
                   if (stauhp > 0.) then
                     CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
@@ -5594,6 +5800,8 @@ contains
                   sitaussatp = sitaussalp + sitaussamp + sitaussahp
                   sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
                   sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                  sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
+                  sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
                   if (sltautp > 0.) then
                     CDSLDTP(icol) = CDSLDTP(icol) + wgt
                     CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
@@ -5601,6 +5809,8 @@ contains
                     SDSLNTP(icol) = SDSLNTP(icol) + wgt * sltaussatp
                     ADSLDTP(icol) = ADSLDTP(icol) + wgt * sltaussatp
                     ADSLNTP(icol) = ADSLNTP(icol) + wgt * sltaussagtp
+                    FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
+                    FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
                   end if
                   if (sitautp > 0.) then
                     CDSIDTP(icol) = CDSIDTP(icol) + wgt
@@ -5609,6 +5819,8 @@ contains
                     SDSINTP(icol) = SDSINTP(icol) + wgt * sitaussatp
                     ADSIDTP(icol) = ADSIDTP(icol) + wgt * sitaussatp
                     ADSINTP(icol) = ADSINTP(icol) + wgt * sitaussagtp
+                    FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
+                    FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
                   end if
                   if (stautp > 0.) then
                     CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
@@ -5742,8 +5954,7 @@ contains
       deallocate(flux_up_allsky,flux_net_allsky,__STAT__)
       deallocate(bnd_flux_dn_allsky,bnd_flux_net_allsky,bnd_flux_dir_allsky,__STAT__)
       deallocate(seeds,urand,cld_mask,__STAT__)
-      if (rrtmgp_use_rrtmg_iceflg3_like_forwice) &
-        deallocate(forwice,__STAT__)
+      deallocate(forwliq,forwice,__STAT__)
       if (gen_mro) then
         deallocate(adl,alpha,urand_aux,__STAT__)
         if (cond_inhomo) then
