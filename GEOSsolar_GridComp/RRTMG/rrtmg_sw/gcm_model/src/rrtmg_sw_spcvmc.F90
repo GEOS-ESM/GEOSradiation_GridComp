@@ -39,6 +39,7 @@ contains
       pltaucmc, plomgcmc, plasycmc, &
       pitaormc, piomormc, piasormc, &
       pitaucmc, piomgcmc, piasycmc, &
+      forwliq, forwice, &
       ptaua, pasya, pomga, prmu0, adjflux, &
       isolvar, svar_f, svar_s, svar_i, &
       svar_f_bnd, svar_s_bnd, svar_i_bnd, &
