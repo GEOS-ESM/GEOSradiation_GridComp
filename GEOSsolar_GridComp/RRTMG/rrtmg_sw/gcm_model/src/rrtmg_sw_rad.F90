@@ -111,6 +111,11 @@ contains
       adsidtp, adsidhp, adsidmp, adsidlp, &
       adsintp, adsinhp, adsinmp, adsinlp, &
 
+      forldtp, forldhp, forldmp, forldlp, &
+      forlntp, forlnhp, forlnmp, forlnlp, &
+      foridtp, foridhp, foridmp, foridlp, &
+      forintp, forinhp, forinmp, forinlp, &
+
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -330,6 +335,13 @@ contains
         adsidtp, adsidhp, adsidmp, adsidlp, &
         adsintp, adsinhp, adsinmp, adsinlp
 
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, intent(out), dimension(ncol) :: &
+        forldtp, forldhp, forldmp, forldlp, &
+        forlntp, forlnhp, forlnmp, forlnlp, &
+        foridtp, foridhp, foridmp, foridlp, &
+        forintp, forinhp, forinmp, forinlp
+
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
       ! if (do_drfband), must point to (ncol,nbndsw) space.
@@ -417,6 +429,11 @@ contains
          adsidtp, adsidhp, adsidmp, adsidlp, &
          adsintp, adsinhp, adsinmp, adsinlp, &
 
+         forldtp, forldhp, forldmp, forldlp, &
+         forlntp, forlnhp, forlnmp, forlnlp, &
+         foridtp, foridhp, foridmp, foridlp, &
+         forintp, forinhp, forinmp, forinlp, &
+
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
@@ -470,6 +487,11 @@ contains
       asmintp, asminhp, asminmp, asminlp, &
       adsidtp, adsidhp, adsidmp, adsidlp, &
       adsintp, adsinhp, adsinmp, adsinlp, &
+
+      forldtp, forldhp, forldmp, forldlp, &
+      forlntp, forlnhp, forlnmp, forlnlp, &
+      foridtp, foridhp, foridmp, foridlp, &
+      forintp, forinhp, forinmp, forinlp, &
 
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
@@ -618,6 +640,13 @@ contains
         adsidtp, adsidhp, adsidmp, adsidlp, &
         adsintp, adsinhp, adsinmp, adsinlp
 
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        forldtp, forldhp, forldmp, forldlp, &
+        forlntp, forlnhp, forlnmp, forlnlp, &
+        foridtp, foridhp, foridmp, foridlp, &
+        forintp, forinhp, forinmp, forinlp
+
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
       ! if (do_drfband), must point to (gncol,nbndsw) space.
@@ -706,6 +735,9 @@ contains
         itaormc, iomormc, iasormc, &
         itaucmc, iomgcmc, iasycmc
       
+      ! McICA phase-split forward scattering fractions 
+      real, dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
 
@@ -777,6 +809,13 @@ contains
         zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
         zadsintp, zadsinhp, zadsinmp, zadsinlp
       
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zforldtp, zforldhp, zforldmp, zforldlp, &
+        zforlntp, zforlnhp, zforlnmp, zforlnlp, &
+        zforidtp, zforidhp, zforidmp, zforidlp, &
+        zforintp, zforinhp, zforinmp, zforinlp
+
       ! Solar variability multipliers
       ! -----------------------------
 
@@ -1324,7 +1363,8 @@ contains
                   ltaormc, lomormc, lasormc, &
                   ltaucmc, lomgcmc, lasycmc, &
                   itaormc, iomormc, iasormc, &
-                  itaucmc, iomgcmc, iasycmc)
+                  itaucmc, iomgcmc, iasycmc, &
+                  forwliq, forwice)
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
             end if
 
@@ -1350,6 +1390,7 @@ contains
                ltaucmc, lomgcmc, lasycmc, &
                itaormc, iomormc, iasormc, &
                itaucmc, iomgcmc, iasycmc, &
+               forwliq, forwice, &
                taua, asya, omga, cossza, adjflux, &
                isolvar, svar_f, svar_s, svar_i, &
                svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -1393,6 +1434,11 @@ contains
                zasmintp, zasminhp, zasminmp, zasminlp, &
                zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
                zadsintp, zadsinhp, zadsinmp, zadsinlp, &
+
+               zforldtp, zforldhp, zforldmp, zforldlp, &
+               zforlntp, zforlnhp, zforlnmp, zforlnlp, &
+               zforidtp, zforidhp, zforidmp, zforidlp, &
+               zforintp, zforinhp, zforinmp, zforinlp, &
 
                do_drfband, zdrband, zdfband, &
                __RC__)
@@ -1480,6 +1526,15 @@ contains
                   adsidhp(gicol) = 0.; adsinhp(gicol) = 0.
                   adsidmp(gicol) = 0.; adsinmp(gicol) = 0.
                   adsidlp(gicol) = 0.; adsinlp(gicol) = 0.
+
+                  forldtp(gicol) = 0.; forlntp(gicol) = 0.
+                  forldhp(gicol) = 0.; forlnhp(gicol) = 0.
+                  forldmp(gicol) = 0.; forlnmp(gicol) = 0.
+                  forldlp(gicol) = 0.; forlnlp(gicol) = 0.
+                  foridtp(gicol) = 0.; forintp(gicol) = 0.
+                  foridhp(gicol) = 0.; forinhp(gicol) = 0.
+                  foridmp(gicol) = 0.; forinmp(gicol) = 0.
+                  foridlp(gicol) = 0.; forinlp(gicol) = 0.
 
                enddo
 
@@ -1586,6 +1641,15 @@ contains
                   adsidhp(gicol) = zadsidhp(icol); adsinhp(gicol) = zadsinhp(icol)
                   adsidmp(gicol) = zadsidmp(icol); adsinmp(gicol) = zadsinmp(icol)
                   adsidlp(gicol) = zadsidlp(icol); adsinlp(gicol) = zadsinlp(icol)
+
+                  forldtp(gicol) = zforldtp(icol); forlntp(gicol) = zforlntp(icol)
+                  forldhp(gicol) = zforldhp(icol); forlnhp(gicol) = zforlnhp(icol)
+                  forldmp(gicol) = zforldmp(icol); forlnmp(gicol) = zforlnmp(icol)
+                  forldlp(gicol) = zforldlp(icol); forlnlp(gicol) = zforlnlp(icol)
+                  foridtp(gicol) = zforidtp(icol); forintp(gicol) = zforintp(icol)
+                  foridhp(gicol) = zforidhp(icol); forinhp(gicol) = zforinhp(icol)
+                  foridmp(gicol) = zforidmp(icol); forinmp(gicol) = zforinmp(icol)
+                  foridlp(gicol) = zforidlp(icol); forinlp(gicol) = zforinlp(icol)
 
                enddo
 

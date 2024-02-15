@@ -39,7 +39,8 @@ contains
                          ltaormc, lomormc, lasormc, &
                          ltaucmc, lomgcmc, lasycmc, &
                          itaormc, iomormc, iasormc, &
-                         itaucmc, iomgcmc, iasycmc)
+                         itaucmc, iomgcmc, iasycmc, &
+                         forwliq, forwice)
    ! ----------------------------------------------------------------------
 
       ! Compute the cloud optical properties for each cloudy layer
@@ -83,6 +84,9 @@ contains
         itaormc, iomormc, iasormc, &
         itaucmc, iomgcmc, iasycmc
 
+      ! McICA phase-split forward scattering fractions
+      real, intent(out), dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+
       ! ------- Local -------
 
       real, parameter :: epsg = 1.e-06     ! small number cf 1. for gice limit
@@ -101,8 +105,8 @@ contains
       real :: fdelta
 
       real, dimension (nlay,ngptsw,pncol) :: &
-         extcoice, gice, ssacoice, forwice, &
-         extcoliq, gliq, ssacoliq, forwliq
+         extcoice, gice, ssacoice, &
+         extcoliq, gliq, ssacoliq
 
       ! Notes by PMN:
       ! The optical properties per unit ice (liquid) amount (e.g., extcoice)
