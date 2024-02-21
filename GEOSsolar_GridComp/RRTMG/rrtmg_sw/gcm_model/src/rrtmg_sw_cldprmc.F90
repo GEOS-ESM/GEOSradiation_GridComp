@@ -35,12 +35,16 @@ contains
    ! ----------------------------------------------------------------------
    subroutine cldprmc_sw(pncol, ncol, nlay, iceflag, liqflag, &
                          cldymc, ciwpmc, clwpmc, reicmc, relqmc, &
+#ifdef SOLAR_RADVAL
                          taormc, taucmc, ssacmc, asmcmc, &
                          ltaormc, lomormc, lasormc, &
                          ltaucmc, lomgcmc, lasycmc, &
                          itaormc, iomormc, iasormc, &
                          itaucmc, iomgcmc, iasycmc, &
                          forwliq, forwice)
+#else
+                         taormc, taucmc, ssacmc, asmcmc)
+#endif
    ! ----------------------------------------------------------------------
 
       ! Compute the cloud optical properties for each cloudy layer
@@ -77,6 +81,7 @@ contains
       real, intent(out) :: asmcmc (nlay,ngptsw,pncol)  ! asymmetry param (delta scaled)
       real, intent(out) :: taormc (nlay,ngptsw,pncol)  ! cloud opt depth (non-delta scaled)
 
+#ifdef SOLAR_RADVAL
       ! McICA phase-split optical properties (original "ormc" and delta-scaled)
       real, intent(out), dimension (nlay,ngptsw,pncol) :: &
         ltaormc, lomormc, lasormc, &
@@ -86,6 +91,7 @@ contains
 
       ! McICA phase-split forward scattering fractions
       real, intent(out), dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+#endif
 
       ! ------- Local -------
 
@@ -107,6 +113,10 @@ contains
       real, dimension (nlay,ngptsw,pncol) :: &
          extcoice, gice, ssacoice, &
          extcoliq, gliq, ssacoliq
+
+#ifndef SOLAR_RADVAL
+      real, dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+#endif
 
       ! Notes by PMN:
       ! The optical properties per unit ice (liquid) amount (e.g., extcoice)
@@ -308,12 +318,14 @@ contains
 
                   ! original (pre-delta-scaling) optical properties
                   taormc (lay,ig,icol) = tauliqorig + tauiceorig
+#ifdef SOLAR_RADVAL
                   ltaormc(lay,ig,icol) = tauliqorig
                   itaormc(lay,ig,icol) = tauiceorig
                   lomormc(lay,ig,icol) = ssacoliq(lay,ig,icol)
                   iomormc(lay,ig,icol) = ssacoice(lay,ig,icol)
                   lasormc(lay,ig,icol) = gliq    (lay,ig,icol)
                   iasormc(lay,ig,icol) = gice    (lay,ig,icol)
+#endif
 
                   ssaliq = ssacoliq(lay,ig,icol) * (1. - forwliq(lay,ig,icol)) &
                            / (1. - forwliq(lay,ig,icol) * ssacoliq(lay,ig,icol))
@@ -327,6 +339,7 @@ contains
 
                   ! delta-scaled optical properties
                   taucmc (lay,ig,icol) = tauliq + tauice
+#ifdef SOLAR_RADVAL
                   ltaucmc(lay,ig,icol) = tauliq
                   itaucmc(lay,ig,icol) = tauice
                   lomgcmc(lay,ig,icol) = ssaliq
@@ -335,6 +348,7 @@ contains
                     (gliq(lay,ig,icol) - forwliq(lay,ig,icol)) / (1. - forwliq(lay,ig,icol))
                   iasycmc(lay,ig,icol) = &
                     (gice(lay,ig,icol) - forwice(lay,ig,icol)) / (1. - forwice(lay,ig,icol))
+#endif
 
                   ! Ensure non-zero taucmc and scatice
 !? pmn because of normalization below?
@@ -377,6 +391,7 @@ contains
                   ssacmc (lay,ig,icol) = 1.
                   asmcmc (lay,ig,icol) = 0.
 
+#ifdef SOLAR_RADVAL
                   ltaormc(lay,ig,icol) = 0.
                   lomormc(lay,ig,icol) = 1.
                   lasormc(lay,ig,icol) = 0.
@@ -392,6 +407,7 @@ contains
                   itaucmc(lay,ig,icol) = 0.
                   iomgcmc(lay,ig,icol) = 1.
                   iasycmc(lay,ig,icol) = 0.
+#endif
                  
 
                endif  ! cloud present

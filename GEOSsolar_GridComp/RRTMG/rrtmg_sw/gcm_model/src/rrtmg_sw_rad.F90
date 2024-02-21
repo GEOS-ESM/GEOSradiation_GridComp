@@ -81,6 +81,8 @@ contains
 
       cotdtp, cotdhp, cotdmp, cotdlp, &  ! non-delta-scaled
       cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
       cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
       cdsntp, cdsnhp, cdsnmp, cdsnlp, &
 
@@ -115,6 +117,7 @@ contains
       forlntp, forlnhp, forlnmp, forlnlp, &
       foridtp, foridhp, foridmp, foridlp, &
       forintp, forinhp, forinmp, forinlp, &
+#endif
 
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
@@ -298,7 +301,10 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(ncol) :: &
         cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
-        cotntp, cotnhp, cotnmp, cotnlp, &
+        cotntp, cotnhp, cotnmp, cotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(ncol) :: &
         cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
         cdsntp, cdsnhp, cdsnmp, cdsnlp
 
@@ -341,6 +347,7 @@ contains
         forlntp, forlnhp, forlnmp, forlnlp, &
         foridtp, foridhp, foridmp, foridlp, &
         forintp, forinhp, forinmp, forinlp
+#endif
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -399,6 +406,8 @@ contains
 
          cotdtp, cotdhp, cotdmp, cotdlp, &
          cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
          cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
          cdsntp, cdsnhp, cdsnmp, cdsnlp, &
 
@@ -433,6 +442,7 @@ contains
          forlntp, forlnhp, forlnmp, forlnlp, &
          foridtp, foridhp, foridmp, foridlp, &
          forintp, forinhp, forinmp, forinlp, &
+#endif
 
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
@@ -458,6 +468,8 @@ contains
 
       cotdtp, cotdhp, cotdmp, cotdlp, &
       cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
       cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
       cdsntp, cdsnhp, cdsnmp, cdsnlp, &
 
@@ -492,6 +504,7 @@ contains
       forlntp, forlnhp, forlnmp, forlnlp, &
       foridtp, foridhp, foridmp, foridlp, &
       forintp, forinhp, forinmp, forinlp, &
+#endif
 
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
@@ -603,7 +616,10 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(gncol) :: &
         cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
-        cotntp, cotnhp, cotnmp, cotnlp, &
+        cotntp, cotnhp, cotnmp, cotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(gncol) :: &
         cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
         cdsntp, cdsnhp, cdsnmp, cdsnlp
 
@@ -646,6 +662,7 @@ contains
         forlntp, forlnhp, forlnmp, forlnlp, &
         foridtp, foridhp, foridmp, foridlp, &
         forintp, forinhp, forinmp, forinlp
+#endif
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -728,6 +745,7 @@ contains
       real :: ssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
       real :: asmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
 
+#ifdef SOLAR_RADVAL
       ! McICA phase-split optical properties (original "ormc" and delta-scaled)
       real, dimension (nlay,ngptsw,pncol) :: &
         ltaormc, lomormc, lasormc, &
@@ -737,6 +755,7 @@ contains
       
       ! McICA phase-split forward scattering fractions 
       real, dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+#endif
 
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
@@ -772,7 +791,10 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, dimension(pncol) :: &
         zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
-        zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+        zcotntp, zcotnhp, zcotnmp, zcotnlp
+
+#ifdef SOLAR_RADVAL
+      real, dimension(pncol) :: &
         zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
         zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
 
@@ -815,6 +837,7 @@ contains
         zforlntp, zforlnhp, zforlnmp, zforlnlp, &
         zforidtp, zforidhp, zforidmp, zforidlp, &
         zforintp, zforinhp, zforinmp, zforinlp
+#endif
 
       ! Solar variability multipliers
       ! -----------------------------
@@ -1359,12 +1382,16 @@ contains
                call cldprmc_sw( &
                   pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                   cldymcl, ciwpmcl, clwpmcl, rei, rel, &
+#ifdef SOLAR_RADVAL
                   taormc, taucmc, ssacmc, asmcmc, &
                   ltaormc, lomormc, lasormc, &
                   ltaucmc, lomgcmc, lasycmc, &
                   itaormc, iomormc, iasormc, &
                   itaucmc, iomgcmc, iasycmc, &
                   forwliq, forwice)
+#else
+                  taormc, taucmc, ssacmc, asmcmc)
+#endif
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
             end if
 
@@ -1386,11 +1413,13 @@ contains
                cc, pncol, ncol, nlay, &
                albdif, albdir, &
                cldymcl, taucmc, asmcmc, ssacmc, taormc, &
+#ifdef SOLAR_RADVAL
                ltaormc, lomormc, lasormc, &
                ltaucmc, lomgcmc, lasycmc, &
                itaormc, iomormc, iasormc, &
                itaucmc, iomgcmc, iasycmc, &
                forwliq, forwice, &
+#endif
                taua, asya, omga, cossza, adjflux, &
                isolvar, svar_f, svar_s, svar_i, &
                svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -1405,6 +1434,8 @@ contains
 
                zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
                zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+
+#ifdef SOLAR_RADVAL
                zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
                zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
 
@@ -1439,6 +1470,7 @@ contains
                zforlntp, zforlnhp, zforlnmp, zforlnlp, &
                zforidtp, zforidhp, zforidmp, zforidlp, &
                zforintp, zforinhp, zforinmp, zforinlp, &
+#endif
 
                do_drfband, zdrband, zdfband, &
                __RC__)
@@ -1471,6 +1503,8 @@ contains
                   cotdhp(gicol) = 0.; cotnhp(gicol) = 0.
                   cotdmp(gicol) = 0.; cotnmp(gicol) = 0.
                   cotdlp(gicol) = 0.; cotnlp(gicol) = 0.
+
+#ifdef SOLAR_RADVAL
                   cdsdtp(gicol) = 0.; cdsntp(gicol) = 0.
                   cdsdhp(gicol) = 0.; cdsnhp(gicol) = 0.
                   cdsdmp(gicol) = 0.; cdsnmp(gicol) = 0.
@@ -1535,6 +1569,7 @@ contains
                   foridhp(gicol) = 0.; forinhp(gicol) = 0.
                   foridmp(gicol) = 0.; forinmp(gicol) = 0.
                   foridlp(gicol) = 0.; forinlp(gicol) = 0.
+#endif
 
                enddo
 
@@ -1586,6 +1621,8 @@ contains
                   cotdhp(gicol) = zcotdhp(icol); cotnhp(gicol) = zcotnhp(icol)
                   cotdmp(gicol) = zcotdmp(icol); cotnmp(gicol) = zcotnmp(icol)
                   cotdlp(gicol) = zcotdlp(icol); cotnlp(gicol) = zcotnlp(icol)
+
+#ifdef SOLAR_RADVAL
                   cdsdtp(gicol) = zcdsdtp(icol); cdsntp(gicol) = zcdsntp(icol)
                   cdsdhp(gicol) = zcdsdhp(icol); cdsnhp(gicol) = zcdsnhp(icol)
                   cdsdmp(gicol) = zcdsdmp(icol); cdsnmp(gicol) = zcdsnmp(icol)
@@ -1650,6 +1687,7 @@ contains
                   foridhp(gicol) = zforidhp(icol); forinhp(gicol) = zforinhp(icol)
                   foridmp(gicol) = zforidmp(icol); forinmp(gicol) = zforinmp(icol)
                   foridlp(gicol) = zforidlp(icol); forinlp(gicol) = zforinlp(icol)
+#endif
 
                enddo
 

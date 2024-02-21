@@ -35,11 +35,13 @@ contains
       cc, pncol, ncol, nlay, &
       palbd, palbp, &
       pcldymc, ptaucmc, pasycmc, pomgcmc, ptaormc, &
+#ifdef SOLAR_RADVAL
       pltaormc, plomormc, plasormc, &
       pltaucmc, plomgcmc, plasycmc, &
       pitaormc, piomormc, piasormc, &
       pitaucmc, piomgcmc, piasycmc, &
       forwliq, forwice, &
+#endif
       ptaua, pasya, pomga, prmu0, adjflux, &
       isolvar, svar_f, svar_s, svar_i, &
       svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -54,6 +56,8 @@ contains
 
       zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
       zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+
+#ifdef SOLAR_RADVAL
       zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
       zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
 
@@ -88,6 +92,7 @@ contains
       zforlntp, zforlnhp, zforlnmp, zforlnlp, &
       zforidtp, zforidhp, zforidmp, zforidlp, &
       zforintp, zforinhp, zforinmp, zforinlp, &
+#endif
 
       do_drfband, zdrband, zdfband, &
       RC)
@@ -162,6 +167,7 @@ contains
       real,    intent(in) :: pomgcmc (nlay,ngptsw,pncol)  ! cloud single scattering albedo [mcica]
       real,    intent(in) :: ptaormc (nlay,ngptsw,pncol)  ! cloud optical depth, non-delta scaled [mcica]
    
+#ifdef SOLAR_RADVAL
       ! McICA non-delta-scaled ("original") phase-split cloud optical properties
       real, intent(in) :: pltaormc(nlay,ngptsw,pncol)  ! liq optical depth
       real, intent(in) :: plomormc(nlay,ngptsw,pncol)  ! liq single scattering albedo
@@ -180,6 +186,7 @@ contains
 
       ! McICA phase-split forward scattering fractions 
       real, intent(in), dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+#endif
 
       real, intent(in) :: ptaua (nlay,nbndsw,pncol)  ! aerosol optical depth
       real, intent(in) :: pasya (nlay,nbndsw,pncol)  ! aerosol asymmetry parameter
@@ -239,7 +246,10 @@ contains
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(pncol) :: &
         zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
-        zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+        zcotntp, zcotnhp, zcotnmp, zcotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(pncol) :: &
         zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
         zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
       
@@ -282,6 +292,7 @@ contains
         zforlntp, zforlnhp, zforlnmp, zforlnlp, &
         zforidtp, zforidhp, zforidmp, zforidlp, &
         zforintp, zforinhp, zforinmp, zforinlp
+#endif
 
       ! Surface downwelling direct and diffuse fluxes (W/m2)
       !    in each band (all-sky): Only filled if (do_drfband).
@@ -297,6 +308,7 @@ contains
 
       real :: zf, zwf, zincflx, wgt
       real :: staotp, staohp, staomp, staolp
+#ifdef SOLAR_RADVAL
       real :: stautp, stauhp, staump, staulp
       real :: sltaotp, sltaohp, sltaomp, sltaolp
       real :: sltautp, sltauhp, sltaump, sltaulp
@@ -312,6 +324,7 @@ contains
       real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
       real :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
       real :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
+#endif
 
       real :: zgco   (nlay,ngptsw,pncol)
       real :: zomco  (nlay,ngptsw,pncol)  
@@ -664,6 +677,8 @@ contains
       zcotdhp = 0.; zcotnhp = 0.
       zcotdmp = 0.; zcotnmp = 0.
       zcotdlp = 0.; zcotnlp = 0.
+
+#ifdef SOLAR_RADVAL
       zcdsdtp = 0.; zcdsntp = 0.
       zcdsdhp = 0.; zcdsnhp = 0.
       zcdsdmp = 0.; zcdsnmp = 0.
@@ -728,6 +743,7 @@ contains
       zforidhp = 0.; zforinhp = 0.
       zforidmp = 0.; zforinmp = 0.
       zforidlp = 0.; zforinlp = 0.
+#endif
 
       ! can only be non-zero for potentially cloudy columns
       if (cc == 2) then
@@ -765,6 +781,7 @@ contains
                   zcotdlp(icol) = zcotdlp(icol) + wgt
                   zcotnlp(icol) = zcotnlp(icol) + wgt * staolp
                end if
+#ifdef SOLAR_RADVAL
                staulp = sum(ptaucmc(1:cloudLM,iw,icol),dim=1)
                if (staulp > 0.) then
                   zcdsdlp(icol) = zcdsdlp(icol) + wgt
@@ -844,6 +861,7 @@ contains
                   zforidlp(icol) = zforidlp(icol) + wgt * sitaussalp
                   zforinlp(icol) = zforinlp(icol) + wgt * sitaussaflp
                end if
+#endif
 
                ! mid pressure layer
                staomp = sum(ptaormc(cloudLM+1:cloudMH,iw,icol),dim=1)
@@ -851,6 +869,7 @@ contains
                   zcotdmp(icol) = zcotdmp(icol) + wgt
                   zcotnmp(icol) = zcotnmp(icol) + wgt * staomp
                end if
+#ifdef SOLAR_RADVAL
                staump = sum(ptaucmc(cloudLM+1:cloudMH,iw,icol),dim=1)
                if (staump > 0.) then
                   zcdsdmp(icol) = zcdsdmp(icol) + wgt
@@ -930,6 +949,7 @@ contains
                   zforidmp(icol) = zforidmp(icol) + wgt * sitaussamp
                   zforinmp(icol) = zforinmp(icol) + wgt * sitaussafmp
                end if
+#endif
 
                ! high pressure layer
                staohp = sum(ptaormc(cloudMH+1:nlay,iw,icol),dim=1)
@@ -937,6 +957,7 @@ contains
                   zcotdhp(icol) = zcotdhp(icol) + wgt
                   zcotnhp(icol) = zcotnhp(icol) + wgt * staohp
                end if
+#ifdef SOLAR_RADVAL
                stauhp = sum(ptaucmc(cloudMH+1:nlay,iw,icol),dim=1)
                if (stauhp > 0.) then
                   zcdsdhp(icol) = zcdsdhp(icol) + wgt
@@ -1016,6 +1037,7 @@ contains
                   zforidhp(icol) = zforidhp(icol) + wgt * sitaussahp
                   zforinhp(icol) = zforinhp(icol) + wgt * sitaussafhp
                end if
+#endif
 
                ! whole subcolumn
                staotp = staolp + staomp + staohp
@@ -1023,6 +1045,7 @@ contains
                   zcotdtp(icol) = zcotdtp(icol) + wgt
                   zcotntp(icol) = zcotntp(icol) + wgt * staotp
                end if
+#ifdef SOLAR_RADVAL
                stautp = staulp + staump + stauhp
                if (stautp > 0.) then
                   zcdsdtp(icol) = zcdsdtp(icol) + wgt
@@ -1079,6 +1102,7 @@ contains
                   zforidtp(icol) = zforidtp(icol) + wgt * sitaussatp
                   zforintp(icol) = zforintp(icol) + wgt * sitaussaftp
                end if
+#endif
 
             end do ! iw
          end do  ! icol

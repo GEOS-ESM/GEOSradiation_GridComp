@@ -1,6 +1,15 @@
 #include "MAPL_Generic.h"
 #define LIN2_ARG1(VAR,I,J,FINT) (VAR(I,J) + FINT * (VAR(I+1,J)-VAR(I,J)))
 
+! ==============================================================================
+! Note: the SOLAR_RADVAL compile time flag (enabled with the ENABLE_SOLAR_RADVAL 
+! CMake option) is used to select solar diagnostic features which are generally
+! more advanced than what a regular user will need and mainly for use by the
+! the radiation code development team. They are chosen by compile time flag 
+! because they bloat the restart state and may also incur other computational
+! costs that are not warranted under normal (non-development) use.
+! ==============================================================================
+
 module GEOS_SolarGridCompMod
 
 !=============================================================================
@@ -208,7 +217,7 @@ module GEOS_SolarGridCompMod
   ! ----------------------------------------------------------------
   ! For an RRTMGP forwice calculation approximating RRTMG iceflag=3:
   ! ----------------------------------------------------------------
-  ! These fdlice3_rrtmgp are exactly the dflice3 of RRTMG except they
+  ! These fdlice3_rrtmgp are exactly the fdlice3 of RRTMG except they
   ! have been reordered (band 14 of RRTMG becomes band 1 of RRTMGP).
   ! The small discrepancy in the upper wavenumr edge of RRTMGP band1
   ! is ignored. Its a difference of only 80 cm-1 or 3.73 um for RRTMGP
@@ -843,7 +852,7 @@ contains
        FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
     ! Note: the four CLDxxSW diagnostics below represent super-layer cloud
-    ! fractions based on the subcolumn cloud generation called in RRTMG SW.
+    ! fractions based on the subcolumn cloud generation called in RRTMG[P] SW.
     ! They are sunlit only fields and generated only at the SW REFRESH frequency,
     ! NOT at the heartbeat. As such, they are useful for diagnostic comparisons
     ! with the CLDxx set above. But they should NOT be used to subsample fields
@@ -892,13 +901,19 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                      &
        FRIENDLYTO = trim(COMP_NAME),                                   __RC__)
 
-    ! Note: The following four TAUxxPAR are REFRESH-frequency fields. As such, all
-    ! the important provisos given in the comment on CLDxxSW above apply to these
-    ! fields as well. Please read those provisos.
+    ! Note: The following TAUxxPAR and COTxxPAR are REFRESH-frequency fields.
+    ! As such, all the important provisos given in the comment on CLDxxSW above
+    ! apply to these fields as well. Please read those provisos. Their advantage
+    ! is that they use the subcolumn cloud generation called in RRTMG[P].
+
+#ifdef SOLAR_RADVAL
+    ! TAUxxPAR are ZERO for clear super-layers, an anti-pattern for *in-cloud* optical
+    ! thicknesses, and deprecated. They are currently included under the SOLAR_RADVAL flag,
+    ! which is generally reserved for developer usage. They may later be removed completely.
 
     call MAPL_AddInternalSpec(GC,                                                      &
        SHORT_NAME = 'TAULOPAR',                                                        &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH',    &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH__deprecated', &
        UNITS      = '1' ,                                                              &
        DEFAULT    = MAPL_UNDEF,                                                        &
        DIMS       = MAPL_DimsHorzOnly,                                                 &
@@ -907,7 +922,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                                      &
        SHORT_NAME = 'TAUMDPAR',                                                        &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH', &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH__deprecated', &
        UNITS      = '1' ,                                                              &
        DEFAULT    = MAPL_UNDEF,                                                        &
        DIMS       = MAPL_DimsHorzOnly,                                                 &
@@ -916,7 +931,7 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                                      &
        SHORT_NAME = 'TAUHIPAR',                                                        &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH',   &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH__deprecated', &
        UNITS      = '1' ,                                                              &
        DEFAULT    = MAPL_UNDEF,                                                        &
        DIMS       = MAPL_DimsHorzOnly,                                                 &
@@ -925,53 +940,54 @@ contains
 
     call MAPL_AddInternalSpec(GC,                                                      &
        SHORT_NAME = 'TAUTTPAR',                                                        &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH',    &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH__deprecated', &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
+#endif
+
+    ! These COTxxPAR are UNDEF for clear super-layers, whereas TAUxxPAR are ZERO.
+    ! As such, the COTxxPAR are a better in-cloud diagnostic.
+
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'COTLOPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_clrundef', &
        UNITS      = '1' ,                                                              &
        DEFAULT    = MAPL_UNDEF,                                                        &
        DIMS       = MAPL_DimsHorzOnly,                                                 &
        VLOCATION  = MAPL_VLocationNone,                                                &
        FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    ! Note: See comments ave for TAUxxPAR. COTxxPAR are undef for clear super-layers,
-    ! whereas TAUxxPAR are zero.
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'COTMDPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_clrundef', &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                            &
-       SHORT_NAME = 'COTLOPAR',                                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_undef',    &
-       UNITS      = '1' ,                                                                    &
-       DEFAULT    = MAPL_UNDEF,                                                              &
-       DIMS       = MAPL_DimsHorzOnly,                                                       &
-       VLOCATION  = MAPL_VLocationNone,                                                      &
-       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'COTHIPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_clrundef', &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                            &
-       SHORT_NAME = 'COTMDPAR',                                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_undef', &
-       UNITS      = '1' ,                                                                    &
-       DEFAULT    = MAPL_UNDEF,                                                              &
-       DIMS       = MAPL_DimsHorzOnly,                                                       &
-       VLOCATION  = MAPL_VLocationNone,                                                      &
-       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
+    call MAPL_AddInternalSpec(GC,                                                      &
+       SHORT_NAME = 'COTTTPAR',                                                        &
+       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_clrundef', &
+       UNITS      = '1' ,                                                              &
+       DEFAULT    = MAPL_UNDEF,                                                        &
+       DIMS       = MAPL_DimsHorzOnly,                                                 &
+       VLOCATION  = MAPL_VLocationNone,                                                &
+       FRIENDLYTO = trim(COMP_NAME),                                             __RC__)
 
-    call MAPL_AddInternalSpec(GC,                                                            &
-       SHORT_NAME = 'COTHIPAR',                                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_undef',   &
-       UNITS      = '1' ,                                                                    &
-       DEFAULT    = MAPL_UNDEF,                                                              &
-       DIMS       = MAPL_DimsHorzOnly,                                                       &
-       VLOCATION  = MAPL_VLocationNone,                                                      &
-       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
-
-    call MAPL_AddInternalSpec(GC,                                                            &
-       SHORT_NAME = 'COTTTPAR',                                                              &
-       LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_undef',    &
-       UNITS      = '1' ,                                                                    &
-       DEFAULT    = MAPL_UNDEF,                                                              &
-       DIMS       = MAPL_DimsHorzOnly,                                                       &
-       VLOCATION  = MAPL_VLocationNone,                                                      &
-       FRIENDLYTO = trim(COMP_NAME),                                                   __RC__)
-
-    ! for COT[DEN|NUM]xxPAR see comments under COT[DEN|NUM]xx
+    ! For COT[DEN|NUM]xxPAR see comments under COT[DEN|NUM]xx.
 
     call MAPL_AddInternalSpec(GC,                                                                  &
        SHORT_NAME = 'COTDENLOPAR',                                                                 &
@@ -1037,7 +1053,9 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
-    ! COTDS[DEN|NUM]xxPAR are like COT[DEN|NUM]xxPAR but delta-scaled
+#ifdef SOLAR_RADVAL
+
+    ! COTDS[DEN|NUM]xxPAR are like COT[DEN|NUM]xxPAR but delta-scaled.
 
     call MAPL_AddInternalSpec(GC,                                                                  &
        SHORT_NAME = 'COTDSDENLOPAR',                                                               &
@@ -1363,7 +1381,7 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
-    ! layerized phase-split cloud SSA and ASM 
+    ! super-layerized phase-split cloud SSA and ASM 
 
     call MAPL_AddInternalSpec(GC,                                                                  &
        SHORT_NAME = 'SSALDENLOPAR',                                                                &
@@ -1877,6 +1895,8 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
+    ! super-layerized phase-split cloud forward-scattering fraction
+
     call MAPL_AddInternalSpec(GC,                                                                  &
        SHORT_NAME = 'FORLDENLOPAR',                                                                &
        LONG_NAME  = 'in_cloud_liquid_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator', &
@@ -2004,6 +2024,7 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                                             &
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
+#endif
 
 !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 !  END of EXPORTs masquerading as INTERNALs
@@ -2229,6 +2250,7 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+#ifdef SOLAR_RADVAL
 ! Note: the four CLDxxSWHB diagnostics below represent super-layer cloud
 ! fractions based on essentially the same subcolumn cloud generation used
 ! by RRTMG SW but called from within the SOLAR UPDATE at the HEARTBEAT.
@@ -2236,14 +2258,15 @@ contains
 ! BUT, because subcolumn cloud generation is EXPENSIVE, asking for any of
 ! these exports will DOUBLE the cost of running the SOLAR GC. As such,
 ! they are for SPECIAL VALIDATION PURPOSES ONLY. No cost is incurred if
-! they are not exported. Note, also, that they are NOT EXACTLY heartbeat
-! versions of CLDxxSW, since they sample the heartbeat cloud fractions
-! not the less frequent snapshots used at REFRESH-frequency, and also since
-! the generation inside UPDATE is on non-flipped vertical fields. This latter
-! difference should be statistically insignificant. A re-coding to use vert-
-! ically flipped fields as per RRTMG SW is possible but will be slightly
-! slower, and was deemed not necessary since the cloud fraction frequency
-! difference will likely dominate.
+! they are not exported. But we encase them in SOLAR_RADVAL as an extra
+! protection against their inadvertant use. Note, also, that they are NOT
+! EXACTLY heartbeat versions of CLDxxSW, since they sample the heartbeat
+! cloud fractions, not the less frequent snapshots used at REFRESH-frequency,
+! and also since the generation inside UPDATE is on non-flipped vertical
+! fields. This latter difference should be statistically insignificant.
+! A re-coding to use vertically flipped fields as per RRTMG SW is possible
+! but will be slightly slower, and was deemed unnecessary since the cloud
+! fraction frequency difference will likely dominate.
 
     call MAPL_AddExportSpec(GC,                                              &
         SHORT_NAME = 'CLDTTSWHB',                                            &
@@ -2272,8 +2295,11 @@ contains
         UNITS      = '1',                                                    &
         DIMS       = MAPL_DimsHorzOnly,                                      &
         VLOCATION  = MAPL_VLocationNone,                              __RC__ )
+#endif
 
-    ! the TAUxx variants are zero when the super-layer is clear
+    ! The TAUxx variants are ZERO when the super-layer is clear.
+    ! These are the HISTORICAL exports, but are non-ideal as
+    ! *in-cloud* diagnostics. The COTxx are to be prefered.
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds',              &
        UNITS      = '1' ,                                                    &
@@ -2309,7 +2335,8 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
-    ! the COTxx variants are undef when the super-layer is clear
+    ! The COTxx variants are UNDEF when the super-layer is clear.
+    ! They are preferred over TAUxx.
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_clrundef',     &
        UNITS      = '1' ,                                                    &
@@ -2334,7 +2361,7 @@ contains
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_clrundef',     &
        UNITS      = '1' ,                                                    &
-       SHORT_NAME = 'COTTX',                                                 &
+       SHORT_NAME = 'COTTT',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
@@ -2342,7 +2369,10 @@ contains
     ! thickness to be calculated via COTNUMxx / COTDENxx. Like the COTxx, clear
     ! values make no contribution, but unlike COTxx, each COT is weighted by a
     ! cloud fraction so that small clouds, which have a small radiative effect,
-    ! get weighted accordingly.
+    ! get weighted accordingly. These provide the best estimate of radiatively
+    ! effective in-cloud optical thicknesses, but require more advance post-
+    ! processing (summing both NUM and DEN fields over the time-period required,
+    ! and only then taking their quotient.)
 
     call MAPL_AddExportSpec(GC,                                                &
        LONG_NAME  = 'in_cloud_optical_thickness_of_low_clouds_denominator',    &
@@ -2368,7 +2398,7 @@ contains
     call MAPL_AddExportSpec(GC,                                                &
        LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_denominator',    &
        UNITS      = '1' ,                                                      &
-       SHORT_NAME = 'COTDENTX',                                                &
+       SHORT_NAME = 'COTDENTT',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                         &
        VLOCATION  = MAPL_VLocationNone,                                  __RC__)
 
@@ -2396,7 +2426,7 @@ contains
     call MAPL_AddExportSpec(GC,                                                &
        LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds_numerator',      &
        UNITS      = '1' ,                                                      &
-       SHORT_NAME = 'COTNUMTX',                                                &
+       SHORT_NAME = 'COTNUMTT',                                                &
        DIMS       = MAPL_DimsHorzOnly,                                         &
        VLOCATION  = MAPL_VLocationNone,                                  __RC__)
 
@@ -3356,40 +3386,52 @@ contains
       ! REFRESH exports (via internals)
       real, pointer, dimension(:)    :: COSZSW
       real, pointer, dimension(:)    :: CLDTS, CLDHS, CLDMS, CLDLS, &
+#ifdef SOLAR_RADVAL
                                         TAUTP, TAUHP, TAUMP, TAULP, &
+#endif
                                         COTTP, COTHP, COTMP, COTLP, &
                                         COTDTP, COTDHP, COTDMP, COTDLP, &
-                                        COTNTP, COTNHP, COTNMP, COTNLP, &
-                                        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+                                        COTNTP, COTNHP, COTNMP, COTNLP
+
+#ifdef SOLAR_RADVAL
+      real, pointer, dimension(:)    :: CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
                                         CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+
                                         COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
                                         COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
-                                        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
-                                        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
                                         COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
                                         COTINTP, COTINHP, COTINMP, COTINLP, &
+
+                                        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+                                        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
                                         CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
                                         CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+
                                         SSALDLP, SSALNLP, SSAIDLP, SSAINLP, &
-                                        ASMLDLP, ASMLNLP, ASMIDLP, ASMINLP, &
                                         SSALDMP, SSALNMP, SSAIDMP, SSAINMP, &
-                                        ASMLDMP, ASMLNMP, ASMIDMP, ASMINMP, &
                                         SSALDHP, SSALNHP, SSAIDHP, SSAINHP, &
-                                        ASMLDHP, ASMLNHP, ASMIDHP, ASMINHP, &
                                         SSALDTP, SSALNTP, SSAIDTP, SSAINTP, &
-                                        ASMLDTP, ASMLNTP, ASMIDTP, ASMINTP, &
+
                                         SDSLDLP, SDSLNLP, SDSIDLP, SDSINLP, &
-                                        ADSLDLP, ADSLNLP, ADSIDLP, ADSINLP, &
                                         SDSLDMP, SDSLNMP, SDSIDMP, SDSINMP, &
-                                        ADSLDMP, ADSLNMP, ADSIDMP, ADSINMP, &
                                         SDSLDHP, SDSLNHP, SDSIDHP, SDSINHP, &
-                                        ADSLDHP, ADSLNHP, ADSIDHP, ADSINHP, &
                                         SDSLDTP, SDSLNTP, SDSIDTP, SDSINTP, &
+
+                                        ASMLDLP, ASMLNLP, ASMIDLP, ASMINLP, &
+                                        ASMLDMP, ASMLNMP, ASMIDMP, ASMINMP, &
+                                        ASMLDHP, ASMLNHP, ASMIDHP, ASMINHP, &
+                                        ASMLDTP, ASMLNTP, ASMIDTP, ASMINTP, &
+
+                                        ADSLDLP, ADSLNLP, ADSIDLP, ADSINLP, &
+                                        ADSLDMP, ADSLNMP, ADSIDMP, ADSINMP, &
+                                        ADSLDHP, ADSLNHP, ADSIDHP, ADSINHP, &
                                         ADSLDTP, ADSLNTP, ADSIDTP, ADSINTP, &
+
                                         FORLDLP, FORLNLP, FORIDLP, FORINLP, &
                                         FORLDMP, FORLNMP, FORIDMP, FORINMP, &
                                         FORLDHP, FORLNHP, FORIDHP, FORINHP, &
                                         FORLDTP, FORLNTP, FORIDTP, FORINTP
+#endif
 
       ! variables for RRTMG code
       ! ------------------------
@@ -3496,12 +3538,14 @@ contains
       real :: stautp, stauhp, staump, staulp
       real :: sltautp, sltauhp, sltaump, sltaulp
       real :: sitautp, sitauhp, sitaump, sitaulp
+#ifdef SOLAR_RADVAL
       real :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
       real :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
       real :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
       real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
       real :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
       real :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
+#endif
 
       ! radice interpolation for forwice
       integer :: radidx
@@ -4118,6 +4162,7 @@ contains
                CLDMS     => ptr2(1:Num2do,1)
             case('CLDLOSW')
                CLDLS     => ptr2(1:Num2do,1)
+#ifdef SOLAR_RADVAL
             case('TAUTTPAR')
                TAUTP     => ptr2(1:Num2do,1)
             case('TAUHIPAR')
@@ -4126,6 +4171,7 @@ contains
                TAUMP     => ptr2(1:Num2do,1)
             case('TAULOPAR')
                TAULP     => ptr2(1:Num2do,1)
+#endif
             case('COTTTPAR')
                COTTP     => ptr2(1:Num2do,1)
             case('COTHIPAR')
@@ -4150,6 +4196,7 @@ contains
                COTNMP    => ptr2(1:Num2do,1)
             case('COTNUMLOPAR')
                COTNLP    => ptr2(1:Num2do,1)
+#ifdef SOLAR_RADVAL
             case('COTDSDENTTPAR')
                CDSDTP    => ptr2(1:Num2do,1)
             case('COTDSDENHIPAR')
@@ -4390,6 +4437,7 @@ contains
                FORIDTP    => ptr2(1:Num2do,1)
             case('FORINUMTTPAR')
                FORINTP    => ptr2(1:Num2do,1)
+#endif
          end select
 
       enddo INT_VARS_2
@@ -5270,11 +5318,13 @@ contains
           do isub = 1,ncols_block
             icol = colS + isub - 1
 
+#ifdef SOLAR_RADVAL
             ! default (no cloud) for TAUx variant 
             TAUTP(icol) = 0.
             TAUHP(icol) = 0.
             TAUMP(icol) = 0.
             TAULP(icol) = 0.
+#endif
 
             ! default (no cloud) for COTx variant
             COTTP(icol) = MAPL_UNDEF
@@ -5287,22 +5337,20 @@ contains
             COTDHP(icol) = 0.; COTNHP(icol) = 0.
             COTDMP(icol) = 0.; COTNMP(icol) = 0.
             COTDLP(icol) = 0.; COTNLP(icol) = 0.
-            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.
-            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.
-            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.
-            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.
-            COTIDTP(icol) = 0.; COTINTP(icol) = 0.
-            COTIDHP(icol) = 0.; COTINHP(icol) = 0.
-            COTIDMP(icol) = 0.; COTINMP(icol) = 0.
-            COTIDLP(icol) = 0.; COTINLP(icol) = 0.
-            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
-            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
-            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
-            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
-            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
-            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
+#ifdef SOLAR_RADVAL
+            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.; COTIDTP(icol) = 0.; COTINTP(icol) = 0.
+            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.; COTIDHP(icol) = 0.; COTINHP(icol) = 0.
+            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.; COTIDMP(icol) = 0.; COTINMP(icol) = 0.
+            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.; COTIDLP(icol) = 0.; COTINLP(icol) = 0.
             SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
+            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
+            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
+            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
             ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
+            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
+            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
+            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
+#endif
 
             ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
@@ -5332,7 +5380,12 @@ contains
                   sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
                   sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
                   staulp = sltaulp + sitaulp
-                  sltaussalp = 0.; sltaussaglp = 0.; sitaussalp = 0.; sitaussaglp = 0.
+                  if (staulp > 0.) then
+                    COTDLP(icol) = COTDLP(icol) + wgt
+                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussalp = 0.; sltaussaglp = 0.
                   if (sltaulp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5349,6 +5402,7 @@ contains
                     ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
                     ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
                   end if
+                  sitaussalp = 0.; sitaussaglp = 0.
                   if (sitaulp > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5365,16 +5419,18 @@ contains
                     ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
                     ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
                   end if
-                  if (staulp > 0.) then
-                    COTDLP(icol) = COTDLP(icol) + wgt
-                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
-                  end if
+#endif
 
                   ! mid pressure layer
                   sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   staump = sltaump + sitaump
-                  sltaussamp = 0.; sltaussagmp = 0.; sitaussamp = 0.; sitaussagmp = 0.
+                  if (staump > 0.) then
+                    COTDMP(icol) = COTDMP(icol) + wgt
+                    COTNMP(icol) = COTNMP(icol) + wgt * staump
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussamp = 0.; sltaussagmp = 0.
                   if (sltaump > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5391,6 +5447,7 @@ contains
                     ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
                     ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
                   end if
+                  sitaussamp = 0.; sitaussagmp = 0.
                   if (sitaump > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5407,16 +5464,18 @@ contains
                     ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
                     ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
                   end if
-                  if (staump > 0.) then
-                    COTDMP(icol) = COTDMP(icol) + wgt
-                    COTNMP(icol) = COTNMP(icol) + wgt * staump
-                  end if
+#endif
 
                   ! high pressure layer
                   sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
                   sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
                   stauhp = sltauhp + sitauhp
-                  sltaussahp = 0.; sltaussaghp = 0.; sitaussahp = 0.; sitaussaghp = 0.
+                  if (stauhp > 0.) then
+                    COTDHP(icol) = COTDHP(icol) + wgt
+                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussahp = 0.; sltaussaghp = 0.
                   if (sltauhp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5433,6 +5492,7 @@ contains
                     ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
                     ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
                   end if
+                  sitaussahp = 0.; sitaussaghp = 0.
                   if (sitauhp > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5449,19 +5509,19 @@ contains
                     ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
                     ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
                   end if
-                  if (stauhp > 0.) then
-                    COTDHP(icol) = COTDHP(icol) + wgt
-                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
-                  end if
+#endif
 
                   ! whole subcolumn
                   sltautp = sltaulp + sltaump + sltauhp
                   sitautp = sitaulp + sitaump + sitauhp
                   stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    COTDTP(icol) = COTDTP(icol) + wgt
+                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
+                  end if
+#ifdef SOLAR_RADVAL
                   sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
                   sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
                   if (sltautp > 0.) then
                     COTLDTP(icol) = COTLDTP(icol) + wgt
                     COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
@@ -5470,6 +5530,8 @@ contains
                     ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
                     ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
                   end if
+                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
+                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
                   if (sitautp > 0.) then
                     COTIDTP(icol) = COTIDTP(icol) + wgt
                     COTINTP(icol) = COTINTP(icol) + wgt * sitautp
@@ -5478,34 +5540,39 @@ contains
                     ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
                     ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
                   end if
-                  if (stautp > 0.) then
-                    COTDTP(icol) = COTDTP(icol) + wgt
-                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
-                  end if
+#endif
 
                 end do ! igpt
               end do ! ib
 
               ! normalize
               ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
-              if (COTDTP(icol) > 0.) then
-                TAUTP(icol) = COTNTP(icol) / COTDTP(icol)
-                if (TAUTP(icol) > 0.) COTTP(icol) = TAUTP(icol)
+              if (COTDTP(icol) > 0. .and. COTNTP(icol) > 0.) then
+                COTTP(icol) = COTNTP(icol) / COTDTP(icol)
+#ifdef SOLAR_RADVAL
+                TAUTP(icol) = COTTP(icol)
+#endif
               end if
 
-              if (COTDHP(icol) > 0.) then
-                TAUHP(icol) = COTNHP(icol) / COTDHP(icol)
-                if (TAUHP(icol) > 0.) COTHP(icol) = TAUHP(icol)
+              if (COTDHP(icol) > 0. .and. COTNHP(icol) > 0.) then
+                COTHP(icol) = COTNHP(icol) / COTDHP(icol)
+#ifdef SOLAR_RADVAL
+                TAUHP(icol) = COTHP(icol)
+#endif
               end if
 
-              if (COTDMP(icol) > 0.) then
-                TAUMP(icol) = COTNMP(icol) / COTDMP(icol)
-                if (TAUMP(icol) > 0.) COTMP(icol) = TAUMP(icol)
+              if (COTDMP(icol) > 0. .and. COTNMP(icol) > 0.) then
+                COTMP(icol) = COTNMP(icol) / COTDMP(icol)
+#ifdef SOLAR_RADVAL
+                TAUMP(icol) = COTMP(icol)
+#endif
               end if
 
-              if (COTDLP(icol) > 0.) then
-                TAULP(icol) = COTNLP(icol) / COTDLP(icol)
-                if (TAULP(icol) > 0.) COTLP(icol) = TAULP(icol)
+              if (COTDLP(icol) > 0. .and. COTNLP(icol) > 0.) then
+                COTLP(icol) = COTNLP(icol) / COTDLP(icol)
+#ifdef SOLAR_RADVAL
+                TAULP(icol) = COTLP(icol)
+#endif
               end if
 
             end if  ! potentially cloudy column 
@@ -5578,6 +5645,7 @@ contains
         endif
         call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
+#ifdef SOLAR_RADVAL
         ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
         ! ** Calculated from subcolumn ensemble, so stochastic **
         ! -------------------------------------------------------
@@ -5594,26 +5662,26 @@ contains
             CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
             CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
             CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
-            CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.
-            CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.
-            CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.
-            CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.
-            CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
-            CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
-            CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
-            CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
-            SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
-            ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
-            SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
-            ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
-            SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
-            ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
+
+            CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.; CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
+            CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.; CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
+            CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.; CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
+            CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.; CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
+
             SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
+            SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
+            SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
+            SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
+
             ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
-            FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
-            FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
-            FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
+            ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
+            ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
+            ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
+
             FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
+            FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
+            FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
+            FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
 
             ! can only be non-zero for potentially cloudy columns
             if (any(CL(icol,:) > 0.)) then
@@ -5643,8 +5711,11 @@ contains
                   sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
                   sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
                   staulp = sltaulp + sitaulp
+                  if (staulp > 0.) then
+                    CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
+                    CDSDLP(icol) = CDSDLP(icol) + wgt
+                  end if
                   sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
-                  sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
                   if (sltaulp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5666,6 +5737,7 @@ contains
                     FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
                     FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
                   end if
+                  sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
                   if (sitaulp > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5687,17 +5759,16 @@ contains
                     FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
                     FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
                   end if
-                  if (staulp > 0.) then
-                    CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
-                    CDSDLP(icol) = CDSDLP(icol) + wgt
-                  end if
 
                   ! mid pressure layer
                   sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
                   staump = sltaump + sitaump
+                  if (staump > 0.) then
+                    CDSNMP(icol) = CDSNMP(icol) + wgt * staump
+                    CDSDMP(icol) = CDSDMP(icol) + wgt
+                  end if
                   sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
-                  sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
                   if (sltaump > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5719,6 +5790,7 @@ contains
                     FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
                     FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
                   end if
+                  sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
                   if (sitaump > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5740,17 +5812,16 @@ contains
                     FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
                     FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
                   end if
-                  if (staump > 0.) then
-                    CDSNMP(icol) = CDSNMP(icol) + wgt * staump
-                    CDSDMP(icol) = CDSDMP(icol) + wgt
-                  end if
 
                   ! high pressure layer
                   sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
                   sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
                   stauhp = sltauhp + sitauhp
+                  if (stauhp > 0.) then
+                    CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
+                    CDSDHP(icol) = CDSDHP(icol) + wgt
+                  end if
                   sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
-                  sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
                   if (sltauhp > 0.) then
                     select type(cloud_props_gpt_liq)
                     class is (ty_optical_props_2str)
@@ -5772,6 +5843,7 @@ contains
                     FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
                     FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
                   end if
+                  sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
                   if (sitauhp > 0.) then
                     select type(cloud_props_gpt_ice)
                     class is (ty_optical_props_2str)
@@ -5793,21 +5865,18 @@ contains
                     FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
                     FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
                   end if
-                  if (stauhp > 0.) then
-                    CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
-                    CDSDHP(icol) = CDSDHP(icol) + wgt
-                  end if
 
                   ! whole subcolumn
                   sltautp = sltaulp + sltaump + sltauhp
                   sitautp = sitaulp + sitaump + sitauhp
                   stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
+                    CDSDTP(icol) = CDSDTP(icol) + wgt
+                  end if
                   sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
                   sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
                   sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
-                  sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
                   if (sltautp > 0.) then
                     CDSLDTP(icol) = CDSLDTP(icol) + wgt
                     CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
@@ -5818,6 +5887,9 @@ contains
                     FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
                     FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
                   end if
+                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
+                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                  sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
                   if (sitautp > 0.) then
                     CDSIDTP(icol) = CDSIDTP(icol) + wgt
                     CDSINTP(icol) = CDSINTP(icol) + wgt * sitautp
@@ -5828,10 +5900,6 @@ contains
                     FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
                     FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
                   end if
-                  if (stautp > 0.) then
-                    CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
-                    CDSDTP(icol) = CDSDTP(icol) + wgt
-                  end if
 
                 end do ! igpt
               end do ! ib
@@ -5840,6 +5908,7 @@ contains
           end do  ! isub
         end if  ! include_aerosols
         call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+#endif
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
 
@@ -6268,6 +6337,8 @@ contains
 
          COTDTP, COTDHP, COTDMP, COTDLP, &
          COTNTP, COTNHP, COTNMP, COTNLP, &
+
+#ifdef SOLAR_RADVAL
          CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
          CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
 
@@ -6302,6 +6373,7 @@ contains
          FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
          FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
          FORINTP, FORINHP, FORINMP, FORINLP, &
+#endif
 
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
@@ -6331,17 +6403,19 @@ contains
         CLDLS(:) = 1. - CLEARCOUNTS(:,4)/float(NGPTSW)
       end if
 
-      ! zero versions of cloud optical thicknesses
-      TAUTP = merge(COTNTP/COTDTP, 0., COTDTP > 0.)
-      TAUHP = merge(COTNHP/COTDHP, 0., COTDHP > 0.)
-      TAUMP = merge(COTNMP/COTDMP, 0., COTDMP > 0.)
-      TAULP = merge(COTNLP/COTDLP, 0., COTDLP > 0.)
-
       ! undef versions of cloud optical thicknesses
-      COTTP = merge(TAUTP, MAPL_UNDEF, TAUTP > 0.)
-      COTHP = merge(TAUHP, MAPL_UNDEF, TAUHP > 0.)
-      COTMP = merge(TAUMP, MAPL_UNDEF, TAUMP > 0.)
-      COTLP = merge(TAULP, MAPL_UNDEF, TAULP > 0.)
+      COTTP = merge(COTNTP/COTDTP, MAPL_UNDEF, COTDTP > 0. .and. COTDTP > 0.)
+      COTHP = merge(COTNHP/COTDHP, MAPL_UNDEF, COTDHP > 0. .and. COTDHP > 0.)
+      COTMP = merge(COTNMP/COTDMP, MAPL_UNDEF, COTDMP > 0. .and. COTDMP > 0.)
+      COTLP = merge(COTNLP/COTDLP, MAPL_UNDEF, COTDLP > 0. .and. COTDLP > 0.)
+
+#ifdef SOLAR_RADVAL
+      ! zero versions of cloud optical thicknesses
+      TAUTP = merge(COTTP, 0., COTDTP > 0. .and. COTDTP > 0.)
+      TAUHP = merge(COTHP, 0., COTDHP > 0. .and. COTDHP > 0.)
+      TAUMP = merge(COTMP, 0., COTDMP > 0. .and. COTDMP > 0.)
+      TAULP = merge(COTLP, 0., COTDLP > 0. .and. COTDLP > 0.)
+#endif
 
       ! fluxes
       FSW  = SWDFLXR  - SWUFLXR
@@ -6650,12 +6724,13 @@ contains
 
       real, pointer, dimension(:,:)   :: TDUST,TSALT,TSO4,TBC,TOC
       real, pointer, dimension(:,:)   :: CLDH,CLDM,CLDL,CLDT, &
-                                         TAUH,TAUM,TAUL,TAUT,TAUTX, &
-                                         COTH,COTM,COTL,     COTTX, &
+                                         TAUH,TAUM,TAUL,TAUX,TAUT, &
+                                         COTH,COTM,COTL,COTT, &
                                          CLDTMP,CLDPRS
-      real, pointer, dimension(:,:)   :: COTDH,COTDM,COTDL,COTDTX, &
-                                         COTNH,COTNM,COTNL,COTNTX
+      real, pointer, dimension(:,:)   :: COTDH,COTDM,COTDL,COTDT, &
+                                         COTNH,COTNM,COTNL,COTNT
 
+#ifdef SOLAR_RADVAL
       ! super-layer RRTMG cloud fraction exports on heartbeat
       real, pointer, dimension(:,:)   :: CLDTTSWHB
       real, pointer, dimension(:,:)   :: CLDHISWHB
@@ -6671,6 +6746,7 @@ contains
       logical, allocatable, dimension(:,:,:) :: cldymcl
       real,    allocatable, dimension(:,:,:) :: ciwpmcl, clwpmcl
       integer, allocatable, dimension(:,:)   :: clearCounts
+#endif
 
       type (ESMF_FieldBundle)         :: BUNDLE
       type (ESMF_Field)               :: FIELD
@@ -6872,26 +6948,28 @@ contains
       call MAPL_GetPointer(EXPORT  , TAUM,       'TAUMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUH,       'TAUHI',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUT,       'TAUTT',      __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUTX,      'TAUTX',      __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUX,       'TAUTX',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTL,       'COTLO',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTM,       'COTMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTH,       'COTHI',      __RC__)
-      call MAPL_GetPointer(EXPORT  , COTTX,      'COTTX',      __RC__)
+      call MAPL_GetPointer(EXPORT  , COTT,       'COTTT',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTMP,     'CLDTMP',     __RC__)
       call MAPL_GetPointer(EXPORT  , CLDPRS,     'CLDPRS',     __RC__)
       call MAPL_GetPointer(EXPORT  , COTDL,      'COTDENLO',   __RC__)
       call MAPL_GetPointer(EXPORT  , COTDM,      'COTDENMD',   __RC__)
       call MAPL_GetPointer(EXPORT  , COTDH,      'COTDENHI',   __RC__)
-      call MAPL_GetPointer(EXPORT  , COTDTX,     'COTDENTX',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTDT,      'COTDENTT',   __RC__)
       call MAPL_GetPointer(EXPORT  , COTNL,      'COTNUMLO',   __RC__)
       call MAPL_GetPointer(EXPORT  , COTNM,      'COTNUMMD',   __RC__)
       call MAPL_GetPointer(EXPORT  , COTNH,      'COTNUMHI',   __RC__)
-      call MAPL_GetPointer(EXPORT  , COTNTX,     'COTNUMTX',   __RC__)
+      call MAPL_GetPointer(EXPORT  , COTNT,      'COTNUMTT',   __RC__)
 
+#ifdef SOLAR_RADVAL
       call MAPL_GetPointer(EXPORT  , CLDLOSWHB,  'CLDLOSWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDMDSWHB,  'CLDMDSWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDHISWHB,  'CLDHISWHB',  __RC__)
       call MAPL_GetPointer(EXPORT  , CLDTTSWHB,  'CLDTTSWHB',  __RC__)
+#endif
 
       if (SOLAR_TO_OBIO) then
          call MAPL_GetPointer(INTERNAL, DRBANDN, 'DRBANDN',    __RC__)
@@ -6903,9 +6981,9 @@ contains
       if (associated(FCLD)) FCLD = CLIN
 
       if (associated(CLDH) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDH) .or. associated(COTNH) .or. &
-          associated(COTDTX) .or. associated(COTNTX)) &
+          associated(COTDT) .or. associated(COTNT)) &
       then
          allocate(aCLDH(IM,JM),__STAT__)
          aCLDH = 0.
@@ -6917,9 +6995,9 @@ contains
       end if
 
       if (associated(CLDM) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDM) .or. associated(COTNM) .or. &
-          associated(COTDTX) .or. associated(COTNTX)) &
+          associated(COTDT) .or. associated(COTNT)) &
       then
          allocate(aCLDM(IM,JM),__STAT__)
          aCLDM = 0.
@@ -6931,9 +7009,9 @@ contains
       end if
 
       if (associated(CLDL) .or. associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX) .or. &
+          associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDL) .or. associated(COTNL) .or. &
-          associated(COTDTX) .or. associated(COTNTX)) &
+          associated(COTDT) .or. associated(COTNT)) &
       then
          allocate(aCLDL(IM,JM),__STAT__)
          aCLDL = 0.
@@ -6945,15 +7023,16 @@ contains
       end if
 
       if (associated(CLDT) .or. &
-          associated(TAUTX) .or. associated(COTTX) .or. &
-          associated(COTDTX) .or. associated(COTNTX)) &
+          associated(TAUX) .or. associated(COTT) .or. &
+          associated(COTDT) .or. associated(COTNT)) &
       then
          allocate(aCLDT(IM,JM),__STAT__)
          aCLDT = 1. - (1-aCLDH)*(1-aCLDM)*(1-aCLDL)
          if (associated(CLDT)) CLDT = aCLDT
-         if (associated(COTDTX)) COTDTX = aCLDT
+         if (associated(COTDT)) COTDT = aCLDT
       end if
 
+#ifdef SOLAR_RADVAL
       ! CLD??SWHB:
       ! Special heartbeat versions of RRTMG generated cloud fractions ...
       ! These are expensive because they require a call to the cloud generator,
@@ -7116,12 +7195,13 @@ contains
          deallocate(clearCounts,__STAT__)
 
       end if  ! CLD??SWHB
+#endif
 
       if (associated(TAUI) .or. associated(TAUW) .or. associated(TAUR) .or. associated(TAUS).or. &
           associated(TAUL) .or. associated(TAUM) .or. associated(TAUH) .or. &
           associated(COTL) .or. associated(COTM) .or. associated(COTH) .or. &
-          associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. &
-          associated(COTNL) .or. associated(COTNM) .or. associated(COTNH) .or. associated(COTNTX) .or. &
+          associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. &
+          associated(COTNL) .or. associated(COTNM) .or. associated(COTNH) .or. associated(COTNT) .or. &
           associated(CLDTMP) .or. associated(CLDPRS)) &
       then
 
@@ -7179,7 +7259,7 @@ contains
          ! pressure super-layers [LMH].
 
          if (associated(TAUH) .or. associated(COTH) .or. associated(COTNH) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
+             associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
             allocate(aTAUH(IM,JM),__STAT__)
             aTAUH = 0.
@@ -7195,7 +7275,7 @@ contains
          end if
 
          if (associated(TAUM) .or. associated(COTM) .or. associated(COTNM) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
+             associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
             allocate(aTAUM(IM,JM),__STAT__)
             aTAUM = 0.
@@ -7211,7 +7291,7 @@ contains
          end if
 
          if (associated(TAUL) .or. associated(COTL) .or. associated(COTNL) .or. &
-             associated(TAUT) .or. associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) &
+             associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
             allocate(aTAUL(IM,JM),__STAT__)
             aTAUL = 0.
@@ -7228,7 +7308,7 @@ contains
 
          ! TAUT however is broken because the three super-layers are randomly overlapped
          ! and with different effective cloud fractions. It has been broken but used for
-         ! a long time. It should be considered deprecated. TAUTX below is an improved
+         ! a long time. It should be considered deprecated. TAUX below is an improved
          ! version.
 
          if (associated(TAUT)) TAUT = aTAUH + aTAUM + aTAUL
@@ -7244,22 +7324,22 @@ contains
          ! the sum of the 7 must be normalized by the random column cloud fraction
          !    CLDT = 1 – (1-CLDL)*(1-CLDM)*(1-CLDH).
          ! Not surprisingly this gives
-         !    TAUTX = (TAUL*CLDL + TAUM*CLDM + TAUH*CLDH) / CLDT,
+         !    TAUX = (TAUL*CLDL + TAUM*CLDM + TAUH*CLDH) / CLDT,
          ! because we assume we can linearly average optical thickness among the comb-
          ! inations. This assumption is questionable, since cloud radiative properties
-         ! are non-linear in optical thickness. This is why TAUTX is approximate. But
+         ! are non-linear in optical thickness. This is why TAUX is approximate. But
          ! its the best we SIMPLY can do.
 
-         if (associated(TAUTX) .or. associated(COTTX) .or. associated(COTNTX)) then
+         if (associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) then
             allocate(aTAUT(IM,JM),__STAT__)
             aTAUT = 0.
             where (aCLDT > 0.) aTAUT = (aTAUL*aCLDL + aTAUM*aCLDM + aTAUH*aCLDH) / aCLDT
-            if (associated(TAUTX)) TAUTX = aTAUT
-            if (associated(COTTX)) then
-              COTTX = MAPL_UNDEF 
-              where (aCLDT > 0.) COTTX = aTAUT
+            if (associated(TAUX)) TAUX = aTAUT
+            if (associated(COTT)) then
+              COTT = MAPL_UNDEF 
+              where (aCLDT > 0.) COTT = aTAUT
             end if
-            if (associated(COTNTX)) COTNTX = aCLDT * aTAUT
+            if (associated(COTNT)) COTNT = aCLDT * aTAUT
          end if
 
          if (allocated(aTAUH)) deallocate(aTAUH,__STAT__)
