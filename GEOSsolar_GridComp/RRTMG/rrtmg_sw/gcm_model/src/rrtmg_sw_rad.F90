@@ -1414,16 +1414,16 @@ contains
                   call cldprmc_sw( &
                      pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                      cldymcl, ciwpmcl, clwpmcl, rei, rel, &
-   #ifdef SOLAR_RADVAL
+#ifdef SOLAR_RADVAL
                      taormc, taucmc, ssacmc, asmcmc, &
                      ltaormc, lomormc, lasormc, &
                      ltaucmc, lomgcmc, lasycmc, &
                      itaormc, iomormc, iasormc, &
                      itaucmc, iomgcmc, iasycmc, &
                      forwliq, forwice)
-   #else
+#else
                      taormc, taucmc, ssacmc, asmcmc)
-   #endif
+#endif
                end if
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
 
@@ -1445,13 +1445,13 @@ contains
                   cc, pncol, ncol, nlay, &
                   albdif, albdir, &
                   cldymcl, taucmc, asmcmc, ssacmc, taormc, &
-   #ifdef SOLAR_RADVAL
+#ifdef SOLAR_RADVAL
                   ltaormc, lomormc, lasormc, &
                   ltaucmc, lomgcmc, lasycmc, &
                   itaormc, iomormc, iasormc, &
                   itaucmc, iomgcmc, iasycmc, &
                   forwliq, forwice, &
-   #endif
+#endif
                   taua, asya, omga, cossza, adjflux, &
                   isolvar, svar_f, svar_s, svar_i, &
                   svar_f_bnd, svar_s_bnd, svar_i_bnd, &
@@ -1467,7 +1467,7 @@ contains
                   zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
                   zcotntp, zcotnhp, zcotnmp, zcotnlp, &
 
-   #ifdef SOLAR_RADVAL
+#ifdef SOLAR_RADVAL
                   zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
                   zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
 
@@ -1502,7 +1502,7 @@ contains
                   zforlntp, zforlnhp, zforlnmp, zforlnlp, &
                   zforidtp, zforidhp, zforidmp, zforidlp, &
                   zforintp, zforinhp, zforinmp, zforinlp, &
-   #endif
+#endif
 
                   do_drfband, zdrband, zdfband, &
                   __RC__)
@@ -1536,7 +1536,7 @@ contains
                      cotdmp(gicol) = 0.; cotnmp(gicol) = 0.
                      cotdlp(gicol) = 0.; cotnlp(gicol) = 0.
 
-   #ifdef SOLAR_RADVAL
+#ifdef SOLAR_RADVAL
                      cdsdtp(gicol) = 0.; cdsntp(gicol) = 0.
                      cdsdhp(gicol) = 0.; cdsnhp(gicol) = 0.
                      cdsdmp(gicol) = 0.; cdsnmp(gicol) = 0.
@@ -1601,7 +1601,7 @@ contains
                      foridhp(gicol) = 0.; forinhp(gicol) = 0.
                      foridmp(gicol) = 0.; forinmp(gicol) = 0.
                      foridlp(gicol) = 0.; forinlp(gicol) = 0.
-   #endif
+#endif
 
                   enddo
 
@@ -1654,7 +1654,7 @@ contains
                      cotdmp(gicol) = zcotdmp(icol); cotnmp(gicol) = zcotnmp(icol)
                      cotdlp(gicol) = zcotdlp(icol); cotnlp(gicol) = zcotnlp(icol)
 
-   #ifdef SOLAR_RADVAL
+#ifdef SOLAR_RADVAL
                      cdsdtp(gicol) = zcdsdtp(icol); cdsntp(gicol) = zcdsntp(icol)
                      cdsdhp(gicol) = zcdsdhp(icol); cdsnhp(gicol) = zcdsnhp(icol)
                      cdsdmp(gicol) = zcdsdmp(icol); cdsnmp(gicol) = zcdsnmp(icol)
@@ -1719,7 +1719,7 @@ contains
                      foridhp(gicol) = zforidhp(icol); forinhp(gicol) = zforinhp(icol)
                      foridmp(gicol) = zforidmp(icol); forinmp(gicol) = zforinmp(icol)
                      foridlp(gicol) = zforidlp(icol); forinlp(gicol) = zforinlp(icol)
-   #endif
+#endif
 
                   enddo
 
