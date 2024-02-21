@@ -1198,7 +1198,6 @@ contains
 
             call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
             call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
-
          else
 
             ! loop over partitions
@@ -1387,6 +1386,10 @@ contains
                   end do
                end do
 
+               ! We have separate loops here because MAPL profiling
+               ! timers must be called on all branches and all processes
+               ! and we do not want the timers in the if-block
+
                call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
                ! cloudy gridcolumns
                if (cc == 2) then
@@ -1404,7 +1407,6 @@ contains
                      p_clearCounts)
                endif
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
-
 
                call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
                if (cc == 2) then
