@@ -14,3 +14,8 @@ esma_add_library (${this}
 if(MKL_FOUND)
    target_compile_definitions(${this} PRIVATE HAVE_MKL)
 endif ()
+
+option(ENABLE_SOLAR_RADVAL "extra solar diagnostics mainly for developer validation" OFF)
+if(ENABLE_SOLAR_RADVAL)
+   target_compile_definitions(${this} PRIVATE SOLAR_RADVAL)
+endif ()
