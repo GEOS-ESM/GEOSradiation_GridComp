@@ -115,7 +115,7 @@ module GEOS_RadiationGridCompMod
 
     integer                                 :: I
     type (MAPL_MetaComp),      pointer      :: MAPL
-
+    integer                                 :: DO_OBIO
 
 ! Begin...
 
@@ -162,6 +162,11 @@ module GEOS_RadiationGridCompMod
     VERIFY_(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_MISR,LABEL="USE_SATSIM_MISR:",default=0,   RC=STATUS)
+    VERIFY_(STATUS)
+
+    ! Decide if should make OBIO exports    
+
+    call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
     VERIFY_(STATUS)
    
 ! set use_satsim if anything is toggled
@@ -403,6 +408,20 @@ module GEOS_RadiationGridCompMod
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
     VERIFY_(STATUS)
+
+    if (DO_OBIO/=0) then
+       call MAPL_AddExportSpec ( GC   ,                                &
+           SHORT_NAME = 'DROBIO',                                          &
+           CHILD_ID = SOL,                                                 &
+           RC=STATUS  )
+       VERIFY_(STATUS)
+
+       call MAPL_AddExportSpec ( GC   ,                                &
+           SHORT_NAME = 'DFOBIO',                                          &
+           CHILD_ID = SOL,                                                 &
+           RC=STATUS  ) 
+       VERIFY_(STATUS)
+    end if
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'FSWBAND',                                         &
