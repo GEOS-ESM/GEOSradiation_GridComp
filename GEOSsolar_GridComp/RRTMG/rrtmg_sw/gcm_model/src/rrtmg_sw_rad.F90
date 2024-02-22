@@ -45,7 +45,7 @@
 ! ****************************************************************************
 
 #include "MAPL_Generic.h"
-
+    
 module rrtmg_sw_rad
 
    use ESMF
@@ -78,7 +78,47 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-      tautp, tauhp, taump, taulp, &
+
+      cotdtp, cotdhp, cotdmp, cotdlp, &  ! non-delta-scaled
+      cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
+      cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+      cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
+      cotldtp, cotldhp, cotldmp, cotldlp, &
+      cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+      cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+      cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+      cotidtp, cotidhp, cotidmp, cotidlp, &
+      cotintp, cotinhp, cotinmp, cotinlp, &
+      cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+      cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+      ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+      ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+      sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+      sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+      ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+      ssaintp, ssainhp, ssainmp, ssainlp, &
+      sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+      sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+      asmldtp, asmldhp, asmldmp, asmldlp, &
+      asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+      adsldtp, adsldhp, adsldmp, adsldlp, &
+      adslntp, adslnhp, adslnmp, adslnlp, &
+      asmidtp, asmidhp, asmidmp, asmidlp, &
+      asmintp, asminhp, asminmp, asminlp, &
+      adsidtp, adsidhp, adsidmp, adsidlp, &
+      adsintp, adsinhp, adsinmp, adsinlp, &
+
+      forldtp, forldhp, forldmp, forldlp, &
+      forlntp, forlnhp, forlnmp, forlnlp, &
+      foridtp, foridhp, foridmp, foridlp, &
+      forintp, forinhp, forinmp, forinlp, &
+#endif
+
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -92,7 +132,7 @@ contains
       ! dimensions
       ! ----------
       integer, intent(in) :: rpart                   ! Number of columns in a partition
-      integer, intent(in) :: ncol                    ! Number of horizontal columns
+      integer, intent(in) :: ncol                    ! Number of horizontal columns     
       integer, intent(in) :: nlay                    ! Number of model layers
 
       ! orbit
@@ -113,7 +153,7 @@ contains
       ! -----------------
       integer, intent(in) :: isolvar                 ! Flag for solar variability method
 
-      ! Notes: isolvar = -1 uses the Kurucz source function, while isolvar >= 0 use the NRLSSI2
+      ! Notes: isolvar = -1 uses the Kurucz source function, while isolvar >= 0 use the NRLSSI2 
       ! solar model. First, the behavior for SCON = 0: isolvar in {-1,0,3} all have a fixed solar
       ! input at 1AU. For isolvar = -1 it is the Kurucz solar constant of 1368.22 Wm-2, while for
       ! isolvar = {0,3} it is the NRLSSI2 solar constant of 1360.85 Wm-2 (for the 100-50000 cm-1
@@ -152,7 +192,7 @@ contains
       ! maximum (for 1=Mg, 2=SB respecively), and to vary linearly with solcycfrac between those
       ! extrema (see NRLSSI2 module for further details).
       !    Still discussing isolvar = 1, for SCON.eq.0 we take the hint from not explicitly
-      ! setting SCON to let an indsolvar.ne.1 choice cause a deviation from the internal solar
+      ! setting SCON to let an indsolvar.ne.1 choice cause a deviation from the internal solar 
       ! constant, because, while the svar_{f,s} average to unity over a cycle *without* a time-
       ! varying indsolvar multiplier, they do not do so with it. If, on the other hand, a value
       ! SCON > 0 is provided, we ASSUME that it is a value that we should honor as a MEAN over
@@ -259,7 +299,55 @@ contains
       real, intent(out) :: fswband (ncol,nbndsw)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (ncol) :: tautp, tauhp, taump, taulp
+      real, intent(out), dimension(ncol) :: &
+        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
+        cotntp, cotnhp, cotnmp, cotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(ncol) :: &
+        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+        cdsntp, cdsnhp, cdsnmp, cdsnlp
+
+      ! ditto but phase-split
+      real, intent(out), dimension(ncol) :: &
+        cotldtp, cotldhp, cotldmp, cotldlp, &
+        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+        cotidtp, cotidhp, cotidmp, cotidlp, &
+        cotintp, cotinhp, cotinmp, cotinlp, &
+        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+        cdsintp, cdsinhp, cdsinmp, cdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, intent(out), dimension(ncol) :: &
+        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+        ssaintp, ssainhp, ssainmp, ssainlp, &
+        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+        sdsintp, sdsinhp, sdsinmp, sdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, intent(out), dimension(ncol) :: &
+        asmldtp, asmldhp, asmldmp, asmldlp, &
+        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+        adsldtp, adsldhp, adsldmp, adsldlp, &
+        adslntp, adslnhp, adslnmp, adslnlp, &
+        asmidtp, asmidhp, asmidmp, asmidlp, &
+        asmintp, asminhp, asminmp, asminlp, &
+        adsidtp, adsidhp, adsidmp, adsidlp, &
+        adsintp, adsinhp, adsinmp, adsinlp
+
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, intent(out), dimension(ncol) :: &
+        forldtp, forldhp, forldmp, forldlp, &
+        forlntp, forlnhp, forlnmp, forlnlp, &
+        foridtp, foridhp, foridmp, foridlp, &
+        forintp, forinhp, forinmp, forinlp
+#endif
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -272,7 +360,7 @@ contains
 
       integer :: pncol
       integer :: STATUS  ! for MAPL error reporting
-
+      
       ! ASSERTs to catch unphysical or invalid inputs
       _ASSERT(all(play   >= 0.), 'negative values in input:   play')
       _ASSERT(all(plev   >= 0.), 'negative values in input:   plev')
@@ -300,7 +388,7 @@ contains
       else
          pncol = 2
       end if
-
+      
       ! do partitions
       call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
@@ -315,13 +403,53 @@ contains
          cloudLM, cloudMH, normFlx, &
          clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
          nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-         tautp, tauhp, taump, taulp, &
+
+         cotdtp, cotdhp, cotdmp, cotdlp, &
+         cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
+         cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+         cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
+         cotldtp, cotldhp, cotldmp, cotldlp, &
+         cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+         cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+         cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+         cotidtp, cotidhp, cotidmp, cotidlp, &
+         cotintp, cotinhp, cotinmp, cotinlp, &
+         cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+         cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+         ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+         ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+         sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+         sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+         ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+         ssaintp, ssainhp, ssainmp, ssainlp, &
+         sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+         sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+         asmldtp, asmldhp, asmldmp, asmldlp, &
+         asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+         adsldtp, adsldhp, adsldmp, adsldlp, &
+         adslntp, adslnhp, adslnmp, adslnlp, &
+         asmidtp, asmidhp, asmidmp, asmidlp, &
+         asmintp, asminhp, asminmp, asminlp, &
+         adsidtp, adsidhp, adsidmp, adsidlp, &
+         adsintp, adsinhp, adsinmp, adsinlp, &
+
+         forldtp, forldhp, forldmp, forldlp, &
+         forlntp, forlnhp, forlnmp, forlnlp, &
+         foridtp, foridhp, foridmp, foridlp, &
+         forintp, forinhp, forinmp, forinlp, &
+#endif
+
          do_drfband, drband, dfband, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
-
+                                                      
       _RETURN(_SUCCESS)
-   end subroutine rrtmg_sw
+   end subroutine rrtmg_sw                                                     
 
 
    subroutine rrtmg_sw_sub (MAPL, &
@@ -337,7 +465,47 @@ contains
       cloudLM, cloudMH, normFlx, &
       clearCounts, swuflx, swdflx, swuflxc, swdflxc, &
       nirr, nirf, parr, parf, uvrr, uvrf, fswband, &
-      tautp, tauhp, taump, taulp, &
+
+      cotdtp, cotdhp, cotdmp, cotdlp, &
+      cotntp, cotnhp, cotnmp, cotnlp, &
+
+#ifdef SOLAR_RADVAL
+      cdsdtp, cdsdhp, cdsdmp, cdsdlp, &
+      cdsntp, cdsnhp, cdsnmp, cdsnlp, &
+
+      cotldtp, cotldhp, cotldmp, cotldlp, &
+      cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+      cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+      cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+      cotidtp, cotidhp, cotidmp, cotidlp, &
+      cotintp, cotinhp, cotinmp, cotinlp, &
+      cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+      cdsintp, cdsinhp, cdsinmp, cdsinlp, &
+
+      ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+      ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+      sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+      sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+      ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+      ssaintp, ssainhp, ssainmp, ssainlp, &
+      sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+      sdsintp, sdsinhp, sdsinmp, sdsinlp, &
+
+      asmldtp, asmldhp, asmldmp, asmldlp, &
+      asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+      adsldtp, adsldhp, adsldmp, adsldlp, &
+      adslntp, adslnhp, adslnmp, adslnlp, &
+      asmidtp, asmidhp, asmidmp, asmidlp, &
+      asmintp, asminhp, asminmp, asminlp, &
+      adsidtp, adsidhp, adsidmp, adsidlp, &
+      adsintp, adsinhp, adsinmp, adsinlp, &
+
+      forldtp, forldhp, forldmp, forldlp, &
+      forlntp, forlnhp, forlnmp, forlnlp, &
+      foridtp, foridhp, foridmp, foridlp, &
+      forintp, forinhp, forinmp, forinlp, &
+#endif
+
       do_drfband, drband, dfband, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
@@ -391,24 +559,24 @@ contains
       ! cloud optics flags
       integer, intent(in) :: iceflgsw                  ! Flag for ice particle specifn
       integer, intent(in) :: liqflgsw                  ! Flag for liquid droplet specifn
-
+      
       ! clouds
       real, intent(in) :: gcld    (gncol,nlay)         ! Cloud fraction
       real, intent(in) :: gciwp   (gncol,nlay)         ! In-cloud ice water path (g/m2)
       real, intent(in) :: gclwp   (gncol,nlay)         ! In-cloud liquid water path (g/m2)
       real, intent(in) :: grei    (gncol,nlay)         ! Cloud ice effective radius (um)
       real, intent(in) :: grel    (gncol,nlay)         ! Cloud drop effective radius (um)
-
+                                                      
       ! cloud overlap
       integer, intent(in) :: dyofyr                    ! Day of the year
       real, intent(in) :: gzm     (gncol,nlay)         ! Heights of level midpoints
       real, intent(in) :: galat   (gncol)              ! Latitudes of columns [radians]
-
+                                              
       ! aerosols (optical props, non-delta-scaled)
       integer, intent(in) :: iaer                      ! aerosol flag (0=off, 10=on)
-      real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)
-      real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)
-      real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)
+      real, intent(in) :: gtauaer (gncol,nlay,nbndsw)  ! aer optical depth   (iaer=10 only)    
+      real, intent(in) :: gssaaer (gncol,nlay,nbndsw)  ! aer single scat alb (iaer=10 only)    
+      real, intent(in) :: gasmaer (gncol,nlay,nbndsw)  ! aer asymmetry param (iaer=10 only)    
 
       ! surface albedos
       real, intent(in) :: gasdir  (gncol)              ! UV/vis  surface albedo: direct rad
@@ -416,7 +584,7 @@ contains
       real, intent(in) :: galdir  (gncol)              ! Near-IR surface albedo: direct rad
       real, intent(in) :: galdif  (gncol)              ! Near-IR surface albedo: diffuse rad
 
-      ! super-layer cloud fraction boundaries
+      ! super-layer cloud fraction boundaries 
       integer, intent(in) :: cloudLM                   ! Low-mid
       integer, intent(in) :: cloudMH                   ! Mid-high
 
@@ -442,11 +610,59 @@ contains
       real, intent(out) :: uvrr    (gncol)             ! UV      direct  down SW flux (w/m2)
       real, intent(out) :: uvrf    (gncol)             ! UV      diffuse down SW flux (w/m2)
 
-      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension (gncol) :: tautp, tauhp, taump, taulp
-
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
+
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, intent(out), dimension(gncol) :: &
+        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
+        cotntp, cotnhp, cotnmp, cotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(gncol) :: &
+        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+        cdsntp, cdsnhp, cdsnmp, cdsnlp
+
+      ! ditto but phase-split
+      real, intent(out), dimension(gncol) :: &
+        cotldtp, cotldhp, cotldmp, cotldlp, &
+        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+        cotidtp, cotidhp, cotidmp, cotidlp, &
+        cotintp, cotinhp, cotinmp, cotinlp, &
+        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+        cdsintp, cdsinhp, cdsinmp, cdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, intent(out), dimension(gncol) :: &
+        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+        ssaintp, ssainhp, ssainmp, ssainlp, &
+        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+        sdsintp, sdsinhp, sdsinmp, sdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        asmldtp, asmldhp, asmldmp, asmldlp, &
+        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+        adsldtp, adsldhp, adsldmp, adsldlp, &
+        adslntp, adslnhp, adslnmp, adslnlp, &
+        asmidtp, asmidhp, asmidmp, asmidlp, &
+        asmintp, asminhp, asminmp, asminlp, &
+        adsidtp, adsidhp, adsidmp, adsidlp, &
+        adsintp, adsinhp, adsinmp, adsinlp
+
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        forldtp, forldhp, forldmp, forldlp, &
+        forlntp, forlnhp, forlnmp, forlnlp, &
+        foridtp, foridhp, foridmp, foridlp, &
+        forintp, forinhp, forinmp, forinlp
+#endif
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -473,12 +689,12 @@ contains
       ! surface albedos
       real :: albdir (nbndsw,pncol)      ! surface albedo, direct
       real :: albdif (nbndsw,pncol)      ! surface albedo, diffuse
-
+      
       ! Atmosphere - setcoef
       ! --------------------
 
       ! tropopause layer index
-      integer :: laytrop   (pncol)
+      integer :: laytrop   (pncol) 
 
       ! gasesous absorbers
       real :: colh2o  (nlay,pncol)         ! column amount (h2o)
@@ -489,17 +705,17 @@ contains
       real :: colmol  (nlay,pncol)         ! column amount (Rayleigh)
 
       ! continuum interpolation coefficients
-      integer :: indself (nlay,pncol)
-      integer :: indfor  (nlay,pncol)
-      real :: selffac    (nlay,pncol)
-      real :: selffrac   (nlay,pncol)
-      real :: forfac     (nlay,pncol)
-      real :: forfrac    (nlay,pncol)
+      integer :: indself (nlay,pncol) 
+      integer :: indfor  (nlay,pncol) 
+      real :: selffac    (nlay,pncol) 
+      real :: selffrac   (nlay,pncol) 
+      real :: forfac     (nlay,pncol) 
+      real :: forfrac    (nlay,pncol) 
 
       ! pressure and temperature interpolation coefficients
       integer, dimension (nlay,pncol) :: jp, jt, jt1
-      real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11
-
+      real,    dimension (nlay,pncol) :: fac00, fac01, fac10, fac11  
+      
       ! general
       real :: play (nlay,  pncol)           ! Layer pressures (hPa)
       real :: plev (nlay+1,pncol)           ! Interface pressures (hPa)
@@ -515,10 +731,10 @@ contains
       real :: clwp (nlay,pncol)             ! In-cloud liq water path [g/m2]
       real :: rei  (nlay,pncol)             ! Cloud ice effective radius [um]
       real :: rel  (nlay,pncol)             ! Cloud drop effective radius [um]
-
+      
       real :: alat      (pncol)             ! latitude for cloud overlap
       real :: zm   (nlay,pncol)		    ! mid-layer hgt for cld overlap [m]
-
+                                                      
       logical :: cldymcl (nlay,ngptsw,pncol)   ! cloud or not? [mcica]
       real    :: ciwpmcl (nlay,ngptsw,pncol)   ! in-cloud ice water path [mcica] [g/m2]
       real    :: clwpmcl (nlay,ngptsw,pncol)   ! in-cloud liq water path [mcica] [g/m2]
@@ -528,6 +744,18 @@ contains
       real :: taormc  (nlay,ngptsw,pncol)   ! unscaled in-cloud optl depth [mcica]
       real :: ssacmc  (nlay,ngptsw,pncol)   ! in-cloud single scat albedo [mcica]
       real :: asmcmc  (nlay,ngptsw,pncol)   ! in-cloud asymmetry param [mcica]
+
+#ifdef SOLAR_RADVAL
+      ! McICA phase-split optical properties (original "ormc" and delta-scaled)
+      real, dimension (nlay,ngptsw,pncol) :: &
+        ltaormc, lomormc, lasormc, &
+        ltaucmc, lomgcmc, lasycmc, &
+        itaormc, iomormc, iasormc, &
+        itaucmc, iomgcmc, iasycmc
+      
+      ! McICA phase-split forward scattering fractions 
+      real, dimension (nlay,ngptsw,pncol) :: forwliq, forwice
+#endif
 
       ! Atmosphere/clouds/aerosol - spcvrt,spcvmc
       ! -----------------------------------------
@@ -560,8 +788,56 @@ contains
 
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
-      ! in-cloud PAR optical thicknesses
-      real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, dimension(pncol) :: &
+        zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
+        zcotntp, zcotnhp, zcotnmp, zcotnlp
+
+#ifdef SOLAR_RADVAL
+      real, dimension(pncol) :: &
+        zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
+        zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
+
+      ! ditto but phase-split
+      real, dimension(pncol) :: &
+        zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+        zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
+        zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+        zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
+        zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+        zcotintp, zcotinhp, zcotinmp, zcotinlp, &
+        zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+        zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, dimension(pncol) :: &
+        zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
+        zssalntp, zssalnhp, zssalnmp, zssalnlp, &
+        zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
+        zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
+        zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
+        zssaintp, zssainhp, zssainmp, zssainlp, &
+        zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
+        zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
+        zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
+        zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
+        zadslntp, zadslnhp, zadslnmp, zadslnlp, &
+        zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
+        zasmintp, zasminhp, zasminmp, zasminlp, &
+        zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
+        zadsintp, zadsinhp, zadsinmp, zadsinlp
+      
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zforldtp, zforldhp, zforldmp, zforldlp, &
+        zforlntp, zforlnhp, zforlnmp, zforlnlp, &
+        zforidtp, zforidhp, zforidmp, zforidlp, &
+        zforintp, zforinhp, zforinmp, zforinlp
+#endif
 
       ! Solar variability multipliers
       ! -----------------------------
@@ -591,7 +867,7 @@ contains
 
       integer :: n, imol, gicol            ! Loop indices
       real :: adjflx                       ! flux adjustment for Earth/Sun distance
-
+      
       integer :: ipart, col_last, cols, cole, cc
 
       ! ncol is the actual number of gridcols in a partition, cf. pncol,
@@ -601,7 +877,7 @@ contains
       ! other solar variability locals
       ! ------------------------------
       real :: solvar (jpband)              ! solar constant scaling factor by band
-      real :: indsolvar_scl (2)            ! Adjusted facular and sunspot amplitude
+      real :: indsolvar_scl (2)            ! Adjusted facular and sunspot amplitude 
                                            !   scale factors (isolvar=1)
       real :: indsolvar_ndx (2)            ! Facular and sunspot indices (isolvar=2)
 
@@ -617,17 +893,17 @@ contains
       solvar(:) = 1.
       adjflux(:) = 1.
       svar_f = 1.
-      svar_s = 1.
-      svar_i = 1.
-      svar_f_bnd(:) = 1.
-      svar_s_bnd(:) = 1.
-      svar_i_bnd(:) = 1.
+      svar_s = 1. 
+      svar_i = 1. 
+      svar_f_bnd(:) = 1. 
+      svar_s_bnd(:) = 1. 
+      svar_i_bnd(:) = 1. 
 
       ! isolvar == 1 specifies the position in AvgCyc11 through solcycfrac
       ! and allows scaling of solar cycle amplitudes as described in notes.
       ! ------------------------------------------------------------------
 
-      if (isolvar .eq. 1) then
+      if (isolvar .eq. 1) then 
 
          ! require solcycfrac present, else what's the point of using isolvar=1 ?
          if (.not.present(solcycfrac)) then
@@ -635,10 +911,10 @@ contains
          end if
          solcycfr = solcycfrac
 
-         ! No amplitude scaling unless indsolvar is present.
+         ! No amplitude scaling unless indsolvar is present. 
          indsolvar_scl(1:2) = 1.
 
-         if (present(indsolvar)) then
+         if (present(indsolvar)) then 
 
             ! Adjust amplitude scaling of mean solar cycle to be unity at
             ! solar minimum (solcycfrac_min), to be the requested indsolvar
@@ -654,15 +930,15 @@ contains
 
       ! isolvar == 2 allows direct specification of Mg and SB via indsolvar
       ! -------------------------------------------------------------------
-
-      if (isolvar .eq. 2) then
+      
+      if (isolvar .eq. 2) then 
 
          ! default to mean indices
          indsolvar_ndx(1) = Mg_avg
          indsolvar_ndx(2) = SB_avg
 
          ! update to specified indices if provided
-         if (present(indsolvar)) then
+         if (present(indsolvar)) then 
             indsolvar_ndx(1) = indsolvar(1)
             indsolvar_ndx(2) = indsolvar(2)
          endif
@@ -675,7 +951,7 @@ contains
 
       ! Set flux adjustment for current Earth/Sun distance (two options)
       ! ----------------------------------------------------------------
-      ! (Set adjflx to 1. to use constant Earth/Sun distance of 1 AU).
+      ! (Set adjflx to 1. to use constant Earth/Sun distance of 1 AU). 
 
       ! 1) Provided by GCM via ADJES (from MAPL sun factor DIST ~ 1/r^2)
       adjflx = adjes
@@ -692,7 +968,7 @@ contains
       ! and input solar constant SCON.
       ! --------------------------------------------------------
 
-      if (scon == 0.) then
+      if (scon == 0.) then 
 
          ! For scon = 0, use internally defined solar constant, which is
          ! 1368.22 Wm-2 (for ISOLVAR=-1) and 1360.85 Wm-2 (For ISOLVAR=0,3;
@@ -718,7 +994,7 @@ contains
          elseif (isolvar .eq. 1) then
 
             ! Apply NRLSSI2 solar irradiance model at a specified solcycfr
-            ! within AvgCyc11, with the additional amplitude scalings in
+            ! within AvgCyc11, with the additional amplitude scalings in 
             ! indsolvar_scl.
 
             ! interpolate mean solar cycle to solcycfr
@@ -755,9 +1031,9 @@ contains
 
          else
             _FAIL('invalid isolvar')
-         endif
+         endif 
 
-      elseif (scon > 0.) then
+      elseif (scon > 0.) then 
 
          ! Scale from internal to externally specified SCON.
 
@@ -767,7 +1043,7 @@ contains
             ! Scale from internal to requested solar constant.
             ! Apply optional scaling by band if bndscl present.
 
-            solvar(jpb1:jpb2) = scon / rrsw_scon
+            solvar(jpb1:jpb2) = scon / rrsw_scon 
             if (present(bndscl)) &
                solvar(jpb1:jpb2) = solvar(jpb1:jpb2) * bndscl(:)
 
@@ -775,7 +1051,7 @@ contains
 
             ! Constant sun (NRLSSI2 model)
             ! Quiet sun, facular, and sunspot terms averaged over AvgCyc11.
-            ! Scale from internal to requested solar constant.
+            ! Scale from internal to requested solar constant. 
 
             scon_int = Fint + Sint + Iint
             svar_r = scon / scon_int
@@ -815,7 +1091,7 @@ contains
 
             svar_f = (indsolvar_ndx(1) - Mg_0) / (Mg_avg - Mg_0)
             svar_s = (indsolvar_ndx(2) - SB_0) / (SB_avg - SB_0)
-            svar_i = (scon - (svar_f * Fint + svar_s * Sint)) / Iint
+            svar_i = (scon - (svar_f * Fint + svar_s * Sint)) / Iint 
 
          elseif (isolvar .eq. 3) then
 
@@ -835,7 +1111,7 @@ contains
 
          else
             _FAIL('invalid isolvar')
-         endif
+         endif 
 
       else
          _FAIL('scon cannot be negative!')
@@ -849,7 +1125,7 @@ contains
       if (isolvar < 0) then
          adjflux(jpb1:jpb2) = adjflux(jpb1:jpb2) * solvar(jpb1:jpb2)
       endif
-
+      
       ! Build profile separation based on cloudiness, i.e., count and index
       ! clear/cloudy gridcolumns. The separation is based on whether the grid-
       ! column has cloud fraction in any layer (or not). This is based on the
@@ -858,7 +1134,7 @@ contains
       ! but the converse in not true ... can easily get a clear subcolumn for a
       ! cloudy gridcolumn. So, the gicol_clr can be assumed to yield all clear
       ! subcolumns, while the gicol_cld will yield both clear and cloudy sub-
-      ! columns.
+      ! columns. 
       ncol_clr = 0
       ncol_cld = 0
       do gicol = 1,gncol
@@ -887,7 +1163,7 @@ contains
 
       do cc = 1,2  ! outer loop over clear then cloudy gridcolumns
 
-         if (cc == 1) then
+         if (cc == 1) then 
             ! clear
             npart = npart_clr
             col_last = ncol_clr
@@ -938,7 +1214,7 @@ contains
                ! copy inputs into partition
                ! --------------------------
 
-               if (cc == 1) then
+               if (cc == 1) then    
 
                   ! -----------------
                   ! Clear gridcolumns
@@ -976,7 +1252,7 @@ contains
                   ! copy in partition (general)
                   do icol = 1,ncol
                      gicol = gicol_clr(icol + cols - 1)
-
+      
                      play(:,icol) = gplay(gicol,1:nlay)
                      plev(:,icol) = gplev(gicol,1:nlay+1)
                      tlay(:,icol) = gtlay(gicol,1:nlay)
@@ -994,7 +1270,7 @@ contains
                            omga(1:nlay,ibnd,icol) = gssaaer(gicol,1:nlay,ibnd)
                         enddo
                      enddo
-                  endif
+                  endif   
 
                   ! copy in partition (gases)
                   do icol = 1,ncol
@@ -1003,7 +1279,7 @@ contains
                      colco2(:,icol) = gco2vmr(gicol,1:nlay)
                      colo3 (:,icol) = go3vmr (gicol,1:nlay)
                      colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                     colo2 (:,icol) = go2vmr (gicol,1:nlay)
+                     colo2 (:,icol) = go2vmr (gicol,1:nlay)   
                   end do
 
                else
@@ -1011,10 +1287,10 @@ contains
                   ! ------------------
                   ! Cloudy gridcolumns
                   ! ------------------
-
+            
                   do icol = 1,ncol
                      gicol = gicol_cld(icol + cols - 1)
-
+      
                      ! assign surface albedos to bands
 
                      ! near IR bands 14=nbndsw and 1-8
@@ -1040,18 +1316,18 @@ contains
                      albdif(9,icol) = (gasdif(gicol)+galdif(gicol))/2.
 
                   enddo
-
+            
                   ! copy in partition (general and cloud physical props)
                   do icol = 1,ncol
                      gicol = gicol_cld(icol + cols - 1)
-
+      
                      play(:,icol) = gplay(gicol,1:nlay)
                      plev(:,icol) = gplev(gicol,1:nlay+1)
                      tlay(:,icol) = gtlay(gicol,1:nlay)
                      cld (:,icol) = gcld (gicol,1:nlay)
                      ciwp(:,icol) = gciwp(gicol,1:nlay)
                      clwp(:,icol) = gclwp(gicol,1:nlay)
-                     rei (:,icol) = grei (gicol,1:nlay)
+                     rei (:,icol) = grei (gicol,1:nlay) 
                      rel (:,icol) = grel (gicol,1:nlay)
                      zm  (:,icol) = gzm  (gicol,1:nlay)
                      alat  (icol) = galat  (gicol)
@@ -1077,7 +1353,7 @@ contains
                      colco2(:,icol) = gco2vmr(gicol,1:nlay)
                      colo3 (:,icol) = go3vmr (gicol,1:nlay)
                      colch4(:,icol) = gch4vmr(gicol,1:nlay)
-                     colo2 (:,icol) = go2vmr (gicol,1:nlay)
+                     colo2 (:,icol) = go2vmr (gicol,1:nlay)  
                   enddo
 
                end if  ! clear or cloudy gridcolumns
@@ -1110,7 +1386,6 @@ contains
                   end do
                end do
 
-
                ! We have separate loops here because MAPL profiling
                ! timers must be called on all branches and all processes
                ! and we do not want the timers in the if-block
@@ -1124,13 +1399,13 @@ contains
                      zm, alat, dyofyr, &
                      play, cld, ciwp, clwp, 1.e-20, &
                      cldymcl, ciwpmcl, clwpmcl, &
-                     seed_order=[4,3,2,1])
+                     seed_order=[4,3,2,1]) 
 
                   ! for super-layer cloud fractions
                   call clearCounts_threeBand( &
                      pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
                      p_clearCounts)
-               end if
+               endif
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
 
                call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
@@ -1139,7 +1414,16 @@ contains
                   call cldprmc_sw( &
                      pncol, ncol, nlay, iceflgsw, liqflgsw,  &
                      cldymcl, ciwpmcl, clwpmcl, rei, rel, &
+#ifdef SOLAR_RADVAL
+                     taormc, taucmc, ssacmc, asmcmc, &
+                     ltaormc, lomormc, lasormc, &
+                     ltaucmc, lomgcmc, lasycmc, &
+                     itaormc, iomormc, iasormc, &
+                     itaucmc, iomgcmc, iasycmc, &
+                     forwliq, forwice)
+#else
                      taormc, taucmc, ssacmc, asmcmc)
+#endif
                end if
                call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
 
@@ -1161,18 +1445,65 @@ contains
                   cc, pncol, ncol, nlay, &
                   albdif, albdir, &
                   cldymcl, taucmc, asmcmc, ssacmc, taormc, &
+#ifdef SOLAR_RADVAL
+                  ltaormc, lomormc, lasormc, &
+                  ltaucmc, lomgcmc, lasycmc, &
+                  itaormc, iomormc, iasormc, &
+                  itaucmc, iomgcmc, iasycmc, &
+                  forwliq, forwice, &
+#endif
                   taua, asya, omga, cossza, adjflux, &
                   isolvar, svar_f, svar_s, svar_i, &
                   svar_f_bnd, svar_s_bnd, svar_i_bnd, &
                   laytrop, jp, jt, jt1, &
                   colch4, colco2, colh2o, colmol, colo2, colo3, &
                   fac00, fac01, fac10, fac11, &
-                  cloudLM, cloudMH, &
+                  cloudLM, cloudMH, & 
                   selffac, selffrac, indself, forfac, forfrac, indfor, &
                   zbbfd, zbbfu, zbbcd, zbbcu, zuvfd, zuvcd, znifd, znicd, &
                   zbbfddir, zbbcddir, zuvfddir, zuvcddir, znifddir, znicddir,&
                   znirr, znirf, zparr, zparf, zuvrr, zuvrf, fndsbnd, &
-                  ztautp, ztauhp, ztaump, ztaulp, &
+
+                  zcotdtp, zcotdhp, zcotdmp, zcotdlp, &
+                  zcotntp, zcotnhp, zcotnmp, zcotnlp, &
+
+#ifdef SOLAR_RADVAL
+                  zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &
+                  zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp, &
+
+                  zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+                  zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
+                  zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+                  zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
+                  zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+                  zcotintp, zcotinhp, zcotinmp, zcotinlp, &
+                  zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+                  zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp, &
+
+                  zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
+                  zssalntp, zssalnhp, zssalnmp, zssalnlp, &
+                  zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
+                  zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
+                  zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
+                  zssaintp, zssainhp, zssainmp, zssainlp, &
+                  zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
+                  zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp, &
+
+                  zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
+                  zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
+                  zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
+                  zadslntp, zadslnhp, zadslnmp, zadslnlp, &
+                  zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
+                  zasmintp, zasminhp, zasminmp, zasminlp, &
+                  zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
+                  zadsintp, zadsinhp, zadsinmp, zadsinlp, &
+
+                  zforldtp, zforldhp, zforldmp, zforldlp, &
+                  zforlntp, zforlnhp, zforlnmp, zforlnlp, &
+                  zforidtp, zforidhp, zforidmp, zforidlp, &
+                  zforintp, zforinhp, zforinmp, zforinlp, &
+#endif
+
                   do_drfband, zdrband, zdfband, &
                   __RC__)
 
@@ -1185,7 +1516,7 @@ contains
 
                   do icol = 1,ncol
                      gicol = gicol_clr(icol + cols - 1)
-
+         
                      ! super-layer clear counts
                      do n = 1,4
                         clearCounts (gicol,n) = ngptsw
@@ -1193,17 +1524,84 @@ contains
 
                      ! up and down fluxes
                      do ilev = 1,nlay+1
-                        swuflxc(gicol,ilev) = zbbcu(ilev,icol)
-                        swdflxc(gicol,ilev) = zbbcd(ilev,icol)
-                        swuflx (gicol,ilev) = zbbfu(ilev,icol)
-                        swdflx (gicol,ilev) = zbbfd(ilev,icol)
+                        swuflxc(gicol,ilev) = zbbcu(ilev,icol) 
+                        swdflxc(gicol,ilev) = zbbcd(ilev,icol) 
+                        swuflx (gicol,ilev) = zbbfu(ilev,icol) 
+                        swdflx (gicol,ilev) = zbbfd(ilev,icol) 
                      enddo
 
                      ! super-layer optical thicknesses
-                     tautp(gicol) = 0.
-                     tauhp(gicol) = 0.
-                     taump(gicol) = 0.
-                     taulp(gicol) = 0.
+                     cotdtp(gicol) = 0.; cotntp(gicol) = 0.
+                     cotdhp(gicol) = 0.; cotnhp(gicol) = 0.
+                     cotdmp(gicol) = 0.; cotnmp(gicol) = 0.
+                     cotdlp(gicol) = 0.; cotnlp(gicol) = 0.
+
+#ifdef SOLAR_RADVAL
+                     cdsdtp(gicol) = 0.; cdsntp(gicol) = 0.
+                     cdsdhp(gicol) = 0.; cdsnhp(gicol) = 0.
+                     cdsdmp(gicol) = 0.; cdsnmp(gicol) = 0.
+                     cdsdlp(gicol) = 0.; cdsnlp(gicol) = 0.
+
+                     cotldtp(gicol) = 0.; cotlntp(gicol) = 0.
+                     cotldhp(gicol) = 0.; cotlnhp(gicol) = 0.
+                     cotldmp(gicol) = 0.; cotlnmp(gicol) = 0.
+                     cotldlp(gicol) = 0.; cotlnlp(gicol) = 0.
+                     cdsldtp(gicol) = 0.; cdslntp(gicol) = 0.
+                     cdsldhp(gicol) = 0.; cdslnhp(gicol) = 0.
+                     cdsldmp(gicol) = 0.; cdslnmp(gicol) = 0.
+                     cdsldlp(gicol) = 0.; cdslnlp(gicol) = 0.
+                     cotidtp(gicol) = 0.; cotintp(gicol) = 0.
+                     cotidhp(gicol) = 0.; cotinhp(gicol) = 0.
+                     cotidmp(gicol) = 0.; cotinmp(gicol) = 0.
+                     cotidlp(gicol) = 0.; cotinlp(gicol) = 0.
+                     cdsidtp(gicol) = 0.; cdsintp(gicol) = 0.
+                     cdsidhp(gicol) = 0.; cdsinhp(gicol) = 0.
+                     cdsidmp(gicol) = 0.; cdsinmp(gicol) = 0.
+                     cdsidlp(gicol) = 0.; cdsinlp(gicol) = 0.
+
+                     ssaldtp(gicol) = 0.; ssalntp(gicol) = 0.
+                     ssaldhp(gicol) = 0.; ssalnhp(gicol) = 0.
+                     ssaldmp(gicol) = 0.; ssalnmp(gicol) = 0.
+                     ssaldlp(gicol) = 0.; ssalnlp(gicol) = 0.
+                     sdsldtp(gicol) = 0.; sdslntp(gicol) = 0.
+                     sdsldhp(gicol) = 0.; sdslnhp(gicol) = 0.
+                     sdsldmp(gicol) = 0.; sdslnmp(gicol) = 0.
+                     sdsldlp(gicol) = 0.; sdslnlp(gicol) = 0.
+                     ssaidtp(gicol) = 0.; ssaintp(gicol) = 0.
+                     ssaidhp(gicol) = 0.; ssainhp(gicol) = 0.
+                     ssaidmp(gicol) = 0.; ssainmp(gicol) = 0.
+                     ssaidlp(gicol) = 0.; ssainlp(gicol) = 0.
+                     sdsidtp(gicol) = 0.; sdsintp(gicol) = 0.
+                     sdsidhp(gicol) = 0.; sdsinhp(gicol) = 0.
+                     sdsidmp(gicol) = 0.; sdsinmp(gicol) = 0.
+                     sdsidlp(gicol) = 0.; sdsinlp(gicol) = 0.
+
+                     asmldtp(gicol) = 0.; asmlntp(gicol) = 0.
+                     asmldhp(gicol) = 0.; asmlnhp(gicol) = 0.
+                     asmldmp(gicol) = 0.; asmlnmp(gicol) = 0.
+                     asmldlp(gicol) = 0.; asmlnlp(gicol) = 0.
+                     adsldtp(gicol) = 0.; adslntp(gicol) = 0.
+                     adsldhp(gicol) = 0.; adslnhp(gicol) = 0.
+                     adsldmp(gicol) = 0.; adslnmp(gicol) = 0.
+                     adsldlp(gicol) = 0.; adslnlp(gicol) = 0.
+                     asmidtp(gicol) = 0.; asmintp(gicol) = 0.
+                     asmidhp(gicol) = 0.; asminhp(gicol) = 0.
+                     asmidmp(gicol) = 0.; asminmp(gicol) = 0.
+                     asmidlp(gicol) = 0.; asminlp(gicol) = 0.
+                     adsidtp(gicol) = 0.; adsintp(gicol) = 0.
+                     adsidhp(gicol) = 0.; adsinhp(gicol) = 0.
+                     adsidmp(gicol) = 0.; adsinmp(gicol) = 0.
+                     adsidlp(gicol) = 0.; adsinlp(gicol) = 0.
+
+                     forldtp(gicol) = 0.; forlntp(gicol) = 0.
+                     forldhp(gicol) = 0.; forlnhp(gicol) = 0.
+                     forldmp(gicol) = 0.; forlnmp(gicol) = 0.
+                     forldlp(gicol) = 0.; forlnlp(gicol) = 0.
+                     foridtp(gicol) = 0.; forintp(gicol) = 0.
+                     foridhp(gicol) = 0.; forinhp(gicol) = 0.
+                     foridmp(gicol) = 0.; forinmp(gicol) = 0.
+                     foridlp(gicol) = 0.; forinlp(gicol) = 0.
+#endif
 
                   enddo
 
@@ -1245,15 +1643,84 @@ contains
                         clearCounts (gicol,n) = p_clearCounts(n,icol)
                      end do
                      do ilev = 1,nlay+1
-                        swuflxc(gicol,ilev) = zbbcu(ilev,icol)
-                        swdflxc(gicol,ilev) = zbbcd(ilev,icol)
-                        swuflx (gicol,ilev) = zbbfu(ilev,icol)
-                        swdflx (gicol,ilev) = zbbfd(ilev,icol)
+                        swuflxc(gicol,ilev) = zbbcu(ilev,icol) 
+                        swdflxc(gicol,ilev) = zbbcd(ilev,icol) 
+                        swuflx (gicol,ilev) = zbbfu(ilev,icol) 
+                        swdflx (gicol,ilev) = zbbfd(ilev,icol) 
                      enddo
-                     tautp(gicol) = ztautp(icol)
-                     tauhp(gicol) = ztauhp(icol)
-                     taump(gicol) = ztaump(icol)
-                     taulp(gicol) = ztaulp(icol)
+
+                     cotdtp(gicol) = zcotdtp(icol); cotntp(gicol) = zcotntp(icol)
+                     cotdhp(gicol) = zcotdhp(icol); cotnhp(gicol) = zcotnhp(icol)
+                     cotdmp(gicol) = zcotdmp(icol); cotnmp(gicol) = zcotnmp(icol)
+                     cotdlp(gicol) = zcotdlp(icol); cotnlp(gicol) = zcotnlp(icol)
+
+#ifdef SOLAR_RADVAL
+                     cdsdtp(gicol) = zcdsdtp(icol); cdsntp(gicol) = zcdsntp(icol)
+                     cdsdhp(gicol) = zcdsdhp(icol); cdsnhp(gicol) = zcdsnhp(icol)
+                     cdsdmp(gicol) = zcdsdmp(icol); cdsnmp(gicol) = zcdsnmp(icol)
+                     cdsdlp(gicol) = zcdsdlp(icol); cdsnlp(gicol) = zcdsnlp(icol)
+
+                     cotldtp(gicol) = zcotldtp(icol); cotlntp(gicol) = zcotlntp(icol)
+                     cotldhp(gicol) = zcotldhp(icol); cotlnhp(gicol) = zcotlnhp(icol)
+                     cotldmp(gicol) = zcotldmp(icol); cotlnmp(gicol) = zcotlnmp(icol)
+                     cotldlp(gicol) = zcotldlp(icol); cotlnlp(gicol) = zcotlnlp(icol)
+                     cdsldtp(gicol) = zcdsldtp(icol); cdslntp(gicol) = zcdslntp(icol)
+                     cdsldhp(gicol) = zcdsldhp(icol); cdslnhp(gicol) = zcdslnhp(icol)
+                     cdsldmp(gicol) = zcdsldmp(icol); cdslnmp(gicol) = zcdslnmp(icol)
+                     cdsldlp(gicol) = zcdsldlp(icol); cdslnlp(gicol) = zcdslnlp(icol)
+                     cotidtp(gicol) = zcotidtp(icol); cotintp(gicol) = zcotintp(icol)
+                     cotidhp(gicol) = zcotidhp(icol); cotinhp(gicol) = zcotinhp(icol)
+                     cotidmp(gicol) = zcotidmp(icol); cotinmp(gicol) = zcotinmp(icol)
+                     cotidlp(gicol) = zcotidlp(icol); cotinlp(gicol) = zcotinlp(icol)
+                     cdsidtp(gicol) = zcdsidtp(icol); cdsintp(gicol) = zcdsintp(icol)
+                     cdsidhp(gicol) = zcdsidhp(icol); cdsinhp(gicol) = zcdsinhp(icol)
+                     cdsidmp(gicol) = zcdsidmp(icol); cdsinmp(gicol) = zcdsinmp(icol)
+                     cdsidlp(gicol) = zcdsidlp(icol); cdsinlp(gicol) = zcdsinlp(icol)
+
+                     ssaldtp(gicol) = zssaldtp(icol); ssalntp(gicol) = zssalntp(icol)
+                     ssaldhp(gicol) = zssaldhp(icol); ssalnhp(gicol) = zssalnhp(icol)
+                     ssaldmp(gicol) = zssaldmp(icol); ssalnmp(gicol) = zssalnmp(icol)
+                     ssaldlp(gicol) = zssaldlp(icol); ssalnlp(gicol) = zssalnlp(icol)
+                     sdsldtp(gicol) = zsdsldtp(icol); sdslntp(gicol) = zsdslntp(icol)
+                     sdsldhp(gicol) = zsdsldhp(icol); sdslnhp(gicol) = zsdslnhp(icol)
+                     sdsldmp(gicol) = zsdsldmp(icol); sdslnmp(gicol) = zsdslnmp(icol)
+                     sdsldlp(gicol) = zsdsldlp(icol); sdslnlp(gicol) = zsdslnlp(icol)
+                     ssaidtp(gicol) = zssaidtp(icol); ssaintp(gicol) = zssaintp(icol)
+                     ssaidhp(gicol) = zssaidhp(icol); ssainhp(gicol) = zssainhp(icol)
+                     ssaidmp(gicol) = zssaidmp(icol); ssainmp(gicol) = zssainmp(icol)
+                     ssaidlp(gicol) = zssaidlp(icol); ssainlp(gicol) = zssainlp(icol)
+                     sdsidtp(gicol) = zsdsidtp(icol); sdsintp(gicol) = zsdsintp(icol)
+                     sdsidhp(gicol) = zsdsidhp(icol); sdsinhp(gicol) = zsdsinhp(icol)
+                     sdsidmp(gicol) = zsdsidmp(icol); sdsinmp(gicol) = zsdsinmp(icol)
+                     sdsidlp(gicol) = zsdsidlp(icol); sdsinlp(gicol) = zsdsinlp(icol)
+
+                     asmldtp(gicol) = zasmldtp(icol); asmlntp(gicol) = zasmlntp(icol)
+                     asmldhp(gicol) = zasmldhp(icol); asmlnhp(gicol) = zasmlnhp(icol)
+                     asmldmp(gicol) = zasmldmp(icol); asmlnmp(gicol) = zasmlnmp(icol)
+                     asmldlp(gicol) = zasmldlp(icol); asmlnlp(gicol) = zasmlnlp(icol)
+                     adsldtp(gicol) = zadsldtp(icol); adslntp(gicol) = zadslntp(icol)
+                     adsldhp(gicol) = zadsldhp(icol); adslnhp(gicol) = zadslnhp(icol)
+                     adsldmp(gicol) = zadsldmp(icol); adslnmp(gicol) = zadslnmp(icol)
+                     adsldlp(gicol) = zadsldlp(icol); adslnlp(gicol) = zadslnlp(icol)
+                     asmidtp(gicol) = zasmidtp(icol); asmintp(gicol) = zasmintp(icol)
+                     asmidhp(gicol) = zasmidhp(icol); asminhp(gicol) = zasminhp(icol)
+                     asmidmp(gicol) = zasmidmp(icol); asminmp(gicol) = zasminmp(icol)
+                     asmidlp(gicol) = zasmidlp(icol); asminlp(gicol) = zasminlp(icol)
+                     adsidtp(gicol) = zadsidtp(icol); adsintp(gicol) = zadsintp(icol)
+                     adsidhp(gicol) = zadsidhp(icol); adsinhp(gicol) = zadsinhp(icol)
+                     adsidmp(gicol) = zadsidmp(icol); adsinmp(gicol) = zadsinmp(icol)
+                     adsidlp(gicol) = zadsidlp(icol); adsinlp(gicol) = zadsinlp(icol)
+
+                     forldtp(gicol) = zforldtp(icol); forlntp(gicol) = zforlntp(icol)
+                     forldhp(gicol) = zforldhp(icol); forlnhp(gicol) = zforlnhp(icol)
+                     forldmp(gicol) = zforldmp(icol); forlnmp(gicol) = zforlnmp(icol)
+                     forldlp(gicol) = zforldlp(icol); forlnlp(gicol) = zforlnlp(icol)
+                     foridtp(gicol) = zforidtp(icol); forintp(gicol) = zforintp(icol)
+                     foridhp(gicol) = zforidhp(icol); forinhp(gicol) = zforinhp(icol)
+                     foridmp(gicol) = zforidmp(icol); forinmp(gicol) = zforinmp(icol)
+                     foridlp(gicol) = zforidlp(icol); forinlp(gicol) = zforinlp(icol)
+#endif
+
                   enddo
 
                   do icol = 1,ncol
@@ -1340,7 +1807,7 @@ contains
    !
    !  Purpose: Function to calculate the correction factor of Earth's orbit
    !  for current day of the year
-   !
+   ! 
    !  idn        : Day of the year
    !  earth_sun  : square of the ratio of mean to actual Earth-Sun distance
    !-----------------------------------------------------------------------
@@ -1351,7 +1818,7 @@ contains
 
       real :: gamma
 
-      gamma = 2. * pi * (idn-1)/365.
+      gamma = 2. * pi * (idn-1)/365. 
 
       ! Use Iqbal's equation 1.2.1
 
