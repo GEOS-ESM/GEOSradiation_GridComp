@@ -3288,7 +3288,7 @@ contains
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
       use mo_gas_concentrations,      only: ty_gas_concs
-      use mo_cloud_optics,            only: ty_cloud_optics
+      use mo_cloud_optics_rrtmgp,     only: ty_cloud_optics_rrtmgp
       use mo_cloud_sampling,          only: draw_samples, &
                                             sampled_mask_max_ran, sampled_mask_exp_ran, &
                                             sampled_urand_gen_max_ran
@@ -3478,7 +3478,7 @@ contains
       ! coefficients and cloud physical properties)
       type(ty_gas_optics_rrtmgp), pointer               :: k_dist
       type(ty_gas_concs)                                :: gas_concs, gas_concs_block
-      type(ty_cloud_optics)                             :: cloud_optics
+      type(ty_cloud_optics_rrtmgp)                      :: cloud_optics
       type(ty_fluxes_byband)                            :: fluxes_clrsky, fluxes_allsky
 
       ! PMN: my earlier RRTMGP implementations used cloud_props for liq and ice combined,

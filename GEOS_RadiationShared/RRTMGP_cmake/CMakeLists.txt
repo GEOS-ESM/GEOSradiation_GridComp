@@ -2,33 +2,34 @@ esma_set_this (OVERRIDE RRTMGP)
 
 # These are from RRTMGP
 set (RRTMGP_SRCS
-  rte/mo_rte_kind.F90
-  rte/mo_rte_config.F90
-  rte/mo_rte_util_array.F90
-  rte/kernels/mo_rte_solver_kernels.F90
-  rte/kernels/mo_optical_props_kernels.F90
-  rte/kernels/mo_fluxes_broadband_kernels.F90
-  rte/mo_optical_props.F90
-  rte/mo_source_functions.F90
-  rte/mo_fluxes.F90
-  rrtmgp/mo_rrtmgp_constants.F90
-  rrtmgp/mo_rrtmgp_util_string.F90
-  rrtmgp/mo_gas_optics.F90
-  rrtmgp/mo_gas_optics_rrtmgp.F90
-  rrtmgp/mo_gas_concentrations.F90
-  rrtmgp/kernels/mo_gas_optics_kernels.F90
+  rte-frontend/mo_rte_kind.F90
+  rte-frontend/mo_rte_config.F90
+  rte-frontend/mo_rte_util_array_validation.F90
+  rte-kernels/mo_rte_util_array.F90
+  rte-kernels/mo_rte_solver_kernels.F90
+  rte-kernels/mo_optical_props_kernels.F90
+  rte-kernels/mo_fluxes_broadband_kernels.F90
+  rte-frontend/mo_optical_props.F90
+  rte-frontend/mo_source_functions.F90
+  rte-frontend/mo_fluxes.F90
+  rte-frontend/mo_rte_lw.F90
+  rte-frontend/mo_rte_sw.F90
+  gas-optics/mo_gas_optics_constants.F90
+  gas-optics/mo_gas_optics_util_string.F90
+  gas-optics/mo_gas_concentrations.F90
+  gas-optics/mo_gas_optics.F90
+  rrtmgp-kernels/mo_gas_optics_rrtmgp_kernels.F90
+  rrtmgp-frontend/mo_gas_optics_rrtmgp.F90
+  rrtmgp-frontend/mo_cloud_optics_rrtmgp.F90
   extensions/mo_compute_bc.F90
   extensions/mo_fluxes_byband.F90
   extensions/mo_fluxes_bygpoint.F90
   extensions/mo_heating_rates.F90
   extensions/mo_rrtmgp_clr_all_sky.F90
-  extensions/cloud_optics/mo_cloud_optics.F90
-  extensions/cloud_optics/mo_cloud_sampling.F90
+  extensions/mo_cloud_sampling.F90
   examples/mo_simple_netcdf.F90
   examples/mo_load_coefficients.F90
   examples/all-sky/mo_load_cloud_coefficients.F90
-  rte/mo_rte_lw.F90
-  rte/mo_rte_sw.F90
   )
 
 esma_mepo_style(RRTMGP RRTMGP_rel_path REL_PATH ..)
@@ -77,3 +78,9 @@ if (MKL_FOUND)
 endif()
 
 set_target_properties (${this} PROPERTIES Fortran_MODULE_DIRECTORY ${include_${this}})
+
+# Option to enable RRTMGP single-precision
+option(RRTMGP_SINGLE_PRECISION "Use single precision for RRTMGP" OFF)
+if (RRTMGP_SINGLE_PRECISION)
+  target_compile_definitions(${this} PRIVATE RTE_USE_SP)
+endif()
