@@ -4578,8 +4578,8 @@ contains
 
       ! initialize k-distribution if not already done
       call MAPL_GetResource( &
-        MAPL, k_dist_file, "RRTMGP_DATA_SW:", &
-        DEFAULT='rrtmgp-data-sw.nc',__RC__)
+        MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+        DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
       if (.not. rrtmgp_state%initialized) then
         ! gas_concs needed only to access required gas names
         call MAPL_TimerOn(MAPL,"--RRTMGP_IO_GAS",__RC__)
@@ -4773,8 +4773,8 @@ contains
       ! gets appropriate coefficients needed to calculate
       ! cloud optical properties from cloud physical properties
       call MAPL_GetResource( &
-        MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_COEFFS_SW:", &
-        DEFAULT='rrtmgp-cloud-optics-coeffs-reordered-sw.nc', __RC__)
+        MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_SW:", &
+        DEFAULT='rrtmgp-clouds-sw.nc', __RC__)
       call MAPL_GetResource( &
         MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
         DEFAULT='LUT', __RC__)
