@@ -30,7 +30,7 @@ class TSI_Mg_SB_Merged_Daily:
     self._data = {}
     self.nfinal = 0
     first = True
-    for yyyymmdd in (zM.viewkeys() & zT.viewkeys()):
+    for yyyymmdd in (zM.keys() & zT.keys()):
 
         # load data dictionary
         rc1, Mg, SB       = zM.getday(yyyymmdd)
@@ -141,18 +141,18 @@ if __name__ == '__main__':
   NB    = os.environ['NOBACKUP']
 
   z = TSI_Mg_SB_Merged_Daily()
-  print('16000101', z.getday('16000101'))
-  print('20161130', z.getday('20161130'))
-  print('20161201', z.getday('20161201'))
-  print('20161202', z.getday('20161202'))
-  t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
-  print(t, z.gettime(t))
+# print('16000101', z.getday('16000101'))
+# print('20161130', z.getday('20161130'))
+# print('20161201', z.getday('20161201'))
+# print('20161202', z.getday('20161202'))
+# t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
+# print(t, z.gettime(t))
 
   z.output_final_textfile(os.sep.join((NB,'NRLSSI2','output','NRLSSI2.txt')))
 
   plt.figure(figsize=(6,12))
   z._plot_all_final()
-  plt.savefig(os.sep.join(('gx','TSInMgSB_plot_all_final.png')),
-    pad_inches=0.33,bbox_inches='tight',dpi=100)
+# plt.savefig(os.sep.join(('gx','TSInMgSB_plot_all_final.png')),
+#   pad_inches=0.33,bbox_inches='tight',dpi=100)
   plt.show()
 

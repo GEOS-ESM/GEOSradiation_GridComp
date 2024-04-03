@@ -82,8 +82,8 @@ class Mg_SB_Daily:
             if d < self.date_min_final: self.date_min_final = d
             if d > self.date_max_final: self.date_max_final = d
 
-  def viewkeys(self):
-    return self._data.viewkeys()
+  def keys(self):
+    return self._data.keys()
 
   def getday(self, yyyymmdd):
     '''
@@ -144,16 +144,16 @@ class Mg_SB_Daily:
 if __name__ == '__main__':
 
   MgSB = Mg_SB_Daily()
-  print('16000101', MgSB.getday('16000101'))
-  print('20161130', MgSB.getday('20161130'))
-  print('20161201', MgSB.getday('20161201'))
-  print('20161202', MgSB.getday('20161202'))
-  t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
-  print(t, MgSB.gettime(t))
+# print('16000101', MgSB.getday('16000101'))
+# print('20161130', MgSB.getday('20161130'))
+# print('20161201', MgSB.getday('20161201'))
+# print('20161202', MgSB.getday('20161202'))
+# t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
+# print(t, MgSB.gettime(t))
 
   plt.figure()
   MgSB._plot_all_final()
-  plt.savefig(os.sep.join(('gx','MgSB_plot_all_final.png')),
-    pad_inches=0.33,bbox_inches='tight',dpi=100)
+# plt.savefig(os.sep.join(('gx','MgSB_plot_all_final.png')),
+#   pad_inches=0.33,bbox_inches='tight',dpi=100)
   plt.show()
 

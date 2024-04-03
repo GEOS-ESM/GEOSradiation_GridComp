@@ -171,8 +171,8 @@ class TSI_Daily:
       sys.stdout.write('\n')
       sys.stdout.flush()
 
-  def viewkeys(self):
-    return self._data.viewkeys()
+  def keys(self):
+    return self._data.keys()
 
   def getday(self, yyyymmdd):
     '''
@@ -234,16 +234,16 @@ class TSI_Daily:
 if __name__ == '__main__':
 
   TSI = TSI_Daily()
-  print('16000101', TSI.getday('16000101'))
-  print('20161130', TSI.getday('20161130'))
-  print('20161201', TSI.getday('20161201'))
-  print('20161202', TSI.getday('20161202'))
-  t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
-  print(t, TSI.gettime(t))
+# print('16000101', TSI.getday('16000101'))
+# print('20161130', TSI.getday('20161130'))
+# print('20161201', TSI.getday('20161201'))
+# print('20161202', TSI.getday('20161202'))
+# t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
+# print(t, TSI.gettime(t))
 
   plt.figure()
   TSI._plot_all_final()
-  plt.savefig(os.sep.join(('gx','TSI_plot_all_final.png')),
-    pad_inches=0.33,bbox_inches='tight',dpi=100)
+# plt.savefig(os.sep.join(('gx','TSI_plot_all_final.png')),
+#   pad_inches=0.33,bbox_inches='tight',dpi=100)
   plt.show()
 
