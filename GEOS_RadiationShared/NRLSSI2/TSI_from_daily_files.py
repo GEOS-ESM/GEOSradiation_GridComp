@@ -1,13 +1,13 @@
 '''
 Get TSI from daily NRLSSI2 netCDF files
 ============================================================
-IMPORTANT RULES THAT GOVERN data/tsi_*_daily_*.nc FILES:
+IMPORTANT RULES THAT GOVERN tsi_*_daily_*.nc FILES:
 ============================================================
 In order to maintain historical reproducabilty and not fail
 the error checking below, please ensure the following for
-data/tsi_*_daily_*.nc files:
+tsi_*_daily_*.nc files:
 1. files specified in the file_template argument must
-obey 'data/tsi_*_daily_s????????_e????????_c????????.nc'
+obey 'tsi_*_daily_s????????_e????????_c????????.nc'
 2. the first '*' is the version e.g., 'v02r01', with an
 optional trailing '-preliminary'
 3. The starting date s???????? should be of the form
@@ -55,8 +55,8 @@ def _yyyymmdd(t):
 class TSI_Daily:
   ''' Daily time series for NRLSSI2 TSI '''
 
-  def __init__(self,
-      file_template='data/tsi_*_daily_s????????_e????????_c????????.nc',
+  def __init__(self, DATADIR,
+      file_template='tsi_*_daily_s????????_e????????_c????????.nc',
       verbose=False):
 
     self.file_template = file_template
@@ -69,11 +69,9 @@ class TSI_Daily:
     # Validate files
     # ==============
 
-    NB = os.environ['NOBACKUP']
-
     # collect templated files and validate
     files = []
-    for path in glob(os.sep.join((NB,'NRLSSI2',file_template))):
+    for path in glob(os.sep.join((DATADIR,file_template))):
       filename = os.path.basename(path)
       # validate filename
       v = filename.split('_')

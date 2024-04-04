@@ -20,22 +20,20 @@ def _yyyymmdd(t):
 class Mg_SB_Daily:
   ''' Daily time series for Solar Mg and SB indices from NRLSSI2 '''
 
-  def __init__(self,
+  def __init__(self, DATADIR,
       filenames=[
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20170630_c20170928.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20180331_c20180418.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20191231_c20200225.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20201231_c20210204.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20220630_c20220803.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20230331_c20230411.txt',
-        'data/tsi-ssi_v02r01_model-input-time-series_s18820101_e20231231_c20240221.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20170630_c20170928.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20180331_c20180418.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20191231_c20200225.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20201231_c20210204.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20220630_c20220803.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20230331_c20230411.txt',
+        'tsi-ssi_v02r01_model-input-time-series_s18820101_e20231231_c20240221.txt',
         ],
       verbose=False):
 
     self.filenames = filenames
     self.verbose   = verbose
-
-    NB = os.environ['NOBACKUP'] 
 
     if verbose:
       print('reading Mg and SB indicies from', filenames)
@@ -45,7 +43,7 @@ class Mg_SB_Daily:
     self.nfinal = 0
     first = True
     for filename in filenames:
-      with open(os.sep.join((NB,'NRLSSI2',filename))) as f:
+      with open(os.sep.join((DATADIR,filename))) as f:
         lines = f.readlines()
 
       # process the data, ignoring the header (top line)

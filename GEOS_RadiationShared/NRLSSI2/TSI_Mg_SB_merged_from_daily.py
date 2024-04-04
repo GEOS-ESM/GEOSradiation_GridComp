@@ -17,13 +17,13 @@ def _yyyymmdd(t):
 class TSI_Mg_SB_Merged_Daily:
   ''' Daily time series for TSI and Solar Mg and SB indices from NRLSSI2 '''
 
-  def __init__(self, verbose=False):
+  def __init__(self, DATADIR, verbose=False):
 
     self.verbose  = verbose
 
     # get each data set
-    zM = Mg_SB_Daily(verbose=verbose)
-    zT =   TSI_Daily(verbose=verbose)
+    zM = Mg_SB_Daily(DATADIR, verbose=verbose)
+    zT =   TSI_Daily(DATADIR, verbose=verbose)
 
     # form the INTERSECTION:
     # (each set is indexed by yyyymmdd, unique in each set)
@@ -138,9 +138,10 @@ class TSI_Mg_SB_Merged_Daily:
 
 if __name__ == '__main__':
 
-  NB    = os.environ['NOBACKUP']
+  DATADIR = '/discover/nobackup/projects/gmao/share/gmao_ops/fvInput/g5gcm/solar/NRLSSI2/data'
+  OUTDIR = os.sep.join((os.environ['NOBACKUP'],'NRLSSI2','output'))
 
-  z = TSI_Mg_SB_Merged_Daily()
+  z = TSI_Mg_SB_Merged_Daily(DATADIR)
 # print('16000101', z.getday('16000101'))
 # print('20161130', z.getday('20161130'))
 # print('20161201', z.getday('20161201'))
@@ -148,7 +149,7 @@ if __name__ == '__main__':
 # t = datetime.strptime('2016-12-01 10:00:00','%Y-%m-%d %H:%M:%S')
 # print(t, z.gettime(t))
 
-  z.output_final_textfile(os.sep.join((NB,'NRLSSI2','output','NRLSSI2.txt')))
+  z.output_final_textfile(os.sep.join((OUTDIR,'NRLSSI2.vYYYY.txt')))
 
   plt.figure(figsize=(6,12))
   z._plot_all_final()
