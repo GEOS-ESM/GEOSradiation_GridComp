@@ -52,6 +52,7 @@ module rrtmg_sw_rad
    use MAPL
 
    use rrsw_vsn
+   use rad_types, only: rptr1d_wrap
    use cloud_subcol_gen, only: &
       generate_stochastic_clouds, clearCounts_threeBand
    use rrtmg_sw_cldprmc, only: cldprmc_sw
@@ -120,6 +121,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
+      OSR_band_out, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -277,6 +279,8 @@ contains
 
       logical, intent(in) :: do_drfband              ! Compute drband, dfband?
 
+      logical, intent(in) :: OSR_band_out (nbndsw)   ! which bands required for OSRB?
+
       ! ----- Outputs -----
 
       ! Subcolumn clear counts for Tot|High|Mid|Low super-layers
@@ -297,6 +301,9 @@ contains
 
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (ncol,nbndsw)
+
+      ! OSR per band outputs
+      type(rptr1d_wrap), intent(out) :: OSRB (nbndsw)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(ncol) :: &
@@ -358,7 +365,7 @@ contains
 
       ! ----- Locals -----
 
-      integer :: pncol
+      integer :: pncol, nbndOSR
       integer :: STATUS  ! for MAPL error reporting
       
       ! ASSERTs to catch unphysical or invalid inputs
@@ -389,6 +396,9 @@ contains
          pncol = 2
       end if
       
+      ! count number of bands needed for OSR output
+      nbndOSR = count(OSR_band_out)
+
       ! do partitions
       call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
@@ -445,6 +455,7 @@ contains
 #endif
 
          do_drfband, drband, dfband, &
+         OSR_band_out, nbndOSR, OSRB, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
                                                       
@@ -507,6 +518,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
+      OSR_band_out, nbndOSR, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -592,6 +604,9 @@ contains
 
       logical, intent(in) :: do_drfband                ! Compute drband, dfband?
 
+      logical, intent(in) :: OSR_band_out (nbndsw)     ! which bands required for OSRB?
+      integer, intent(in) :: nbndOSR                   !   and how many of them?
+
       ! ----- Outputs -----
 
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
@@ -612,6 +627,9 @@ contains
 
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
+
+      ! OSR per band outputs
+      type(rptr1d_wrap), intent(out) :: OSRB (nbndsw)
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(gncol) :: &
@@ -676,6 +694,7 @@ contains
       ! Control
       real, parameter :: zepzen = 1.e-10  ! very small cossza
       integer :: ibnd, icol, ilay, ilev   ! various indices
+      integer :: jbnd
 
       ! Atmosphere
       real :: coldry (nlay,pncol)        ! dry air column amount
@@ -787,6 +806,8 @@ contains
                                        ! (all-sky and diffuse+direct)
 
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
+
+      real :: zOSRB (pncol,nbndOSR)    ! partitioned OSRB 
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, dimension(pncol) :: &
@@ -1505,6 +1526,7 @@ contains
 #endif
 
                   do_drfband, zdrband, zdfband, &
+                  OSR_band_out, nbndOSR, zOSRB, &
                   __RC__)
 
                ! Copy out up and down, clear- and all-sky fluxes to output arrays.
@@ -1635,6 +1657,20 @@ contains
                      end do
                   end if
 
+                  ! band OSR at TOA
+                  if (nbndOSR > 0) then
+                     jbnd = 0
+                     do ibnd = 1,nbndsw
+                        if (OSR_band_out(ibnd)) then
+                           jbnd = jbnd + 1
+                           do icol = 1,ncol
+                              gicol = gicol_clr(icol + cols - 1)
+                              OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
+                           end do
+                        end if
+                     end do
+                  end if
+
                else ! cloudy columns
 
                   do icol = 1,ncol
@@ -1752,6 +1788,20 @@ contains
                      end do
                   end if
 
+                  ! band OSR at TOA
+                  if (nbndOSR > 0) then
+                     jbnd = 0
+                     do ibnd = 1,nbndsw
+                        if (OSR_band_out(ibnd)) then
+                           jbnd = jbnd + 1
+                           do icol = 1,ncol
+                              gicol = gicol_cld(icol + cols - 1)
+                              OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
+                           end do
+                        end if
+                     end do
+                  end if
+
                endif  ! clear/cloudy
 
                call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
@@ -1792,6 +1842,14 @@ contains
             do ibnd = 1,nbndsw
                drband(:,ibnd) = drband(:,ibnd) / swdflx_at_top(:)
                dfband(:,ibnd) = dfband(:,ibnd) / swdflx_at_top(:)
+            end do
+         end if
+
+         if (nbndOSR > 0) then
+            do ibnd = 1,nbndsw
+               if (OSR_band_out(ibnd)) then
+                  OSRB(ibnd)%p(:) = OSRB(ibnd)%p(:) / swdflx_at_top(:)
+               end if
             end do
          end if
 

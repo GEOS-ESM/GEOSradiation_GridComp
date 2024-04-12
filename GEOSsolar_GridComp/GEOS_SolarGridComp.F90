@@ -177,9 +177,12 @@ module GEOS_SolarGridCompMod
 
   use rrtmg_sw_rad, only: rrtmg_sw
   use rrtmg_sw_init, only: rrtmg_sw_ini
-  use parrrsw, only: ngptsw
+  use parrrsw, only: nbndsw, jpb1, jpb2, ngptsw
+  use rrsw_wvn, only: wavenum1, wavenum2
+  use rad_types, only: rptr1d_wrap
   use cloud_subcol_gen, only: &
      generate_stochastic_clouds, clearCounts_threeBand
+  use rad_utils, only: Tbr_from_band_flux
 
   use mo_rte_kind, only: wp
 
@@ -201,6 +204,39 @@ module GEOS_SolarGridCompMod
 
 !EOP
 
+  ! -------------------------------------------
+  ! Select which RRTMG bands support OSR output
+  ! -------------------------------------------
+  !    via OSRBbbRG and TBRBbbRG exports ...
+  ! (These exports require support space in the
+  ! internal state so we choose only the ones we want
+  ! to offer here at compile time. In the future, if
+  ! most of the bands are required, then we will change
+  ! strategy and reserve space for ALL of them in the
+  ! internal state. In that case we would only require
+  ! runtime band selection via the EXPORTS chosen.)
+
+  ! Which bands are supported?
+  !    (Currently RRTMG only)
+  !    (actual calculation only if export is requested)
+  ! Supported?    Band  Requested by (and use)
+  logical, parameter :: band_output_supported (nbndsw) = [ &
+     .false. , &!  01
+     .false. , &!  02
+     .false. , &!  03
+     .false. , &!  04
+     .false. , &!  05
+     .false. , &!  06
+     .false. , &!  07
+     .true.  , &!  08   W. Putman (GOES-"Veggie")
+     .true.  , &!  09   W. Putman (GOES-Red)
+     .true.  , &!  10   W. Putman (GOES-Blue)
+     .false. , &!  11
+     .false. , &!  12
+     .false. , &!  13
+     .false. ]  !  14
+
+  ! -----------------------------------------------
   ! RRTMGP internal state:
   ! Will be attached to the Gridded Component.
   ! Used to provide efficient initialization
@@ -430,6 +466,11 @@ contains
 
     type (ty_RRTMGP_state), pointer :: rrtmgp_state
     type (ty_RRTMGP_wrap)           :: wrap
+
+    ! for OSRBbbRG, TBRBbbRG
+    integer :: ibnd 
+    character*2  :: bb
+    character*11 :: wvn_rng  ! xxxxx-yyyyy
 
 !=============================================================================
 
@@ -717,6 +758,28 @@ contains
        SHORT_NAME ='FSCUN',                                                  &
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationEdge,                                __RC__)
+
+    if (USE_RRTMG) then
+       ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)]
+       ! in [cm^-1]. The index jpb1:jpb2 (16:29) is over the 14 bands.
+
+       do ibnd = 1,nbndsw
+          if (band_output_supported(ibnd)) then
+             write(bb,'(I0.2)') ibnd
+             write(wvn_rng,'(I0,"-",I0)') &
+               nint(wavenum1(jpb1-1+ibnd)), nint(wavenum2(jpb1-1+ibnd))
+    
+             call MAPL_AddInternalSpec(GC,                                   &
+                SHORT_NAME = 'OSRB'//bb//'RGN',                              &
+                LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
+                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
+                UNITS      = '1',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                              &
+                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+   
+          end if
+       end do
+    end if
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME      = 'normalized_net_surface_downward_shortwave_flux_per_band_in_air',&
@@ -2573,6 +2636,36 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+    if (USE_RRTMG) then
+       ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)]
+       ! in [cm^-1]. The index jpb1:jpb2 (16:29) is over the 14 bands.
+
+       do ibnd = 1,nbndsw
+          if (band_output_supported(ibnd)) then
+             write(bb,'(I0.2)') ibnd
+             write(wvn_rng,'(I0,"-",I0)') &
+               nint(wavenum1(jpb1-1+ibnd)), nint(wavenum2(jpb1-1+ibnd))
+    
+             call MAPL_AddExportSpec(GC,                                     &
+                SHORT_NAME = 'OSRB'//bb//'RG',                               &
+                LONG_NAME  = 'upwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
+                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
+                UNITS      = 'W m-2',                                        &
+                DIMS       = MAPL_DimsHorzOnly,                              &
+                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+   
+             call MAPL_AddExportSpec(GC,                                     &
+                SHORT_NAME = 'TBRB'//bb//'RG',                               &
+                LONG_NAME  = 'brightness_temperature_in_RRTMG_SW_band'       &
+                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
+                UNITS      = 'K',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                              &
+                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+    
+          end if
+       end do
+    end if
+
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'toa_net_downward_shortwave_flux',                       &
        UNITS      = 'W m-2',                                                 &
@@ -2839,6 +2932,12 @@ contains
     end type S_
     type(S_), allocatable :: list(:)
 
+    ! which bands require OSR output?
+    ! (only RRTMG currently; OSRBbbRG, TBRBbbRG)
+    logical :: band_output (nbndsw)
+    integer :: ibnd
+    character*2 :: bb  
+
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
@@ -2944,6 +3043,28 @@ contains
          write (*,*) "Please check that your optics tables and NUM_BANDS are correct."
       end if
       _FAIL('Total number of radiation bands is inconsistent!')
+   end if
+
+   ! select which bands require OSRB output ...                                  
+   ! ------------------------------------------
+   ! Currently only available for RRTMG
+   ! must be supported AND requested by export 'OSRBbbRG' OR 'TBRBbbRG'
+   if (USE_RRTMG) then
+      do ibnd = 1,nbndsw
+         band_output(ibnd) = .false.
+         if (.not. band_output_supported(ibnd)) cycle
+         write(bb,'(I0.2)') ibnd
+         call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
+         if (associated(ptr2d)) then 
+            band_output(ibnd) = .true.
+            cycle
+         end if 
+         call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__) 
+         if (associated(ptr2d)) then
+            band_output(ibnd) = .true.
+            cycle
+         end if
+      end do
    end if
 
    ! Decide if should make OBIO exports
@@ -3360,6 +3481,9 @@ contains
 
       ! outputs used for OBIO
       real, pointer, dimension(:,:)  :: DRBAND, DFBAND
+
+      ! outputs for OSRBbbRGN internals
+      type(rptr1d_wrap) :: OSRBRGN (nbndsw)
 
       ! REFRESH exports (via internals)
       real, pointer, dimension(:)    :: COSZSW
@@ -4130,6 +4254,36 @@ contains
                FSCUA     => ptr2(1:Num2do,:)
             case('FSWBANDNAN')
                FSWBANDA  => ptr2(1:Num2do,:)
+            ! ===============
+            case('OSRB01RGN')
+               OSRBRGN( 1) % p => ptr2(1:Num2do,1)
+            case('OSRB02RGN')
+               OSRBRGN( 2) % p => ptr2(1:Num2do,1)
+            case('OSRB03RGN')
+               OSRBRGN( 3) % p => ptr2(1:Num2do,1)
+            case('OSRB04RGN')
+               OSRBRGN( 4) % p => ptr2(1:Num2do,1)
+            case('OSRB05RGN')
+               OSRBRGN( 5) % p => ptr2(1:Num2do,1)
+            case('OSRB06RGN')
+               OSRBRGN( 6) % p => ptr2(1:Num2do,1)
+            case('OSRB07RGN')
+               OSRBRGN( 7) % p => ptr2(1:Num2do,1)
+            case('OSRB08RGN')
+               OSRBRGN( 8) % p => ptr2(1:Num2do,1)
+            case('OSRB09RGN')
+               OSRBRGN( 9) % p => ptr2(1:Num2do,1)
+            case('OSRB10RGN')
+               OSRBRGN(10) % p => ptr2(1:Num2do,1)
+            case('OSRB11RGN')
+               OSRBRGN(11) % p => ptr2(1:Num2do,1)
+            case('OSRB12RGN')
+               OSRBRGN(12) % p => ptr2(1:Num2do,1)
+            case('OSRB13RGN')
+               OSRBRGN(13) % p => ptr2(1:Num2do,1)
+            case('OSRB14RGN')
+               OSRBRGN(14) % p => ptr2(1:Num2do,1)
+            ! ===============
             case('COSZSW')
                COSZSW    => ptr2(1:Num2do,1)
             case('CLDTTSW')
@@ -6354,6 +6508,7 @@ contains
 #endif
 
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
+         BAND_OUTPUT .and. include_aerosols, OSRBRGN, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
 
@@ -6623,8 +6778,6 @@ contains
 
     subroutine UPDATE_EXPORT(IM,JM,LM, RC)
 
-      use parrrsw, only: nbndsw, jpb1, jpb2
-      use rrsw_wvn, only: wavenum1, wavenum2
       use mo_gas_concentrations, only: ty_gas_concs
       use mo_load_coefficients,  only: load_and_init
 
@@ -6679,6 +6832,8 @@ contains
       real, pointer, dimension(:,:  ) :: DFNIRN, DRNIRN
       real, pointer, dimension(:,:  ) :: ALBEDO
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
+
+      real, allocatable, dimension(:,:) :: OSRB
 
       real, pointer, dimension(:,:,:)   :: FCLD,CLIN,RH
       real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
@@ -6806,6 +6961,9 @@ contains
       real :: swvn1, swvn2, owvn1, owvn2, sfrac
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
       logical :: sfirst, ofirst
+
+      ! band wavenumber bounds (m-1) 
+      real :: wn1, wn2 
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -7528,6 +7686,44 @@ contains
       if(associated(OSRCLR)) OSRCLR = (1.-  FSCN(:,:, 0))*SLR
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
+
+! band OSR and/or TBR output
+! --------------------------
+
+      if (USE_RRTMG) then
+        ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
+        ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+
+        do ibnd = 1,nbndsw
+          if (band_output(ibnd)) then
+
+            write(bb,'(I0.2)') ibnd
+            allocate(OSRB(IM,JM),__STAT__)
+
+            ! get last full calculation
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'OSRB'//bb//'RGN', __RC__)
+            OSRB = ptr2d
+
+            ! scale to current solar input
+            OSRB = OSRB * SLR
+
+            ! fill OSRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) ptr2D = OSRB
+
+            ! calculate TBRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+               wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
+               call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+            end if
+
+            deallocate(OSRB,__STAT__)
+
+          end if
+        end do
+
+      endif  ! RRTMG
 
 ! SOLAR TO OBIO conversion ...
 ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
