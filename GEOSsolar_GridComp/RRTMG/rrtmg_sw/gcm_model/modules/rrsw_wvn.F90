@@ -40,9 +40,21 @@
       integer  :: nspa(jpb1:jpb2)
       integer  :: nspb(jpb1:jpb2)
 
-      real  :: wavenum1(jpb1:jpb2)
-      real  :: wavenum2(jpb1:jpb2)
-      real  :: delwave(jpb1:jpb2)
+!     real  :: wavenum1(jpb1:jpb2)
+!     real  :: wavenum2(jpb1:jpb2)
+!     real  :: delwave(jpb1:jpb2)
+
+      ! lower band limit [cm-1]
+      real, parameter :: wavenum1 (jpb1:jpb2) = &
+         [2600., 3250., 4000., 4650., 5150., 6150., 7700., &
+          8050.,12850.,16000.,22650.,29000.,38000.,  820.]
+      ! upper band limit [cm-1]
+      real, parameter :: wavenum2 (jpb1:jpb2) = &
+         [3250., 4000., 4650., 5150., 6150., 7700., 8050., &
+         12850.,16000.,22650.,29000.,38000.,50000., 2600.]
+      ! band width [cm-1]
+      real, parameter :: delwave  (jpb1:jpb2) = wavenum2 - wavenum1
+
       integer :: icxa(jpb1:jpb2)
 
       integer  :: ngc(nbndsw)
