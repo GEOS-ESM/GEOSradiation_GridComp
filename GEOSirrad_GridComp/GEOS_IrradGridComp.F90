@@ -3568,7 +3568,14 @@ contains
 
              ! fill OLRBbbRG if requested
              call MAPL_GetPointer(EXPORT, ptr2d, 'OLRB'//bb//'RG', __RC__)
-             if (associated(ptr2d)) ptr2D = OLRB
+             if (associated(ptr2d)) then
+                if (all(OLRB == 0.)) then
+                   ! handles pre-first-full-calc case
+                   ptr2d = MAPL_UNDEF
+                else
+                   ptr2d = OLRB
+               end if
+            end if
 
              ! calculate TBRBbbRG if requested
              call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)

@@ -53,7 +53,8 @@
          [3250., 4000., 4650., 5150., 6150., 7700., 8050., &
          12850.,16000.,22650.,29000.,38000.,50000., 2600.]
       ! band width [cm-1]
-      real, parameter :: delwave  (jpb1:jpb2) = wavenum2 - wavenum1
+      real, parameter :: delwave(jpb1:jpb2) = &
+         wavenum2(jpb1:jpb2) - wavenum1(jpb1:jpb2)
 
       integer :: icxa(jpb1:jpb2)
 

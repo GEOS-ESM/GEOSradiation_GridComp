@@ -7709,13 +7709,20 @@ contains
 
             ! fill OSRBbbRG if requested
             call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
-            if (associated(ptr2d)) ptr2D = OSRB
+            if (associated(ptr2d)) then
+              if (all(OSRB == 0.)) then
+                ! handles pre-first-full-calc case
+                ptr2d = MAPL_UNDEF
+              else
+                ptr2d = OSRB
+              end if
+            end if
 
             ! calculate TBRBbbRG if requested
             call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
             if (associated(ptr2d)) then
-               wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
-               call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+              wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
+              call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
             end if
 
             deallocate(OSRB,__STAT__)
