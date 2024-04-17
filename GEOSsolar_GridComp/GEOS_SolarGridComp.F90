@@ -1792,11 +1792,13 @@ contains
                  value=(BANDS_SOLAR_OFFSET+band),__RC__)
 
               ! execute the aero provider's optics method
+              call MAPL_TimerOn(MAPL,"---AEROSOL_OPTICS")
               call ESMF_MethodExecute(AERO, &
                  label="run_aerosol_optics", &
                  userRC=AS_STATUS, RC=STATUS)
               VERIFY_(AS_STATUS)
               VERIFY_(STATUS)
+              call MAPL_TimerOff(MAPL,"---AEROSOL_OPTICS")
 
               ! EXT from AERO_PROVIDER
               call ESMF_AttributeGet(AERO, &
@@ -2713,6 +2715,9 @@ contains
       end if
       call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
+      ! number of columns after load balancing
+      NCOL = size(Q,1)
+
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
 ! Do shortwave calculations on a list of soundings
@@ -2739,8 +2744,8 @@ contains
       ! Prepare auxilliary variables
       ! ----------------------------
 
-      allocate(RH(size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL(size(Q,1),size(Q,2)),__STAT__)
+      allocate(RH(NCOL,LM),__STAT__)
+      allocate(PL(NCOL,LM),__STAT__)
       allocate(PLhPa(size(PLE,1),size(PLE,2)),__STAT__)
 
       PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
@@ -2750,8 +2755,8 @@ contains
       ! Water amounts and effective radii are in arrays indexed by species
       !-------------------------------------------------------------------
 
-      allocate(QQ3 (size(Q,1),size(Q,2),4),__STAT__)
-      allocate(RR3 (size(Q,1),size(Q,2),4),__STAT__)
+      allocate(QQ3 (NCOL,LM,4),__STAT__)
+      allocate(RR3 (NCOL,LM,4),__STAT__)
 
       ! In-cloud water contents
       QQ3(:,:,1) = QI
@@ -2772,7 +2777,7 @@ contains
       ! Convert odd oxygen, which is the model prognostic, to ozone
       !------------------------------------------------------------
 
-      allocate(O3 (size(Q,1),size(Q,2)),__STAT__)
+      allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
       WHERE(PL < 100.)
@@ -2789,9 +2794,9 @@ contains
       ! Begin aerosol code
       ! ------------------
 
-      allocate(TAUA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(SSAA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(ASYA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
+      allocate(TAUA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(SSAA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(ASYA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
 
       ! Zero out aerosol arrays.
       ! If num_aero_vars == 0, these zeroes are used inside code.
@@ -2834,9 +2839,6 @@ contains
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
       call MAPL_TimerOn(MAPL,"-RRTMGP",__RC__)
-
-      ! number of columns after load balancing
-      ncol = size(Q,1)
 
       ! absorbing gas names
       error_msg = gas_concs%init([character(3) :: &
@@ -3631,47 +3633,45 @@ contains
       ! regular RRTMG
       call MAPL_TimerOn(MAPL,"-RRTMG")
 
-      NCOL = size(Q,1)
-
       ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
       ! -------------------------------------------------------------------
 
       ! interface (between layer) variables
-      allocate(TLEV  (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(TLEV_R(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(PLE_R (size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(TLEV  (NCOL,LM+1),__STAT__)
+      allocate(TLEV_R(NCOL,LM+1),__STAT__)
+      allocate(PLE_R (NCOL,LM+1),__STAT__)
       ! cloud physical properties
-      allocate(FCLD_R(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CICEWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
-      allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
+      allocate(FCLD_R(NCOL,LM),__STAT__)
+      allocate(CLIQWP(NCOL,LM),__STAT__)
+      allocate(CICEWP(NCOL,LM),__STAT__)
+      allocate(RELIQ (NCOL,LM),__STAT__)
+      allocate(REICE (NCOL,LM),__STAT__)
       ! aerosol optical properties
-      allocate(TAUAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(SSAAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(ASMAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
+      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
       ! layer variables
-      allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(ZL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(T_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(Q_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O2_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O3_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CO2_R (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CH4_R (size(Q,1),size(Q,2)),__STAT__)
+      allocate(DPR   (NCOL,LM),__STAT__)
+      allocate(PL_R  (NCOL,LM),__STAT__)
+      allocate(ZL_R  (NCOL,LM),__STAT__)
+      allocate(T_R   (NCOL,LM),__STAT__)
+      allocate(Q_R   (NCOL,LM),__STAT__)
+      allocate(O2_R  (NCOL,LM),__STAT__)
+      allocate(O3_R  (NCOL,LM),__STAT__)
+      allocate(CO2_R (NCOL,LM),__STAT__)
+      allocate(CH4_R (NCOL,LM),__STAT__)
       ! super-layer cloud fractions
-      allocate(CLEARCOUNTS (size(Q,1),4),__STAT__)
+      allocate(CLEARCOUNTS (NCOL,4),__STAT__)
       ! output fluxes
-      allocate(SWUFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXC(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXC(size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(SWUFLX (NCOL,LM+1),__STAT__)
+      allocate(SWDFLX (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
       ! un-flipped outputs
-      allocate(SWUFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
 
       ! Set flags related to cloud properties (see RRTMG_SW)
       ! ----------------------------------------------------
