@@ -207,7 +207,7 @@ module GEOS_SolarGridCompMod
   ! -------------------------------------------
   ! Select which RRTMG bands support OSR output
   ! -------------------------------------------
-  !    via OSRBbbRG and TBRBbbRG exports ...
+  !    via OSRBbbRG, ISRBbbRG, and TBRBbbRG exports ...
   ! (These exports require support space in the
   ! internal state so we choose only the ones we want
   ! to offer here at compile time. In the future, if
@@ -467,7 +467,7 @@ contains
     type (ty_RRTMGP_state), pointer :: rrtmgp_state
     type (ty_RRTMGP_wrap)           :: wrap
 
-    ! for OSRBbbRG, TBRBbbRG
+    ! for OSRBbbRG, ISRBbbRG, and TBRBbbRG
     integer :: ibnd 
     character*2  :: bb
     character*11 :: wvn_rng  ! xxxxx-yyyyy
@@ -772,6 +772,14 @@ contains
              call MAPL_AddInternalSpec(GC,                                   &
                 SHORT_NAME = 'OSRB'//bb//'RGN',                              &
                 LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
+                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
+                UNITS      = '1',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                              &
+                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+   
+             call MAPL_AddInternalSpec(GC,                                   &
+                SHORT_NAME = 'ISRB'//bb//'RGN',                              &
+                LONG_NAME  = 'normalized_downwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
                                 //bb//' ('//trim(wvn_rng)//' cm-1)',         &
                 UNITS      = '1',                                            &
                 DIMS       = MAPL_DimsHorzOnly,                              &
@@ -2655,6 +2663,14 @@ contains
                 VLOCATION  = MAPL_VLocationNone,                      __RC__ )
    
              call MAPL_AddExportSpec(GC,                                     &
+                SHORT_NAME = 'ISRB'//bb//'RG',                               &
+                LONG_NAME  = 'downwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
+                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
+                UNITS      = 'W m-2',                                        &
+                DIMS       = MAPL_DimsHorzOnly,                              &
+                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+   
+             call MAPL_AddExportSpec(GC,                                     &
                 SHORT_NAME = 'TBRB'//bb//'RG',                               &
                 LONG_NAME  = 'brightness_temperature_in_RRTMG_SW_band'       &
                                 //bb//' ('//trim(wvn_rng)//' cm-1)',         &
@@ -2933,7 +2949,7 @@ contains
     type(S_), allocatable :: list(:)
 
     ! which bands require OSR output?
-    ! (only RRTMG currently; OSRBbbRG, TBRBbbRG)
+    ! (only RRTMG currently; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
     logical :: band_output (nbndsw)
     integer :: ibnd
     character*2 :: bb  
@@ -3048,13 +3064,18 @@ contains
    ! select which bands require OSRB output ...                                  
    ! ------------------------------------------
    ! Currently only available for RRTMG
-   ! must be supported AND requested by export 'OSRBbbRG' OR 'TBRBbbRG'
+   ! must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
    if (USE_RRTMG) then
       do ibnd = 1,nbndsw
          band_output(ibnd) = .false.
          if (.not. band_output_supported(ibnd)) cycle
          write(bb,'(I0.2)') ibnd
          call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
+         if (associated(ptr2d)) then 
+            band_output(ibnd) = .true.
+            cycle
+         end if 
+         call MAPL_GetPointer(EXPORT, ptr2d, 'ISRB'//bb//'RG', __RC__)
          if (associated(ptr2d)) then 
             band_output(ibnd) = .true.
             cycle
@@ -3482,8 +3503,8 @@ contains
       ! outputs used for OBIO
       real, pointer, dimension(:,:)  :: DRBAND, DFBAND
 
-      ! outputs for OSRBbbRGN internals
-      type(rptr1d_wrap) :: OSRBRGN (nbndsw)
+      ! outputs for OSRBbbRGN & ISRBbbRGN internals
+      type(rptr1d_wrap), dimension(nbndsw) :: OSRBRGN, ISRBRGN
 
       ! REFRESH exports (via internals)
       real, pointer, dimension(:)    :: COSZSW
@@ -4283,6 +4304,35 @@ contains
                OSRBRGN(13) % p => ptr2(1:Num2do,1)
             case('OSRB14RGN')
                OSRBRGN(14) % p => ptr2(1:Num2do,1)
+            ! ===============
+            case('ISRB01RGN')
+               ISRBRGN( 1) % p => ptr2(1:Num2do,1)
+            case('ISRB02RGN')
+               ISRBRGN( 2) % p => ptr2(1:Num2do,1)
+            case('ISRB03RGN')
+               ISRBRGN( 3) % p => ptr2(1:Num2do,1)
+            case('ISRB04RGN')
+               ISRBRGN( 4) % p => ptr2(1:Num2do,1)
+            case('ISRB05RGN')
+               ISRBRGN( 5) % p => ptr2(1:Num2do,1)
+            case('ISRB06RGN')
+               ISRBRGN( 6) % p => ptr2(1:Num2do,1)
+            case('ISRB07RGN')
+               ISRBRGN( 7) % p => ptr2(1:Num2do,1)
+            case('ISRB08RGN')
+               ISRBRGN( 8) % p => ptr2(1:Num2do,1)
+            case('ISRB09RGN')
+               ISRBRGN( 9) % p => ptr2(1:Num2do,1)
+            case('ISRB10RGN')
+               ISRBRGN(10) % p => ptr2(1:Num2do,1)
+            case('ISRB11RGN')
+               ISRBRGN(11) % p => ptr2(1:Num2do,1)
+            case('ISRB12RGN')
+               ISRBRGN(12) % p => ptr2(1:Num2do,1)
+            case('ISRB13RGN')
+               ISRBRGN(13) % p => ptr2(1:Num2do,1)
+            case('ISRB14RGN')
+               ISRBRGN(14) % p => ptr2(1:Num2do,1)
             ! ===============
             case('COSZSW')
                COSZSW    => ptr2(1:Num2do,1)
@@ -6508,7 +6558,7 @@ contains
 #endif
 
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
-         BAND_OUTPUT .and. include_aerosols, OSRBRGN, &
+         BAND_OUTPUT .and. include_aerosols, ISRBRGN, OSRBRGN, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
 
@@ -6833,7 +6883,7 @@ contains
       real, pointer, dimension(:,:  ) :: ALBEDO
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
 
-      real, allocatable, dimension(:,:) :: OSRB
+      real, allocatable, dimension(:,:) :: OSRB, ISRB
 
       real, pointer, dimension(:,:,:)   :: FCLD,CLIN,RH
       real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
@@ -7687,8 +7737,8 @@ contains
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
 
-! band OSR and/or TBR output
-! --------------------------
+! band OSR, ISR, and/or TBR output
+! --------------------------------
 
       if (USE_RRTMG) then
         ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
@@ -7699,13 +7749,17 @@ contains
 
             write(bb,'(I0.2)') ibnd
             allocate(OSRB(IM,JM),__STAT__)
+            allocate(ISRB(IM,JM),__STAT__)
 
             ! get last full calculation
             call MAPL_GetPointer(INTERNAL, ptr2d, 'OSRB'//bb//'RGN', __RC__)
             OSRB = ptr2d
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'ISRB'//bb//'RGN', __RC__)
+            ISRB = ptr2d
 
             ! scale to current solar input
             OSRB = OSRB * SLR
+            ISRB = ISRB * SLR
 
             ! fill OSRBbbRG if requested
             call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
@@ -7718,6 +7772,17 @@ contains
               end if
             end if
 
+            ! fill ISRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'ISRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+              if (all(ISRB == 0.)) then
+                ! handles pre-first-full-calc case
+                ptr2d = MAPL_UNDEF
+              else
+                ptr2d = ISRB
+              end if
+            end if
+
             ! calculate TBRBbbRG if requested
             call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
             if (associated(ptr2d)) then
@@ -7725,7 +7790,7 @@ contains
               call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
             end if
 
-            deallocate(OSRB,__STAT__)
+            deallocate(OSRB,ISRB,__STAT__)
 
           end if
         end do

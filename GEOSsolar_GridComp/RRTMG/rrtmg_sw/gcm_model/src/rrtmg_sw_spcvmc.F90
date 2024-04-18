@@ -95,7 +95,7 @@ contains
 #endif
 
       do_drfband, zdrband, zdfband, &
-      OSR_band_out, nbndOSR, zOSRB, &
+      OSR_band_out, nbndOSR, zISRB, zOSRB, &
       RC)
    ! ---------------------------------------------------------------------------
    !
@@ -303,7 +303,8 @@ contains
       !    in each band (all-sky): Only filled if (do_drfband).
       real, intent(out), dimension (pncol,nbndsw) :: zdrband, zdfband
 
-      real, intent(out) :: zOSRB (pncol,nbndOSR)    ! OSR band output
+      ! ISR and OSR band output
+      real, intent(out), dimension(pncol,nbndOSR) :: zISRB, zOSRB
 
       integer, intent(out), optional :: RC  ! return code
 
@@ -384,7 +385,10 @@ contains
          zdrband  = 0.
          zdfband  = 0.
       end if
-      if (nbndOSR > 0) zOSRB = 0.
+      if (nbndOSR > 0) then
+         zISRB = 0.
+         zOSRB = 0.
+      end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
       call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
@@ -676,10 +680,11 @@ contains
                zdfband(icol,ibm) = zdfband(icol,ibm) + zincflx * zfd  (nlay+1,iw,icol)  ! total
             end if
 
-            ! band OSR at TOA
+            ! band ISR and OSR at TOA
             if (nbndOSR > 0) then
                if (OSR_band_out(ibm)) then
                   if (ibm > ibm_prev) jbnd = jbnd + 1
+                  zISRB(icol,jbnd) = zISRB(icol,jbnd) + zincflx * zfd(1,iw,icol)
                   zOSRB(icol,jbnd) = zOSRB(icol,jbnd) + zincflx * zfu(1,iw,icol)
                end if
             end if

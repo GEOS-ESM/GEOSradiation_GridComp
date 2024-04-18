@@ -121,7 +121,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
-      OSR_band_out, OSRB, &
+      OSR_band_out, ISRB, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -302,8 +302,8 @@ contains
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (ncol,nbndsw)
 
-      ! OSR per band outputs
-      type(rptr1d_wrap), intent(out) :: OSRB (nbndsw)
+      ! ISR and OSR per band outputs
+      type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(ncol) :: &
@@ -455,7 +455,7 @@ contains
 #endif
 
          do_drfband, drband, dfband, &
-         OSR_band_out, nbndOSR, OSRB, &
+         OSR_band_out, nbndOSR, ISRB, OSRB, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
                                                       
@@ -518,7 +518,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
-      OSR_band_out, nbndOSR, OSRB, &
+      OSR_band_out, nbndOSR, ISRB, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -628,8 +628,8 @@ contains
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
 
-      ! OSR per band outputs
-      type(rptr1d_wrap), intent(out) :: OSRB (nbndsw)
+      ! ISR and OSR per band outputs
+      type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(gncol) :: &
@@ -807,7 +807,7 @@ contains
 
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
-      real :: zOSRB (pncol,nbndOSR)    ! partitioned OSRB 
+      real, dimension (pncol,nbndOSR) :: zISRB, zOSRB  ! partitioned
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, dimension(pncol) :: &
@@ -1526,7 +1526,7 @@ contains
 #endif
 
                   do_drfband, zdrband, zdfband, &
-                  OSR_band_out, nbndOSR, zOSRB, &
+                  OSR_band_out, nbndOSR, zISRB, zOSRB, &
                   __RC__)
 
                ! Copy out up and down, clear- and all-sky fluxes to output arrays.
@@ -1657,7 +1657,7 @@ contains
                      end do
                   end if
 
-                  ! band OSR at TOA
+                  ! band ISR & OSR at TOA
                   if (nbndOSR > 0) then
                      jbnd = 0
                      do ibnd = 1,nbndsw
@@ -1665,6 +1665,7 @@ contains
                            jbnd = jbnd + 1
                            do icol = 1,ncol
                               gicol = gicol_clr(icol + cols - 1)
+                              ISRB(ibnd)%p(gicol) = zISRB(icol,jbnd)
                               OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
                            end do
                         end if
@@ -1788,7 +1789,7 @@ contains
                      end do
                   end if
 
-                  ! band OSR at TOA
+                  ! band ISR & OSR at TOA
                   if (nbndOSR > 0) then
                      jbnd = 0
                      do ibnd = 1,nbndsw
@@ -1796,6 +1797,7 @@ contains
                            jbnd = jbnd + 1
                            do icol = 1,ncol
                               gicol = gicol_cld(icol + cols - 1)
+                              ISRB(ibnd)%p(gicol) = zISRB(icol,jbnd)
                               OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
                            end do
                         end if
@@ -1848,6 +1850,7 @@ contains
          if (nbndOSR > 0) then
             do ibnd = 1,nbndsw
                if (OSR_band_out(ibnd)) then
+                  ISRB(ibnd)%p(:) = ISRB(ibnd)%p(:) / swdflx_at_top(:)
                   OSRB(ibnd)%p(:) = OSRB(ibnd)%p(:) / swdflx_at_top(:)
                end if
             end do
