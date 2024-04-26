@@ -95,6 +95,7 @@ contains
 #endif
 
       do_drfband, zdrband, zdfband, &
+      OSR_band_out, nbndOSR, zISRB, zOSRB, &
       RC)
    ! ---------------------------------------------------------------------------
    !
@@ -127,7 +128,7 @@ contains
    !           Aug 2007 
    ! Revision: Added ztau[lmht]p: PMNorris, GMAO, at some point
    ! Revision: Added zdrband, zdfband for OBIO support: PMNorris, GMAO, Nov 2022
-   ! Revision: separate phase tracking for taormc, taucmc: PMNorris, Jan 2024
+   ! Revision: Added zOSRB etc. for OSR band support: PMNorris, GMAO, Apr 2024
    !
    ! ------------------------------------------------------------------
 
@@ -217,6 +218,9 @@ contains
 
       logical, intent(in) :: do_drfband  ! Compute zdrband, zdfband?
 
+      logical, intent(in) :: OSR_band_out (nbndsw)  ! which bands required for OSRB?
+      integer, intent(in) :: nbndOSR                !   and how many of them?
+
       ! ------- Output -------
 
       real, intent(out) :: pbbcd    (nlay+1,pncol) 
@@ -298,13 +302,16 @@ contains
       !    in each band (all-sky): Only filled if (do_drfband).
       real, intent(out), dimension (pncol,nbndsw) :: zdrband, zdfband
 
+      ! ISR and OSR band output
+      real, intent(out), dimension (pncol,nbndOSR) :: zISRB, zOSRB
+
       integer, intent(out), optional :: RC  ! return code
 
       ! ------- Local -------
 
       integer :: icol
       integer :: jk, ikl
-      integer :: iw, jb, ibm
+      integer :: iw, jb, ibm, ibm_prev, jbnd
 
       real :: zf, zwf, zincflx, wgt
       real :: staotp, staohp, staomp, staolp
@@ -377,6 +384,10 @@ contains
          zdrband  = 0.
          zdfband  = 0.
       end if
+      if (nbndOSR > 0) then
+          zISRB = 0.
+          zOSRB = 0.
+       end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
       call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
@@ -620,8 +631,12 @@ contains
 
       end if
 
-      ! surface band fluxes
+      ! band fluxes
       do icol = 1,ncol
+
+         ! note: this iw loop does yield monotionically increasing ibm 
+         jbnd = 0
+         ibm_prev = 0
          do iw = 1,ngptsw
             jb = ngb(iw)
             ibm = jb - 15
@@ -635,7 +650,7 @@ contains
                zincflx = adjflux(jb) * ssi     (iw,icol) * prmu0(icol)           
             endif
 
-            ! Band fluxes
+            ! band fluxes
             if (ibm == 14 .or. ibm <= 8) then
                ! near-IR
                znirr(icol) = znirr(icol) + zincflx * ztdbt(nlay+1,iw,icol)  ! Direct flux
@@ -664,8 +679,19 @@ contains
                zdfband(icol,ibm) = zdfband(icol,ibm) + zincflx * zfd  (nlay+1,iw,icol)  ! total
             end if
 
-         end do
-      enddo                    
+            ! band ISR and OSR at TOA
+            if (nbndOSR > 0) then
+               if (OSR_band_out(ibm)) then
+                  if (ibm > ibm_prev) jbnd = jbnd + 1
+                  zISRB(icol,jbnd) = zISRB(icol,jbnd) + zincflx * zfd(1,iw,icol)
+                  zOSRB(icol,jbnd) = zOSRB(icol,jbnd) + zincflx * zfu(1,iw,icol)
+               end if
+            end if
+
+            ibm_prev = ibm
+         end do  ! iw
+
+      enddo  ! icol                  
 
       ! convert from total to diffuse only
       if (do_drfband) zdfband = zdfband - zdrband

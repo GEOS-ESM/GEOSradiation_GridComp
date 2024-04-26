@@ -52,6 +52,7 @@ module rrtmg_sw_rad
    use MAPL
 
    use rrsw_vsn
+   use rad_types, only: rptr1d_wrap
    use cloud_subcol_gen, only: &
       generate_stochastic_clouds, clearCounts_threeBand
    use rrtmg_sw_cldprmc, only: cldprmc_sw
@@ -120,6 +121,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
+      OSR_band_out, ISRB, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -277,6 +279,8 @@ contains
 
       logical, intent(in) :: do_drfband              ! Compute drband, dfband?
 
+      logical, intent(in) :: OSR_band_out (nbndsw)   ! which bands required for OSRB?
+
       ! ----- Outputs -----
 
       ! Subcolumn clear counts for Tot|High|Mid|Low super-layers
@@ -297,6 +301,9 @@ contains
 
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (ncol,nbndsw)
+
+      ! ISR and OSR per band outputs
+       type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(ncol) :: &
@@ -358,7 +365,7 @@ contains
 
       ! ----- Locals -----
 
-      integer :: pncol
+      integer :: pncol, nbndOSR
       integer :: STATUS  ! for MAPL error reporting
       
       ! ASSERTs to catch unphysical or invalid inputs
@@ -388,7 +395,10 @@ contains
       else
          pncol = 2
       end if
-      
+
+      ! count number of bands needed for OSR output
+      nbndOSR = count(OSR_band_out)
+
       ! do partitions
       call rrtmg_sw_sub (MAPL, &
          pncol, ncol, nlay, &
@@ -445,6 +455,7 @@ contains
 #endif
 
          do_drfband, drband, dfband, &
+         OSR_band_out, nbndOSR, ISRB, OSRB, &
          bndscl, indsolvar, solcycfrac, &  ! optional inputs
          __RC__)
                                                       
@@ -507,6 +518,7 @@ contains
 #endif
 
       do_drfband, drband, dfband, &
+      OSR_band_out, nbndOSR, ISRB, OSRB, &
       bndscl, indsolvar, solcycfrac, &  ! optional inputs
       RC)
 
@@ -592,6 +604,9 @@ contains
 
       logical, intent(in) :: do_drfband                ! Compute drband, dfband?
 
+      logical, intent(in) :: OSR_band_out (nbndsw)     ! which bands required for OSRB?
+      integer, intent(in) :: nbndOSR                   !   and how many of them?
+
       ! ----- Outputs -----
 
       ! subcolumn clear counts for Tot|High|Mid|Low super-layers
@@ -613,56 +628,8 @@ contains
       ! Surface net downwelling fluxes per band, all-sky & beam+diffuse (W/m2)
       real, intent(out) :: fswband (gncol,nbndsw)
 
-      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, intent(out), dimension(gncol) :: &
-        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
-        cotntp, cotnhp, cotnmp, cotnlp
-
-#ifdef SOLAR_RADVAL
-      real, intent(out), dimension(gncol) :: &
-        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
-        cdsntp, cdsnhp, cdsnmp, cdsnlp
-
-      ! ditto but phase-split
-      real, intent(out), dimension(gncol) :: &
-        cotldtp, cotldhp, cotldmp, cotldlp, &
-        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
-        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
-        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
-        cotidtp, cotidhp, cotidmp, cotidlp, &
-        cotintp, cotinhp, cotinmp, cotinlp, &
-        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
-        cdsintp, cdsinhp, cdsinmp, cdsinlp
-
-      ! ditto but single-scattering albedo (tau weighted)
-      real, intent(out), dimension(gncol) :: &
-        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
-        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
-        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
-        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
-        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
-        ssaintp, ssainhp, ssainmp, ssainlp, &
-        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
-        sdsintp, sdsinhp, sdsinmp, sdsinlp
-
-      ! ditto but asymmetry parameter (tau*ssa weighted)
-      real, intent(out), dimension(gncol) :: &
-        asmldtp, asmldhp, asmldmp, asmldlp, &
-        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
-        adsldtp, adsldhp, adsldmp, adsldlp, &
-        adslntp, adslnhp, adslnmp, adslnlp, &
-        asmidtp, asmidhp, asmidmp, asmidlp, &
-        asmintp, asminhp, asminmp, asminlp, &
-        adsidtp, adsidhp, adsidmp, adsidlp, &
-        adsintp, adsinhp, adsinmp, adsinlp
-
-      ! ditto but forward scattering fraction (tau*ssa weighted)
-      real, intent(out), dimension(gncol) :: &
-        forldtp, forldhp, forldmp, forldlp, &
-        forlntp, forlnhp, forlnmp, forlnlp, &
-        foridtp, foridhp, foridmp, foridlp, &
-        forintp, forinhp, forinmp, forinlp
-#endif
+      ! ISR and OSR per band outputs
+      type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
@@ -676,6 +643,7 @@ contains
       ! Control
       real, parameter :: zepzen = 1.e-10  ! very small cossza
       integer :: ibnd, icol, ilay, ilev   ! various indices
+      integer :: jbnd
 
       ! Atmosphere
       real :: coldry (nlay,pncol)        ! dry air column amount
@@ -788,56 +756,10 @@ contains
 
       real, dimension (pncol,nbndsw) :: zdrband, zdfband
 
-      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
-      real, dimension(pncol) :: &
-        zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
-        zcotntp, zcotnhp, zcotnmp, zcotnlp
+      real, dimension (pncol,nbndOSR) :: zISRB, zOSRB  ! partitioned
 
-#ifdef SOLAR_RADVAL
-      real, dimension(pncol) :: &
-        zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
-        zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
-
-      ! ditto but phase-split
-      real, dimension(pncol) :: &
-        zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
-        zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
-        zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
-        zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
-        zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
-        zcotintp, zcotinhp, zcotinmp, zcotinlp, &
-        zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
-        zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
-
-      ! ditto but single-scattering albedo (tau weighted)
-      real, dimension(pncol) :: &
-        zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
-        zssalntp, zssalnhp, zssalnmp, zssalnlp, &
-        zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
-        zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
-        zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
-        zssaintp, zssainhp, zssainmp, zssainlp, &
-        zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
-        zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp
-
-      ! ditto but asymmetry parameter (tau*ssa weighted)
-      real, dimension(pncol) :: &
-        zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
-        zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
-        zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
-        zadslntp, zadslnhp, zadslnmp, zadslnlp, &
-        zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
-        zasmintp, zasminhp, zasminmp, zasminlp, &
-        zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
-        zadsintp, zadsinhp, zadsinmp, zadsinlp
-      
-      ! ditto but forward scattering fraction (tau*ssa weighted)
-      real, dimension(pncol) :: &
-        zforldtp, zforldhp, zforldmp, zforldlp, &
-        zforlntp, zforlnhp, zforlnmp, zforlnlp, &
-        zforidtp, zforidhp, zforidmp, zforidlp, &
-        zforintp, zforinhp, zforinmp, zforinlp
-#endif
+      ! in-cloud PAR optical thicknesses
+      real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
 
       ! Solar variability multipliers
       ! -----------------------------
@@ -1505,6 +1427,7 @@ contains
 #endif
 
                   do_drfband, zdrband, zdfband, &
+                  OSR_band_out, nbndOSR, zISRB, zOSRB, &
                   __RC__)
 
                ! Copy out up and down, clear- and all-sky fluxes to output arrays.
@@ -1635,6 +1558,21 @@ contains
                      end do
                   end if
 
+                  ! band OSR at TOA
+                  if (nbndOSR > 0) then
+                     jbnd = 0
+                     do ibnd = 1,nbndsw
+                        if (OSR_band_out(ibnd)) then
+                           jbnd = jbnd + 1
+                           do icol = 1,ncol
+                              gicol = gicol_clr(icol + cols - 1)
+                              ISRB(ibnd)%p(gicol) = zISRB(icol,jbnd)
+                              OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
+                           end do
+                        end if
+                     end do
+                  end if
+
                else ! cloudy columns
 
                   do icol = 1,ncol
@@ -1752,6 +1690,21 @@ contains
                      end do
                   end if
 
+                  ! band ISR and OSR at TOA
+                  if (nbndOSR > 0) then
+                     jbnd = 0
+                     do ibnd = 1,nbndsw
+                        if (OSR_band_out(ibnd)) then
+                           jbnd = jbnd + 1
+                           do icol = 1,ncol
+                              gicol = gicol_cld(icol + cols - 1)
+                              ISRB(ibnd)%p(gicol) = zISRB(icol,jbnd)
+                              OSRB(ibnd)%p(gicol) = zOSRB(icol,jbnd)
+                           end do
+                        end if
+                     end do
+                  end if
+
                endif  ! clear/cloudy
 
                call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
@@ -1792,6 +1745,15 @@ contains
             do ibnd = 1,nbndsw
                drband(:,ibnd) = drband(:,ibnd) / swdflx_at_top(:)
                dfband(:,ibnd) = dfband(:,ibnd) / swdflx_at_top(:)
+            end do
+         end if
+
+         if (nbndOSR > 0) then
+            do ibnd = 1,nbndsw
+               if (OSR_band_out(ibnd)) then
+                  ISRB(ibnd)%p(:) = ISRB(ibnd)%p(:) / swdflx_at_top(:)
+                  OSRB(ibnd)%p(:) = OSRB(ibnd)%p(:) / swdflx_at_top(:)
+               end if
             end do
          end if
 
