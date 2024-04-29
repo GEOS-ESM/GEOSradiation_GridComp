@@ -303,7 +303,7 @@ contains
       real, intent(out) :: fswband (ncol,nbndsw)
 
       ! ISR and OSR per band outputs
-       type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
+      type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
       ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
       real, intent(out), dimension(ncol) :: &
@@ -395,7 +395,7 @@ contains
       else
          pncol = 2
       end if
-
+      
       ! count number of bands needed for OSR output
       nbndOSR = count(OSR_band_out)
 
@@ -631,6 +631,57 @@ contains
       ! ISR and OSR per band outputs
       type(rptr1d_wrap), intent(out), dimension (nbndsw) :: ISRB, OSRB
 
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, intent(out), dimension(gncol) :: &
+        cotdtp, cotdhp, cotdmp, cotdlp, &  ! regular
+        cotntp, cotnhp, cotnmp, cotnlp
+
+#ifdef SOLAR_RADVAL
+      real, intent(out), dimension(gncol) :: &
+        cdsdtp, cdsdhp, cdsdmp, cdsdlp, &  ! delta-scaled
+        cdsntp, cdsnhp, cdsnmp, cdsnlp
+
+      ! ditto but phase-split
+      real, intent(out), dimension(gncol) :: &
+        cotldtp, cotldhp, cotldmp, cotldlp, &
+        cotlntp, cotlnhp, cotlnmp, cotlnlp, &
+        cdsldtp, cdsldhp, cdsldmp, cdsldlp, &
+        cdslntp, cdslnhp, cdslnmp, cdslnlp, &
+        cotidtp, cotidhp, cotidmp, cotidlp, &
+        cotintp, cotinhp, cotinmp, cotinlp, &
+        cdsidtp, cdsidhp, cdsidmp, cdsidlp, &
+        cdsintp, cdsinhp, cdsinmp, cdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, intent(out), dimension(gncol) :: &
+        ssaldtp, ssaldhp, ssaldmp, ssaldlp, &
+        ssalntp, ssalnhp, ssalnmp, ssalnlp, &
+        sdsldtp, sdsldhp, sdsldmp, sdsldlp, &
+        sdslntp, sdslnhp, sdslnmp, sdslnlp, &
+        ssaidtp, ssaidhp, ssaidmp, ssaidlp, &
+        ssaintp, ssainhp, ssainmp, ssainlp, &
+        sdsidtp, sdsidhp, sdsidmp, sdsidlp, &
+        sdsintp, sdsinhp, sdsinmp, sdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        asmldtp, asmldhp, asmldmp, asmldlp, &
+        asmlntp, asmlnhp, asmlnmp, asmlnlp, &
+        adsldtp, adsldhp, adsldmp, adsldlp, &
+        adslntp, adslnhp, adslnmp, adslnlp, &
+        asmidtp, asmidhp, asmidmp, asmidlp, &
+        asmintp, asminhp, asminmp, asminlp, &
+        adsidtp, adsidhp, adsidmp, adsidlp, &
+        adsintp, adsinhp, adsinmp, adsinlp
+
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, intent(out), dimension(gncol) :: &
+        forldtp, forldhp, forldmp, forldlp, &
+        forlntp, forlnhp, forlnmp, forlnlp, &
+        foridtp, foridhp, foridmp, foridlp, &
+        forintp, forinhp, forinmp, forinlp
+#endif
+
       ! Surface downwelling direct and diffuse (W/m2) in each solar band:
       ! Only filled if (do_drfband), otherwise not touched and can be null pointers;
       ! if (do_drfband), must point to (gncol,nbndsw) space.
@@ -758,8 +809,56 @@ contains
 
       real, dimension (pncol,nbndOSR) :: zISRB, zOSRB  ! partitioned
 
-      ! in-cloud PAR optical thicknesses
-      real, dimension (pncol) :: ztautp, ztauhp, ztaump, ztaulp
+      ! In-cloud PAR optical thickness for Tot|High|Mid|Low super-layers
+      real, dimension(pncol) :: &
+        zcotdtp, zcotdhp, zcotdmp, zcotdlp, &  ! regular
+        zcotntp, zcotnhp, zcotnmp, zcotnlp
+
+#ifdef SOLAR_RADVAL
+      real, dimension(pncol) :: &
+        zcdsdtp, zcdsdhp, zcdsdmp, zcdsdlp, &  ! delta-scaled
+        zcdsntp, zcdsnhp, zcdsnmp, zcdsnlp
+
+      ! ditto but phase-split
+      real, dimension(pncol) :: &
+        zcotldtp, zcotldhp, zcotldmp, zcotldlp, &
+        zcotlntp, zcotlnhp, zcotlnmp, zcotlnlp, &
+        zcdsldtp, zcdsldhp, zcdsldmp, zcdsldlp, &
+        zcdslntp, zcdslnhp, zcdslnmp, zcdslnlp, &
+        zcotidtp, zcotidhp, zcotidmp, zcotidlp, &
+        zcotintp, zcotinhp, zcotinmp, zcotinlp, &
+        zcdsidtp, zcdsidhp, zcdsidmp, zcdsidlp, &
+        zcdsintp, zcdsinhp, zcdsinmp, zcdsinlp
+
+      ! ditto but single-scattering albedo (tau weighted)
+      real, dimension(pncol) :: &
+        zssaldtp, zssaldhp, zssaldmp, zssaldlp, &
+        zssalntp, zssalnhp, zssalnmp, zssalnlp, &
+        zsdsldtp, zsdsldhp, zsdsldmp, zsdsldlp, &
+        zsdslntp, zsdslnhp, zsdslnmp, zsdslnlp, &
+        zssaidtp, zssaidhp, zssaidmp, zssaidlp, &
+        zssaintp, zssainhp, zssainmp, zssainlp, &
+        zsdsidtp, zsdsidhp, zsdsidmp, zsdsidlp, &
+        zsdsintp, zsdsinhp, zsdsinmp, zsdsinlp
+
+      ! ditto but asymmetry parameter (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zasmldtp, zasmldhp, zasmldmp, zasmldlp, &
+        zasmlntp, zasmlnhp, zasmlnmp, zasmlnlp, &
+        zadsldtp, zadsldhp, zadsldmp, zadsldlp, &
+        zadslntp, zadslnhp, zadslnmp, zadslnlp, &
+        zasmidtp, zasmidhp, zasmidmp, zasmidlp, &
+        zasmintp, zasminhp, zasminmp, zasminlp, &
+        zadsidtp, zadsidhp, zadsidmp, zadsidlp, &
+        zadsintp, zadsinhp, zadsinmp, zadsinlp
+      
+      ! ditto but forward scattering fraction (tau*ssa weighted)
+      real, dimension(pncol) :: &
+        zforldtp, zforldhp, zforldmp, zforldlp, &
+        zforlntp, zforlnhp, zforlnmp, zforlnlp, &
+        zforidtp, zforidhp, zforidmp, zforidlp, &
+        zforintp, zforinhp, zforinmp, zforinlp
+#endif
 
       ! Solar variability multipliers
       ! -----------------------------
@@ -1558,7 +1657,7 @@ contains
                      end do
                   end if
 
-                  ! band OSR at TOA
+                  ! band ISR & OSR at TOA
                   if (nbndOSR > 0) then
                      jbnd = 0
                      do ibnd = 1,nbndsw
@@ -1690,7 +1789,7 @@ contains
                      end do
                   end if
 
-                  ! band ISR and OSR at TOA
+                  ! band ISR & OSR at TOA
                   if (nbndOSR > 0) then
                      jbnd = 0
                      do ibnd = 1,nbndsw

@@ -184,7 +184,6 @@ module GEOS_SolarGridCompMod
      generate_stochastic_clouds, clearCounts_threeBand
   use rad_utils, only: Tbr_from_band_flux
 
-
   use mo_rte_kind, only: wp
 
   implicit none
@@ -4828,6 +4827,9 @@ contains
       ! gpoint limits for each band
       allocate (band_lims_gpt(2,nbnd),__STAT__)
       band_lims_gpt = k_dist%get_band_lims_gpoint()
+
+      ! dummy array (see later)
+      allocate(dummy_wp(ncol,LM),source=0._wp, __STAT__)
 
       ! allocate input arrays
       allocate(tsi(ncol), mu0(ncol), __STAT__)

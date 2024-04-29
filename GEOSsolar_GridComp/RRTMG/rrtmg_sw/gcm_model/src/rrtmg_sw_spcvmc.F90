@@ -128,6 +128,7 @@ contains
    !           Aug 2007 
    ! Revision: Added ztau[lmht]p: PMNorris, GMAO, at some point
    ! Revision: Added zdrband, zdfband for OBIO support: PMNorris, GMAO, Nov 2022
+   ! Revision: separate phase tracking for taormc, taucmc: PMNorris, Jan 2024
    ! Revision: Added zOSRB etc. for OSR band support: PMNorris, GMAO, Apr 2024
    !
    ! ------------------------------------------------------------------
@@ -303,7 +304,7 @@ contains
       real, intent(out), dimension (pncol,nbndsw) :: zdrband, zdfband
 
       ! ISR and OSR band output
-      real, intent(out), dimension (pncol,nbndOSR) :: zISRB, zOSRB
+      real, intent(out), dimension(pncol,nbndOSR) :: zISRB, zOSRB
 
       integer, intent(out), optional :: RC  ! return code
 
@@ -385,9 +386,9 @@ contains
          zdfband  = 0.
       end if
       if (nbndOSR > 0) then
-          zISRB = 0.
-          zOSRB = 0.
-       end if
+         zISRB = 0.
+         zOSRB = 0.
+      end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
       call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
