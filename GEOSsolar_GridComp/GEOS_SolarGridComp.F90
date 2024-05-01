@@ -2949,7 +2949,7 @@ contains
     type(S_), allocatable :: list(:)
 
     ! which bands require OSR output?
-    ! (only RRTMG currently; OSRBbbRG, TBRBbbRG)
+    ! (only RRTMG currently; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
     logical :: band_output (nbndsw)
     integer :: ibnd
     character*2 :: bb  
@@ -6828,8 +6828,6 @@ contains
 
     subroutine UPDATE_EXPORT(IM,JM,LM, RC)
 
-      use parrrsw, only: nbndsw, jpb1, jpb2
-      use rrsw_wvn, only: wavenum1, wavenum2
       use mo_gas_concentrations, only: ty_gas_concs
       use mo_load_coefficients,  only: load_and_init
 
