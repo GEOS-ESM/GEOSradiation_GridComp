@@ -67,7 +67,8 @@ module GEOS_IrradGridCompMod
   use rrtmg_lw_init, only: rrtmg_lw_ini
   use parrrtm, only: ngptlw, nbndlw
   use rrlw_wvn, only: wavenum1, wavenum2
-  use rad_utils, only: Tbr_from_band_flux
+  use rad_utils, only: Tbr_from_band_flux, &
+    choose_solar_scheme, choose_irrad_scheme
 
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -83,9 +84,20 @@ module GEOS_IrradGridCompMod
 
 !EOP
 
-   ! -------------------------------------------
-   ! Select which RRTMG bands support OLR output
-   ! -------------------------------------------
+   ! number of bands in different radiation codes
+   ! --------------------------------------------
+
+   integer, parameter :: NB_CHOU   = 10        ! #bands in IRRAD calcs for Chou
+   integer, parameter :: NB_RRTMG  = 16        ! #bands in IRRAD calcs for RRTMG
+   integer, parameter :: NB_RRTMGP = 16        ! #bands in IRRAD calcs for RRTMGP
+    
+   integer, parameter :: NB_CHOU_SORAD   = 8   ! #bands in SORAD calcs for Chou
+   integer, parameter :: NB_RRTMG_SORAD  = 14  ! #bands in SORAD calcs for RRTMG
+   integer, parameter :: NB_RRTMGP_SORAD = 14  ! #bands in SORAD calcs for RRTMGP
+
+   ! ----------------------------------------------
+   ! Select which RRTMG[P] bands support OLR output
+   ! ----------------------------------------------
    !    via OLRBbbRG and TBRBbbRG exports ...
    ! (These exports require support space in the
    ! internal state so we choose only the ones we want
@@ -95,7 +107,7 @@ module GEOS_IrradGridCompMod
    ! internal state. In that case we would only require
    ! runtime band selection via the EXPORTS chosen.)
 
-   ! NOTE: band 16 should be requested with caution ...
+   ! NOTE: RRTMG band 16 should be requested with caution ...
    ! Band 16 is technically 2600-3250 cm-1. But when RT
    ! is performed across all 16 bands, as it is in GEOS-5
    ! usage, then band 16 includes the integrated Planck
@@ -106,8 +118,10 @@ module GEOS_IrradGridCompMod
    ! the limits [2600,3250] are used.
 
    ! Which bands are supported?
-   !    (Currently RRTMG only)
-   !    (actual calculation only if export is requested)
+   !    (Currently RRTMG & RRTMGP only:
+   !      RRTMG & RRTMGP have the same number of bands &
+   !      very similar, but not identical, band limits)
+   !    (Actual calculation only if export is requested)
    ! Supported?    Band  Requested by (and use)
    logical, parameter :: band_output_supported (nbndlw) = [ &
       .false. , &!  01
@@ -126,6 +140,8 @@ module GEOS_IrradGridCompMod
       .false. , &!  14
       .false. , &!  15
       .false. ]  !  16
+   ! PMN: TODO, make LW method like SW so it doesnt waste
+   ! intermediate variable space on unused bands?
 
    ! PS: We may later have an RRTMG internal state like
    ! RRTMGP below with various rrtmg_lw_init data, etc.
@@ -174,30 +190,26 @@ contains
     integer                    :: STATUS
     character(len=ESMF_MAXSTR) :: COMP_NAME
 
-    type (ESMF_Config) :: CF
+    type (MAPL_MetaComp), pointer :: MAPL
 
     integer :: MY_STEP
     integer :: ACCUMINT
     real    :: DT
 
-    type (ty_RRTMGP_state), pointer :: rrtmgp_state => null()
+    logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+
+    type (ty_RRTMGP_state), pointer :: rrtmgp_state
     type (ty_RRTMGP_wrap)           :: wrap
 
     ! for OLRBbbRG, TBRBbbRG
-    real :: RFLAG
-    logical :: USE_RRTMG
     integer :: ibnd
     character*2 :: bb
-    character*9 :: wvn_rng  ! xxxx-yyyy
 
 !=============================================================================
 
-! Get my name and set-up traceback handle
-! ---------------------------------------
-
-    Iam = 'SetServices'
+    ! Get my name and set-up traceback handle
     call ESMF_GridCompGet(GC, NAME=COMP_NAME, __RC__)
-    Iam = trim(COMP_NAME) // Iam
+    Iam = trim(COMP_NAME) // 'SetServices'
 
     ! save pointer to the wrapped RRTMGP internal state in the GC
     allocate(rrtmgp_state, __STAT__)
@@ -205,39 +217,23 @@ contains
     call ESMF_UserCompSetInternalState(GC, 'RRTMGP_state', wrap, status)
     VERIFY_(status)
 
-! Set the Run entry point
-! -----------------------
+    ! Get my internal MAPL_Generic state
+    call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
 
-    call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_RUN, Run, __RC__)
+    ! Get the intervals; "heartbeat" must exist
+    call MAPL_GetResource (MAPL, DT, Label="RUN_DT:", __RC__)
 
-! Get the configuration
-! ---------------------
-
-    call ESMF_GridCompGet(GC, CONFIG=CF, __RC__)
-
-! Get the intervals; "heartbeat" must exist
-! -----------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label="RUN_DT:", __RC__)
-
-! Refresh interval defaults to heartbeat. This will also be read by
-! MAPL_Generic and set as the component's main time step.
-! -----------------------------------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label=trim(COMP_NAME)//"_DT:", default=DT, __RC__)
+    ! Refresh interval defaults to heartbeat.
+    ! This will also be read by MAPL_Generic and set as the component's main time step.
+    call MAPL_GetResource (MAPL, DT, Label=trim(COMP_NAME)//"_DT:", default=DT, __RC__)
     MY_STEP = nint(DT)
 
-! Averaging interval defaults to the refresh interval.
-!-----------------------------------------------------
-
-    call ESMF_ConfigGetAttribute(CF, DT, Label=trim(COMP_NAME)//'Avrg:', default=DT, __RC__)
+    ! Averaging interval defaults to refresh interval.
+    call MAPL_GetResource (MAPL, DT, Label=trim(COMP_NAME)//"Avrg:", default=DT, __RC__)
     ACCUMINT = nint(DT)
 
-! Is RRTMG LW being run?
-! ----------------------
-
-    call ESMF_ConfigGetAttribute(CF, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMG = RFLAG /= 0.
+    ! Decide which radiation to use
+    call choose_irrad_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
 
 ! Set the state variable specs.
 ! -----------------------------
@@ -615,27 +611,28 @@ contains
         DIMS       = MAPL_DimsHorzOnly,                           &
         VLOCATION  = MAPL_VLocationNone,                   __RC__ )
 
-    if (USE_RRTMG) then
+    if (USE_RRTMG .or. USE_RRTMGP) then
+       ! Stating the obvious ...
+       _ASSERT(NB_RRTMG == nbndlw, 'Number of RRTMG bands error!')
+       _ASSERT(NB_RRTMGP == NB_RRTMG, 'Broken assumption for OLRB diagnostics')
+
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
 
-             call MAPL_AddExportSpec(GC,                                    &
-                SHORT_NAME = 'OLRB'//bb//'RG',                              &
-                LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RRTMG_band' &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',        &
-                UNITS      = 'W m-2',                                       &
-                DIMS       = MAPL_DimsHorzOnly,                             &
-                VLOCATION  = MAPL_VLocationNone,                     __RC__ )
+             call MAPL_AddExportSpec(GC,                                      &
+                SHORT_NAME = 'OLRB'//bb//'RG',                                &
+                LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = 'W m-2',                                         &
+                DIMS       = MAPL_DimsHorzOnly,                               &
+                VLOCATION  = MAPL_VLocationNone,                       __RC__ )
 
-             call MAPL_AddExportSpec(GC,                                    &
-                SHORT_NAME = 'TBRB'//bb//'RG',                              &
-                LONG_NAME  = 'brightness_temperature_in_RRTMG_LW_band'      &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',        &
-                UNITS      = 'K',                                           &
-                DIMS       = MAPL_DimsHorzOnly,                             &
-                VLOCATION  = MAPL_VLocationNone,                     __RC__ )
+             call MAPL_AddExportSpec(GC,                                      &
+                SHORT_NAME = 'TBRB'//bb//'RG',                                &
+                LONG_NAME  = 'brightness_temperature_in_RR_LW_band'//bb,      &
+                UNITS      = 'K',                                             &
+                DIMS       = MAPL_DimsHorzOnly,                               &
+                VLOCATION  = MAPL_VLocationNone,                       __RC__ )
 
           end if
        end do
@@ -900,25 +897,25 @@ contains
         DIMS       = MAPL_DimsHorzVert,                           &
         VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
 
-    if (USE_RRTMG) then
+    if (USE_RRTMG .or. USE_RRTMGP) then
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
 
-             call MAPL_AddInternalSpec(GC,                                       &
-                SHORT_NAME = 'OLRB'//bb//'RG',                                   &
-                LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RRTMG_band'//bb, &
-                UNITS      = 'W m-2',                                            &
-                DIMS       = MAPL_DimsHorzOnly,                                  &
-                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
+             call MAPL_AddInternalSpec(GC,                                    &
+                SHORT_NAME = 'OLRB'//bb//'RG',                                &
+                LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = 'W m-2',                                         &
+                DIMS       = MAPL_DimsHorzOnly,                               &
+                VLOCATION  = MAPL_VLocationNone,                       __RC__ )
 
-             call MAPL_AddInternalSpec(GC,                                       &
-                SHORT_NAME = 'DOLRB'//bb//'RGDT',                                &
-                LONG_NAME  = 'derivative_of_upwelling_longwave_flux_at_TOA'//    &
-                                '_in_RRTMG_band'//bb//'_wrt_surface_temp',       &
-                UNITS      = 'W m-2 K-1',                                        &
-                DIMS       = MAPL_DimsHorzOnly,                                  &
-                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
+             call MAPL_AddInternalSpec(GC,                                    &
+                SHORT_NAME = 'DOLRB'//bb//'RGDT',                             &
+                LONG_NAME  = 'derivative_of_upwelling_longwave_flux_at_TOA'// &
+                                '_in_RR_band'//bb//'_wrt_surface_temp',       &
+                UNITS      = 'W m-2 K-1',                                     &
+                DIMS       = MAPL_DimsHorzOnly,                               &
+                VLOCATION  = MAPL_VLocationNone,                       __RC__ )
 
           end if
        end do
@@ -926,9 +923,7 @@ contains
 
 !EOS
 
-! Set the Profiling timers
-! ------------------------
-
+    ! Set the Profiling timers
     call MAPL_TimerAdd(GC, name="-LW_DRIVER"               , __RC__)
     call MAPL_TimerAdd(GC, name="--IRRAD"                  , __RC__)
     call MAPL_TimerAdd(GC, name="---IRRAD_RUN"             , __RC__)
@@ -948,13 +943,11 @@ contains
     call MAPL_TimerAdd(GC, name="---AEROSOLS"              , __RC__)
     call MAPL_TimerAdd(GC, name="-UPDATE_FLX"              , __RC__)
 
-! Set generic init and final methods
-! ----------------------------------
-
+    ! Set Run method and use generic Initalize and Finalize methods
+    call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices(GC, __RC__)
 
     RETURN_(ESMF_SUCCESS)
-
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1025,14 +1018,6 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
 ! Concerning what radiation to use (global to LW_driver and Update_Flx)
 
-   integer, parameter :: NB_CHOU   = 10        ! #bands in IRRAD calcs for Chou
-   integer, parameter :: NB_RRTMG  = 16        ! #bands in IRRAD calcs for RRTMG
-   integer, parameter :: NB_RRTMGP = 16        ! #bands in IRRAD calcs for RRTMGP
-
-   integer, parameter :: NB_CHOU_SORAD   = 8   ! #bands in SORAD calcs for Chou
-   integer, parameter :: NB_RRTMG_SORAD  = 14  ! #bands in SORAD calcs for RRTMG
-   integer, parameter :: NB_RRTMGP_SORAD = 14  ! #bands in SORAD calcs for RRTMGP
-
    logical :: USE_RRTMGP, USE_RRTMGP_SORAD
    logical :: USE_RRTMG,  USE_RRTMG_SORAD
    logical :: USE_CHOU,   USE_CHOU_SORAD
@@ -1047,10 +1032,11 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
    real, pointer, dimension(:,:  )   :: LONS
    real, pointer, dimension(:,:  )   :: LATS
 
-   ! which bands require OLR output?
-   ! (only RRTMG currently; OLRBbbRG, TBRBbbRG)
+! which bands require OLR output?
+   ! (only RRTMG[P]; OLRBbbRG, TBRBbbRG)
    real, pointer, dimension(:,:) :: ptr2d
    logical :: band_output (nbndlw)
+   logical :: any_band_output
    integer :: ibnd
    character*2 :: bb
 
@@ -1126,9 +1112,10 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
    ! select which bands require OLRB output ...
    ! ------------------------------------------
-   ! Currently only available for RRTMG
+   ! Only available for RRTMG[P]
    ! must be supported AND requested by export 'OLRBbbRG' OR 'TBRBbbRG'
-   if (USE_RRTMG) then
+   any_band_output = .false.
+   if (USE_RRTMG .or. USE_RRTMGP) then
       do ibnd = 1,nbndlw
          band_output(ibnd) = .false.
          if (.not. band_output_supported(ibnd)) cycle
@@ -1144,6 +1131,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
             cycle
          end if
       end do
+      any_band_output = any(band_output)
    end if
 
 ! Pointers to Internals; these are needed by both Update and Refresh
@@ -1229,6 +1217,7 @@ contains
                                          ty_optical_props_2str, ty_optical_props_nstr
    use mo_source_functions,        only: ty_source_func_lw
    use mo_fluxes,                  only: ty_fluxes_broadband
+   use mo_fluxes_byband,           only: ty_fluxes_byband
    use mo_rte_lw,                  only: rte_lw
    use mo_load_coefficients,       only: load_and_init
    use mo_load_cloud_coefficients, only: load_cld_lutcoeff, load_cld_padecoeff
@@ -1377,8 +1366,14 @@ contains
    real, parameter :: CCL4 = 0.1105000E-09 ! preexisting
    real, parameter :: CO   = 0.            ! currently zero
 
-   ! variables for RRTMGP code
-   ! -------------------------
+   integer                    :: in
+   real                       :: xx
+   type (ESMF_Time)           :: CURRENTTIME
+   real, dimension (LM+1)     :: TLEV
+   real, dimension (LM)       :: DP
+
+! variables for RRTMGP code
+! -------------------------
 
    ! conversion factor (see below)
    real(wp), parameter :: cwp_fac = real(1000./MAPL_GRAV,kind=wp)
@@ -1395,19 +1390,25 @@ contains
    real(wp), dimension(:),   allocatable         :: t_sfc
    real(wp), dimension(:,:), allocatable         :: emis_sfc ! first dim is band
 
-   ! fluxes
-   real(wp), dimension(:,:), allocatable, target :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
-                                                    flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
-                                                    flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
-                                                    flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
+   ! fluxes:
+   ! broadband
+   real(wp), dimension(:,:), allocatable, target :: &
+     flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
+     flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
+     flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
+     flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
+   ! byband
+   real(wp), dimension(:,:,:), allocatable, target :: &
+     bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
+     bnd_flux_up_allsky, bnd_dfupdts_allsky
 
    ! derived types for interacting with RRTMGP
    type(ty_gas_optics_rrtmgp), pointer           :: k_dist
    type(ty_gas_concs)                            :: gas_concs, gas_concs_block
    type(ty_cloud_optics_rrtmgp)                  :: cloud_optics
    type(ty_source_func_lw)                       :: sources
-   type(ty_fluxes_broadband)                     :: fluxes_clrsky, fluxes_clrnoa, &
-                                                    fluxes_allsky, fluxes_allnoa
+   type(ty_fluxes_broadband)                     :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
+   type(ty_fluxes_byband)                        :: fluxes_byband_allnoa, fluxes_byband_allsky
 
    ! The band-space (ncols_block,nlay,nbnd) aerosol and in-cloud optical properties
    ! Polymorphic with dynamic type (#streams) defined later
@@ -1425,6 +1426,7 @@ contains
    logical :: need_dirty_optical_props, need_cloud_optical_props
    logical :: export_clrnoa, export_clrsky, export_allnoa, export_allsky
    logical ::   calc_clrnoa,   calc_clrsky,   calc_allnoa,   calc_allsky
+   logical :: allnoa_to_allsky_band_xfer_needed
    integer :: ncol, nbnd, ngpt, nmom, nga, icergh
    integer :: b, nBlocks, colS, colE, ncols_block, &
               partial_blockSize, icol, isub, ilay, igpt
@@ -1472,13 +1474,6 @@ contains
 
    ! block size for efficient column processing (set from resource file)
    integer :: rrtmgp_blockSize
-
-! For aerosol
-   integer                    :: in
-   real                       :: xx
-   type (ESMF_Time)           :: CURRENTTIME
-   real, dimension (LM+1)     :: TLEV
-   real, dimension (LM)       :: DP
 
 ! pointers to import
 !-------------------
@@ -2066,6 +2061,8 @@ contains
         call MAPL_GetPointer(EXPORT, ptr2d, list(i)%str, __RC__)
         export_allsky = (export_allsky .or. associated(ptr2d))
       end do
+      ! band outputs are all-sky only for the moment
+      export_allsky = (export_allsky .or. any_band_output)
       deallocate(list,__STAT__)
 
       ! which fluxes to calculate?
@@ -2074,6 +2071,11 @@ contains
       calc_allnoa = (export_allnoa .or. (export_allsky .and. .not.implements_aerosol_optics))
       calc_clrsky =  export_clrsky
       calc_allsky =  export_allsky
+
+      ! handle allnoa -> allsky band output when aerosols not implemented
+      !   (band output currently only available for all-sky case)
+      allnoa_to_allsky_band_xfer_needed = &
+        export_allsky .and. any_band_output .and. .not.implements_aerosol_optics
 
       ! do we actually need dirty optical properties?
       need_dirty_optical_props = &
@@ -2092,6 +2094,10 @@ contains
         allocate(flux_up_allnoa(ncol,LM+1), &
                  flux_dn_allnoa(ncol,LM+1), &
                  dfupdts_allnoa(ncol,LM+1), __STAT__)
+        if (allnoa_to_allsky_band_xfer_needed) then
+          allocate(bnd_flux_up_allnoa(ncol,LM+1,nbnd), &   
+                   bnd_dfupdts_allnoa(ncol,LM+1,nbnd), __STAT__)
+        end if
       end if
       if (calc_clrsky) then
         allocate(flux_up_clrsky(ncol,LM+1), &
@@ -2102,6 +2108,10 @@ contains
         allocate(flux_up_allsky(ncol,LM+1), &
                  flux_dn_allsky(ncol,LM+1), &
                  dfupdts_allsky(ncol,LM+1), __STAT__)
+        if (any_band_output) then
+          allocate(bnd_flux_up_allsky(ncol,LM+1,nbnd), &   
+                   bnd_dfupdts_allsky(ncol,LM+1,nbnd), __STAT__)
+        end if
       end if
 
       ! =======================================================================================
@@ -2655,13 +2665,13 @@ contains
 
         ! clean clear-sky case
         if (calc_clrnoa) then
-          fluxes_clrnoa%flux_up => flux_up_clrnoa(colS:colE,:)
-          fluxes_clrnoa%flux_dn => flux_dn_clrnoa(colS:colE,:)
+          fluxes_clrnoa%flux_up     => flux_up_clrnoa(colS:colE,:)
+          fluxes_clrnoa%flux_dn     => flux_dn_clrnoa(colS:colE,:)
+          fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
           error_msg = rte_lw( &
             clean_optical_props, &
             top_at_1, sources, emis_sfc(:,colS:colE), &
-            fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s, &
-            flux_up_Jac=dfupdts_clrnoa(colS:colE,:))
+            fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
           TEST_(error_msg)
         end if
 
@@ -2697,14 +2707,28 @@ contains
           TEST_(cloud_props_gpt%increment(clean_optical_props))
 
           ! clean all-sky RT
-          fluxes_allnoa%flux_up => flux_up_allnoa(colS:colE,:)
-          fluxes_allnoa%flux_dn => flux_dn_allnoa(colS:colE,:)
-          error_msg = rte_lw( &
-            clean_optical_props, &
-            top_at_1, sources, emis_sfc(:,colS:colE), &
-            fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s, &
-            flux_up_Jac=dfupdts_allnoa(colS:colE,:))
-          TEST_(error_msg)
+          if (allnoa_to_allsky_band_xfer_needed) then
+            fluxes_byband_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
+            fluxes_byband_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
+            fluxes_byband_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
+            fluxes_byband_allnoa%bnd_flux_up     => bnd_flux_up_allnoa(colS:colE,:,:)
+            fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE,:,:)
+            error_msg = rte_lw( &
+              clean_optical_props, &
+              top_at_1, sources, emis_sfc(:,colS:colE), &
+              fluxes_byband_allnoa, n_gauss_angles=nga, use_2stream=u2s)
+            TEST_(error_msg)
+          else
+            ! only broadband required
+            fluxes_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
+            fluxes_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
+            fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
+            error_msg = rte_lw( &
+              clean_optical_props, &
+              top_at_1, sources, emis_sfc(:,colS:colE), &
+              fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s)
+            TEST_(error_msg)
+          endif
         end if
 
         if (export_clrsky .or. export_allsky) then
@@ -2718,13 +2742,13 @@ contains
 
             ! dirty clear-sky RT
             if (calc_clrsky) then
-              fluxes_clrsky%flux_up => flux_up_clrsky(colS:colE,:)
-              fluxes_clrsky%flux_dn => flux_dn_clrsky(colS:colE,:)
+              fluxes_clrsky%flux_up     => flux_up_clrsky(colS:colE,:)
+              fluxes_clrsky%flux_dn     => flux_dn_clrsky(colS:colE,:)
+              fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE,:)
               error_msg = rte_lw( &
                 dirty_optical_props, &
                 top_at_1, sources, emis_sfc(:,colS:colE), &
-                fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s, &
-                flux_up_Jac=dfupdts_clrsky(colS:colE,:))
+                fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s)
               TEST_(error_msg)
             end if
 
@@ -2735,14 +2759,28 @@ contains
               TEST_(cloud_props_gpt%increment(dirty_optical_props))
 
               ! dirty all-sky RT
-              fluxes_allsky%flux_up => flux_up_allsky(colS:colE,:)
-              fluxes_allsky%flux_dn => flux_dn_allsky(colS:colE,:)
-              error_msg = rte_lw( &
-                dirty_optical_props, &
-                top_at_1, sources, emis_sfc(:,colS:colE), &
-                fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s, &
-                flux_up_Jac=dfupdts_allsky(colS:colE,:))
-              TEST_(error_msg)
+              ! (band output currently only available for all-sky case)
+              if (any_band_output) then
+                fluxes_byband_allsky%flux_up     => flux_up_allsky(colS:colE,:)
+                fluxes_byband_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
+                fluxes_byband_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
+                fluxes_byband_allsky%bnd_flux_up     => bnd_flux_up_allsky(colS:colE,:,:)
+                fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE,:,:)
+                error_msg = rte_lw( &
+                  dirty_optical_props, &
+                  top_at_1, sources, emis_sfc(:,colS:colE), &
+                  fluxes_byband_allsky, n_gauss_angles=nga, use_2stream=u2s)
+                TEST_(error_msg)
+              else
+                fluxes_allsky%flux_up     => flux_up_allsky(colS:colE,:)
+                fluxes_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
+                fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
+                error_msg = rte_lw( &
+                  dirty_optical_props, &
+                  top_at_1, sources, emis_sfc(:,colS:colE), &
+                  fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s)
+                TEST_(error_msg)
+              end if
             end if
 
           else
@@ -2758,6 +2796,10 @@ contains
               flux_up_allsky(colS:colE,:) = flux_up_allnoa(colS:colE,:)
               flux_dn_allsky(colS:colE,:) = flux_dn_allnoa(colS:colE,:)
               dfupdts_allsky(colS:colE,:) = dfupdts_allnoa(colS:colE,:)
+              if (any_band_output) then
+                bnd_flux_up_allsky(colS:colE,:,:) = bnd_flux_up_allnoa(colS:colE,:,:)
+                bnd_dfupdts_allsky(colS:colE,:,:) = bnd_dfupdts_allnoa(colS:colE,:,:)
+              end if
             end if
 
           end if ! implements_aerosol_optics
@@ -2794,6 +2836,16 @@ contains
         FLXU_INT = real(reshape(-flux_up_allsky, (/IM,JM,LM+1/)))
         FLXD_INT = real(reshape( flux_dn_allsky, (/IM,JM,LM+1/)))
         DFDTS    = real(reshape(-dfupdts_allsky, (/IM,JM,LM+1/)))
+        ! band OLR and Tsfc Jacobian
+        do ib = 1,nbnd
+         if (band_output(ib)) then
+           write(bb,'(I0.2)') ib
+           call MAPL_GetPointer(INTERNAL, ptr2d, 'OLRB'//bb//'RG', __RC__)
+           ptr2d = real(reshape(-bnd_flux_up_allsky(:,1,ib), [IM,JM]))
+           call MAPL_GetPointer(INTERNAL, ptr2d, 'DOLRB'//bb//'RGDT', __RC__)
+           ptr2d = real(reshape(-bnd_dfupdts_allsky(:,1,ib), [IM,JM]))
+         end if
+        end do
       end if
 
       !mjs: Corrected emitted at the surface to remove reflected
@@ -2829,12 +2881,18 @@ contains
       end if
       if (calc_allnoa) then
         deallocate(flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa, __STAT__)
+        if (allnoa_to_allsky_band_xfer_needed) then
+          deallocate(bnd_flux_up_allnoa, bnd_dfupdts_allnoa, __STAT__)
+        end if
       end if
       if (calc_clrsky) then
         deallocate(flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, __STAT__)
       end if
       if (calc_allsky) then
         deallocate(flux_up_allsky, flux_dn_allsky, dfupdts_allsky, __STAT__)
+        if (any_band_output) then
+          deallocate(bnd_flux_up_allsky, bnd_dfupdts_allsky, __STAT__)
+        end if
       end if
 
       call MAPL_TimerOff(MAPL,"---RRTMGP_POST",__RC__)
@@ -3247,6 +3305,7 @@ contains
 !------------------------------------------------
 
  subroutine Update_Flx(IM,JM,LM,RC)
+   use mo_rte_kind, only: wp
    integer,           intent(IN ) :: IM, JM, LM
    integer, optional, intent(OUT) :: RC
 
@@ -3309,6 +3368,9 @@ contains
    real, pointer, dimension(:    )   :: PREF
 
    real, allocatable, dimension(:,:) :: DUMTT, OLRB
+
+   ! access to RRTMGP wavenumber limits
+   real(wp) :: band_lims_wvn(2,nbndlw)
 
 !  Begin...
 !----------
@@ -3551,45 +3613,65 @@ contains
        if(associated(FLNSC )) FLNSC  = FLC_INT(:,:,LM) + DFDTSC(:,:,LM) * DELT
        if(associated(FLNSA )) FLNSA  = MAPL_UNDEF
 
-       ! band OLR and/or TBR output
-       do ibnd = 1,nbndlw
-          if (band_output(ibnd)) then
+   end if  ! RRTMG
 
-             write(bb,'(I0.2)') ibnd
-             allocate(OLRB(IM,JM),__STAT__)
+   ! band OLR and/or TBR output
+   if ((USE_RRTMG .or. USE_RRTMGP) .and. any_band_output) then
 
-             ! get last full calculation
-             call MAPL_GetPointer(INTERNAL, ptr2d, 'OLRB'//bb//'RG', __RC__)
-             OLRB = ptr2d
+      allocate(OLRB(IM,JM),__STAT__)
 
-             ! update for surface temperature on heartbeat
-             call MAPL_GetPointer(INTERNAL, ptr2d, 'DOLRB'//bb//'RGDT', __RC__)
-             OLRB = OLRB + ptr2d * DELT
+      if (USE_RRTMGP) then
+         call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+         VERIFY_(status)
+         rrtmgp_state => wrap%ptr
+         if (rrtmgp_state%initialized) &
+            band_lims_wvn = rrtmgp_state%k_dist%get_band_lims_wavenumber()
+      end if
 
-             ! fill OLRBbbRG if requested
-             call MAPL_GetPointer(EXPORT, ptr2d, 'OLRB'//bb//'RG', __RC__)
-             if (associated(ptr2d)) then
-                if (all(OLRB == 0.)) then
-                   ! handles pre-first-full-calc case
-                   ptr2d = MAPL_UNDEF
-                else
-                   ptr2d = OLRB
+      do ibnd = 1,nbndlw
+         if (band_output(ibnd)) then
+            write(bb,'(I0.2)') ibnd
+
+            ! get last full calculation
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'OLRB'//bb//'RG', __RC__)
+            OLRB = ptr2d
+
+            ! update for surface temperature on heartbeat
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'DOLRB'//bb//'RGDT', __RC__)
+            OLRB = OLRB + ptr2d * DELT
+
+            ! fill OLRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'OLRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+               if (all(OLRB == 0.)) then
+                  ! handles pre-first-full-calc case
+                  ptr2d = MAPL_UNDEF
+               else
+                  ptr2d = OLRB
                end if
             end if
 
-             ! calculate TBRBbbRG if requested
-             call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
-             if (associated(ptr2d)) then
-                wn1 = wavenum1(ibnd)*100.; wn2 = wavenum2(ibnd)*100.  ! [m-1]
-                call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, __RC__)
-             end if
+            ! calculate TBRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+               if (USE_RRTMG) then
+                  wn1 = wavenum1(ibnd)*100.; wn2 = wavenum2(ibnd)*100.  ! [m-1]
+                  call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, __RC__)
+               else ! RRTMGP
+                  if (rrtmgp_state%initialized) then
+                     wn1 = band_lims_wvn(1,ibnd)*100.; wn2 = band_lims_wvn(2,ibnd)*100.  ! [m-1]
+                     call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, __RC__)
+                  else
+                     ptr2d = MAPL_UNDEF
+                  end if
+               end if
+            end if
 
-             deallocate(OLRB,__STAT__)
+         end if
+      end do
 
-          end if
-       end do
-
-   endif  ! RRTMG
+      deallocate(OLRB,__STAT__)
+   end if
 
    ! update reference linearization to current temperature
    ! pmn: should be deprecated because its moving along the line passing
@@ -3609,62 +3691,6 @@ contains
  end subroutine Update_Flx
 
 end subroutine RUN
-
-
-  ! Decide which radiation to use for thermodynamics state evolution.
-  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
-  ! Chou-Suarez is the default if nothing else asked for in Resource file.
-  !----------------------------------------------------------------------
-
-  subroutine choose_solar_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-      
-    _RETURN(_SUCCESS)
-  end subroutine choose_solar_scheme
-      
-  subroutine choose_irrad_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-      
-    real :: RFLAG
-    integer :: STATUS 
-      
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_irrad_scheme
 
 end module GEOS_IrradGridCompMod
 
