@@ -2816,7 +2816,8 @@ contains
       call MAPL_TimerOn(MAPL,"---RRTMGP_POST",__RC__)
 
       ! load output arrays
-      ! note: the DFDTS* are the derivatives of the NEGATED upward fluxes wrt TS
+      ! note: the upward fluxes must be NEGATED for the downward +ve conventionS
+      ! likewise, the DFDTS* are the derivatives of the NEGATED upward fluxes wrt TS
       if (export_clrnoa) then
         FLAU_INT = real(reshape(-flux_up_clrnoa, (/IM,JM,LM+1/)))
         FLAD_INT = real(reshape( flux_dn_clrnoa, (/IM,JM,LM+1/)))
@@ -2836,16 +2837,6 @@ contains
         FLXU_INT = real(reshape(-flux_up_allsky, (/IM,JM,LM+1/)))
         FLXD_INT = real(reshape( flux_dn_allsky, (/IM,JM,LM+1/)))
         DFDTS    = real(reshape(-dfupdts_allsky, (/IM,JM,LM+1/)))
-        ! band OLR and Tsfc Jacobian
-        do ib = 1,nbnd
-         if (band_output(ib)) then
-           write(bb,'(I0.2)') ib
-           call MAPL_GetPointer(INTERNAL, ptr2d, 'OLRB'//bb//'RG', __RC__)
-           ptr2d = real(reshape(-bnd_flux_up_allsky(:,1,ib), [IM,JM]))
-           call MAPL_GetPointer(INTERNAL, ptr2d, 'DOLRB'//bb//'RGDT', __RC__)
-           ptr2d = real(reshape(-bnd_dfupdts_allsky(:,1,ib), [IM,JM]))
-         end if
-        end do
       end if
 
       !mjs: Corrected emitted at the surface to remove reflected
@@ -2854,6 +2845,20 @@ contains
       SFCEM_INT = real(reshape( &
         -flux_up_allsky(:,LM+1) + flux_dn_allsky(:,LM+1) * (1._wp - emis_sfc(1,:)), &
         (/IM,JM/)))
+
+      ! band OLR and Tsfc Jacobian
+      ! These are direct INTERNALs and do not need the above negation for upward fluxes
+      if (export_allsky) then
+        do ib = 1,nbnd
+         if (band_output(ib)) then
+           write(bb,'(I0.2)') ib
+           call MAPL_GetPointer(INTERNAL, ptr2d, 'OLRB'//bb//'RG', __RC__)
+           ptr2d = real(reshape(bnd_flux_up_allsky(:,1,ib), [IM,JM]))
+           call MAPL_GetPointer(INTERNAL, ptr2d, 'DOLRB'//bb//'RGDT', __RC__)
+           ptr2d = real(reshape(bnd_dfupdts_allsky(:,1,ib), [IM,JM]))
+         end if
+        end do
+      end if
 
       ! clean up
       deallocate(t_sfc,emis_sfc,__STAT__)
