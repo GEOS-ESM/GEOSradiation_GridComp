@@ -128,17 +128,17 @@ module GEOS_IrradGridCompMod
       .false. , &!  02
       .false. , &!  03
       .false. , &!  04
-      .false. , &!  05
-      .true.  , &!  06   A. Collow (Window)
-      .false. , &!  07
+      .true.  , &!  05   W. Putman (CO2 Longwave IR, GOES Band 16)
+      .true.  , &!  06   A. Collow (Longwave IR, GOES Band 14)
+      .true.  , &!  07   W. Putman (Ozone IR, GOES Band 12)
       .false. , &!  08
-      .true.  , &!  09   W. Putman (Water Vapor)
-      .true.  , &!  10   W. Putman (Water Vapor)
-      .true.  , &!  11   W. Putman (Water Vapor)
+      .true.  , &!  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
+      .true.  , &!  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
+      .true.  , &!  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
       .false. , &!  12
       .false. , &!  13
       .false. , &!  14
-      .false. , &!  15
+      .true.  , &!  15   W. Putman (Shortwave IR, GOES Band 7)
       .false. ]  !  16
    ! PMN: TODO, make LW method like SW so it doesnt waste
    ! intermediate variable space on unused bands?
