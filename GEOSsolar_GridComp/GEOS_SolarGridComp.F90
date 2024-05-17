@@ -240,7 +240,7 @@ module GEOS_SolarGridCompMod
      .true.  , &!  08   W. Putman (RRTMG: GOES-"Veggie")
      .true.  , &!  09   W. Putman (RRTMG: GOES-Red)       (RRTMGP: GOES-"Veggie")
      .true.  , &!  10   W. Putman (RRTMG: GOES-Blue)      (RRTMGP: GOES-Red)
-     .false. , &!  11   W. Putman                         (RRTMGP: GOES-Blue)
+     .true.  , &!  11   W. Putman                         (RRTMGP: GOES-Blue)
      .false. , &!  12
      .false. , &!  13
      .false. ]  !  14
