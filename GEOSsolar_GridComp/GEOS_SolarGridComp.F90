@@ -621,6 +621,15 @@ contains
        REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
 
     call MAPL_AddImportSpec(GC,                                              &
+       LONG_NAME  = 'mass_fraction_of_graupel_in_air',                       &
+       UNITS      = 'kg kg-1',                                               &
+       SHORT_NAME = 'QG',                                                    &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                                    &
+       AVERAGING_INTERVAL = ACCUMINT,                                        &
+       REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
+
+    call MAPL_AddImportSpec(GC,                                              &
        LONG_NAME  = 'effective_radius_of_cloud_liquid_water_particles',      &
        UNITS      = 'm',                                                     &
        SHORT_NAME = 'RL',                                                    &
@@ -651,6 +660,15 @@ contains
        LONG_NAME  = 'effective_radius_of_snow_particles',                    &
        UNITS      = 'm',                                                     &
        SHORT_NAME = 'RS',                                                    &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                                    &
+       AVERAGING_INTERVAL = ACCUMINT,                                        &
+       REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
+
+    call MAPL_AddImportSpec(GC,                                              &
+       LONG_NAME  = 'effective_radius_of_graupel_particles',                 &
+       UNITS      = 'm',                                                     &
+       SHORT_NAME = 'RG',                                                    &
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationCenter,                                    &
        AVERAGING_INTERVAL = ACCUMINT,                                        &
@@ -3486,7 +3504,7 @@ contains
 
       ! inputs
       real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, OX, CL, &
-                                        QL, QI, QR, QS, RL, RI, RR, RS
+                                        QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
       real, pointer, dimension(:)    :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
                                         Ig1D, Jg1D, ALAT, SLR1D, ZT
 
@@ -3575,6 +3593,8 @@ contains
       integer :: DYOFYR
       integer :: NCOL
       integer :: RPART, IAER, NORMFLX
+
+      logical :: USE_PRECIP_IN_RADIATION
 
       integer                   :: ISOLVAR
       real, dimension(2)        :: INDSOLVAR
@@ -3675,6 +3695,12 @@ contains
       integer :: IM_World, JM_World, Gdims(3)
       integer, dimension(IM,JM) :: Ig, Jg
 
+      integer, parameter :: KICE     = 1
+      integer, parameter :: KLIQUID  = 2
+      integer, parameter :: KRAIN    = 3
+      integer, parameter :: KSNOW    = 4
+      integer, parameter :: KGRAUPEL = 5
+
       ! a column random number generator
 #ifdef HAVE_MKL
       type(ty_rng_mklvsl_plus) :: rng
@@ -3718,7 +3744,7 @@ contains
       real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
-      integer :: I, J, K, L, i1, iN
+      integer :: I, J, K, L, LV, i1, iN
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
@@ -3736,6 +3762,9 @@ contains
       integer :: NumMax, HorzDims(2)
       integer :: ibinary
       real :: def
+
+      real :: xx
+      real, allocatable, dimension(:) :: ILWT
 
       IAm = trim(COMP_NAME)//"Soradcore"
       call MAPL_TimerOn(MAPL,"-MISC")
@@ -4039,6 +4068,8 @@ contains
                   QR    => ptr2(1:Num2do,:)
                case('QS')
                   QS    => ptr2(1:Num2do,:)
+               case('QG')               
+                  QG    => ptr2(1:Num2do,:)
                case('RL')
                   RL    => ptr2(1:Num2do,:)
                case('RI')
@@ -4047,6 +4078,8 @@ contains
                   RR    => ptr2(1:Num2do,:)
                case('RS')
                   RS    => ptr2(1:Num2do,:)
+               case('RG')
+                  RG    => ptr2(1:Num2do,:)
                case('ALBVR')
                   ALBVR => ptr2(1:Num2do,1)
                case('ALBVF')
@@ -4682,24 +4715,28 @@ contains
       ! Water amounts and effective radii are in arrays indexed by species
       !-------------------------------------------------------------------
 
-      allocate(QQ3 (NCOL,LM,4),__STAT__)
-      allocate(RR3 (NCOL,LM,4),__STAT__)
+      allocate(QQ3 (NCOL,LM,5),__STAT__)
+      allocate(RR3 (NCOL,LM,5),__STAT__)
+      allocate(ILWT(NCOL     ),__STAT__)
 
       ! In-cloud water contents
       QQ3(:,:,1) = QI
       QQ3(:,:,2) = QL
       QQ3(:,:,3) = QR
       QQ3(:,:,4) = QS
+      QQ3(:,:,5) = QG
 
       ! Effective radii [microns]
       WHERE (RI == MAPL_UNDEF) RI = 36.e-6
       WHERE (RL == MAPL_UNDEF) RL = 14.e-6
       WHERE (RR == MAPL_UNDEF) RR = 50.e-6
       WHERE (RS == MAPL_UNDEF) RS = 50.e-6
+      WHERE (RG == MAPL_UNDEF) RG = 50.e-6 
       RR3(:,:,1) = RI*1.e6
       RR3(:,:,2) = RL*1.e6
       RR3(:,:,3) = RR*1.e6
       RR3(:,:,4) = RS*1.e6
+      RR3(:,:,5) = RG*1.e6
 
       ! Convert odd oxygen, which is the model prognostic, to ozone
       !------------------------------------------------------------
@@ -6304,6 +6341,14 @@ contains
       call MAPL_GetResource(MAPL,ICEFLGSW,'RRTMG_ICEFLG:',DEFAULT=3,__RC__)
       call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,__RC__)
 
+      if (LM > 72) then    
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
+        VERIFY_(STATUS)    
+      else
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
+        VERIFY_(STATUS)
+      endif
+
       ! Normalize aerosol inputs
       ! ------------------------
 
@@ -6327,12 +6372,39 @@ contains
       DPR(:,1:LM) = (PLE(:,2:LM+1)-PLE(:,1:LM))
 
       ! cloud water paths converted from g/g to g/m^2
-      CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
-      CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
+         !  Flip in vertical
+         do K = 1,LM
+            LV = LM-K+1  ! LM --> 1
 
-      ! cloud effective radii with limits imposed as assumed by RRTMG
-      REICE (:,1:LM) = RR3(:,LM:1:-1,1)
-      RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
+            ! Convert content [kg/kg] to path [g/m2]
+            ! using hydrostatic eqn dp/g ~ rho*dz,
+            ! so conversion factor is 1000*dp/g ~ 1.02*100*dp.
+            ! pmn: why not use MAPL_GRAV explicitly?
+            if (USE_PRECIP_IN_RADIATION) then
+              ILWT = QQ3(:,LV,KLIQUID)+QQ3(:,LV,KRAIN)
+              CLIQWP(:,K) = 1.02*100*DPR(:,LV)*ILWT
+              where (ILWT > 0.0)
+                RELIQ (:,K) = ( RR3(:,LV,KLIQUID)*QQ3(:,LV,KLIQUID) + &
+                                RR3(:,LV,KRAIN  )*QQ3(:,LV,KRAIN  ) ) / ILWT
+              elsewhere
+                RELIQ (:,K) = 14.0
+              end where
+              ILWT = QQ3(:,LV,KICE)+QQ3(:,LV,KSNOW)+QQ3(:,LV,KGRAUPEL)
+              CICEWP(:,K) = 1.02*100*DPR(:,LV)*ILWT
+              WHERE (ILWT > 0.0)
+                REICE (:,K) = ( RR3(:,LV,KICE    )*QQ3(:,LV,KICE    ) + &
+                                RR3(:,LV,KSNOW   )*QQ3(:,LV,KSNOW   ) + &
+                                RR3(:,LV,KGRAUPEL)*QQ3(:,LV,KGRAUPEL) ) / ILWT
+              elsewhere
+                REICE (:,K) = 36.0
+              end where
+            else
+              CLIQWP(:,K) = 1.02*100*DPR(:,LV)*QQ3(:,LV,KLIQUID)
+              CICEWP(:,K) = 1.02*100*DPR(:,LV)*QQ3(:,LV,KICE)
+              RELIQ (:,K) =                    RR3(:,LV,KLIQUID)
+              REICE (:,K) =                    RR3(:,LV,KICE   )
+            endif
+         enddo
 
       IF      (ICEFLGSW == 0) THEN
          WHERE (REICE < 10.)  REICE = 10.
@@ -6674,6 +6746,7 @@ contains
 
       deallocate (PL, RH, PLhPa)
       deallocate (QQ3, RR3)
+      deallocate (ILWT)
       deallocate (O3)
       deallocate (TAUA, SSAA, ASYA)
 
