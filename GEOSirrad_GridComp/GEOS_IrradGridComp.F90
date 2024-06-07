@@ -310,6 +310,15 @@ contains
         REFRESH_INTERVAL   = MY_STEP,                      __RC__ )
 
      call MAPL_AddImportSpec(GC,                                  &
+        SHORT_NAME         = 'QG',                                &
+        LONG_NAME          = 'mass_fraction_of_graupel_in_air',   &
+        UNITS              = 'kg kg-1',                           &
+        DIMS               = MAPL_DimsHorzVert,                   &
+        VLOCATION          = MAPL_VLocationCenter,                &
+        AVERAGING_INTERVAL = ACCUMINT,                            &
+        REFRESH_INTERVAL   = MY_STEP,                      __RC__ )
+
+     call MAPL_AddImportSpec(GC,                                  &
         SHORT_NAME         = 'RL',                                &
         LONG_NAME          = 'effective_radius_of_cloud_liquid_water_particles',      &
         UNITS              = 'm',                                 &
@@ -339,6 +348,15 @@ contains
      call MAPL_AddImportSpec(GC,                                  &
         SHORT_NAME         = 'RS',                                &
         LONG_NAME          = 'effective_radius_of_snow_particles',&
+        UNITS              = 'm',                                 &
+        DIMS               = MAPL_DimsHorzVert,                   &
+        VLOCATION          = MAPL_VLocationCenter,                &
+        AVERAGING_INTERVAL = ACCUMINT,                            &
+        REFRESH_INTERVAL   = MY_STEP,                      __RC__ )
+
+     call MAPL_AddImportSpec(GC,                                  &
+        SHORT_NAME         = 'RG',                                &
+        LONG_NAME          = 'effective_radius_of_graupel_particles',&
         UNITS              = 'm',                                 &
         DIMS               = MAPL_DimsHorzVert,                   &
         VLOCATION          = MAPL_VLocationCenter,                &
@@ -619,7 +637,7 @@ contains
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
+             write(wvn_rng,'(I0,"-",I0)') 0,0 !nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
 
              call MAPL_AddExportSpec(GC,                                    &
                 SHORT_NAME = 'OLRB'//bb//'RG',                              &
@@ -1274,6 +1292,7 @@ contains
    integer, parameter :: KLIQUID  = 2
    integer, parameter :: KRAIN    = 3
    integer, parameter :: KSNOW    = 4
+   integer, parameter :: KGRAUPEL = 5
 
    real    :: CO2
 
@@ -1296,7 +1315,7 @@ contains
    real, dimension (IM,JM,NS,10)   :: RV    !  vegetation reflectivity
    real, dimension (IM,JM,LM,10)   :: TAUDIAG
    real, dimension (IM,JM,LM)      :: RH, PL, FCLD
-   real, dimension (IM,JM,LM,4), target :: &
+   real, dimension (IM,JM,LM,5), target :: &
       CWC, &   ! in-cloud cloud water mixing ratio
       REFF     ! effective radius of cloud particles
 
@@ -1475,7 +1494,7 @@ contains
 
 ! For aerosol
    integer                    :: in
-   real                       :: xx
+   real                       :: xx, LWT, IWT
    type (ESMF_Time)           :: CURRENTTIME
    real, dimension (LM+1)     :: TLEV
    real, dimension (LM)       :: DP
@@ -1488,8 +1507,8 @@ contains
    real, pointer, dimension(:,:  )   :: EMIS
    real, pointer, dimension(:,:,:)   :: PLE, T,  Q,  O3
    real, pointer, dimension(:,:,:)   :: CH4, N2O, CFC11, CFC12, HCFC22
-   real, pointer, dimension(:,:,:)   :: QL,  QI, QR, QS
-   real, pointer, dimension(:,:,:)   :: RI,  RL, RR, RS, FCLD_IN
+   real, pointer, dimension(:,:,:)   :: QL, QI, QR, QS, QG
+   real, pointer, dimension(:,:,:)   :: RI, RL, RR, RS, RG, FCLD_IN
    real, pointer, dimension(:,:,:,:) :: RAERO
    real, pointer, dimension(:,:,:)   :: QAERO
 
@@ -1520,6 +1539,7 @@ contains
 ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _ASSERT(.false.,"RRTMGP Error: "//trim(error_msg)); endif
 
+   logical :: USE_PRECIP_IN_RADIATION
    integer :: PARTITION_SIZE
 
 !  Begin...
@@ -1538,10 +1558,12 @@ contains
    call MAPL_GetPointer(IMPORT, QI,     'QI',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, QR,     'QR',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, QS,     'QS',     RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(IMPORT, QG,     'QG',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, RL,     'RL',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, RI,     'RI',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, RR,     'RR',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, RS,     'RS',     RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(IMPORT, RG,     'RG',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, O3,     'O3',     RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, CH4,    'CH4',    RC=STATUS); VERIFY_(STATUS)
    call MAPL_GetPointer(IMPORT, N2O,    'N2O',    RC=STATUS); VERIFY_(STATUS)
@@ -1614,10 +1636,11 @@ contains
 !----------------------------------------------------------
 
    ! In-cloud water contents
-   CWC (:,:,:,KICE   ) = QI
-   CWC (:,:,:,KLIQUID) = QL
-   CWC (:,:,:,KRAIN  ) = QR
-   CWC (:,:,:,KSNOW  ) = QS
+   CWC (:,:,:,KICE    ) = QI
+   CWC (:,:,:,KLIQUID ) = QL
+   CWC (:,:,:,KRAIN   ) = QR
+   CWC (:,:,:,KSNOW   ) = QS
+   CWC (:,:,:,KGRAUPEL) = QG
 
 
    ! Effective radii [microns]
@@ -1625,10 +1648,12 @@ contains
    WHERE (RL == MAPL_UNDEF) RL = 14.e-6
    WHERE (RR == MAPL_UNDEF) RR = 50.e-6
    WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-   REFF(:,:,:,KICE   ) = RI * 1.0e6
-   REFF(:,:,:,KLIQUID) = RL * 1.0e6
-   REFF(:,:,:,KRAIN  ) = RR * 1.0e6
-   REFF(:,:,:,KSNOW  ) = RS * 1.0e6
+   WHERE (RG == MAPL_UNDEF) RG = 50.e-6     
+   REFF(:,:,:,KICE    ) = RI * 1.0e6
+   REFF(:,:,:,KLIQUID ) = RL * 1.0e6
+   REFF(:,:,:,KRAIN   ) = RR * 1.0e6
+   REFF(:,:,:,KSNOW   ) = RS * 1.0e6
+   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
 
 ! Determine the model level separating high-middle and low-middle clouds
 !-----------------------------------------------------------------------
@@ -2300,8 +2325,8 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,4])        
-        call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,4])
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])        
+        call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
 
       end if ! need_cloud_optical_props
 
@@ -2846,6 +2871,14 @@ contains
       call MAPL_TimerOn(MAPL,"--RRTMG",RC=STATUS)
       VERIFY_(STATUS)
 
+      if (LM > 72) then
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGLW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
+        VERIFY_(STATUS)
+      else
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGLW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
+        VERIFY_(STATUS)
+      endif
+
       call MAPL_GetResource(MAPL,PARTITION_SIZE,'RRTMGLW_PARTITION_SIZE:',DEFAULT=4,RC=STATUS)
       VERIFY_(STATUS)
 
@@ -2933,10 +2966,30 @@ contains
             ! so conversion factor is 1000*dp/g ~ 1.02*100*dp.
             ! pmn: why not use MAPL_GRAV explicitly?
             xx = 1.02*100*DP(LV)
-            CLIQWP(IJ,K) = xx*CWC(I,J,LV,KLIQUID)
-            CICEWP(IJ,K) = xx*CWC(I,J,LV,KICE)
-            RELIQ (IJ,K) =   REFF(I,J,LV,KLIQUID)
-            REICE (IJ,K) =   REFF(I,J,LV,KICE   )
+            if (USE_PRECIP_IN_RADIATION) then
+              LWT = CWC(I,J,LV,KLIQUID)+CWC(I,J,LV,KRAIN)
+              CLIQWP(IJ,K) = xx*(LWT)
+              if (LWT > 0.0) then
+                RELIQ (IJ,K) = ( REFF(I,J,LV,KLIQUID)*CWC(I,J,LV,KLIQUID) + &
+                                 REFF(I,J,LV,KRAIN  )*CWC(I,J,LV,KRAIN  ) ) / LWT
+              else
+                RELIQ (IJ,K) = 14.0
+              endif
+              IWT = CWC(I,J,LV,KICE)+CWC(I,J,LV,KSNOW)+CWC(I,J,LV,KGRAUPEL)
+              CICEWP(IJ,K) = xx*(IWT)
+              if (IWT > 0.0) then
+                REICE (IJ,K) = ( REFF(I,J,LV,KICE    )*CWC(I,J,LV,KICE    ) + &
+                                 REFF(I,J,LV,KSNOW   )*CWC(I,J,LV,KSNOW   ) + &
+                                 REFF(I,J,LV,KGRAUPEL)*CWC(I,J,LV,KGRAUPEL) ) / IWT
+              else
+                REICE (IJ,K) = 36.0
+              endif
+            else
+              CLIQWP(IJ,K) = xx*CWC(I,J,LV,KLIQUID)
+              CICEWP(IJ,K) = xx*CWC(I,J,LV,KICE)
+              RELIQ (IJ,K) =   REFF(I,J,LV,KLIQUID)
+              REICE (IJ,K) =   REFF(I,J,LV,KICE   )
+            endif
 
             ! impose RRTMG re_liq limits
             if    (LIQFLGLW.eq.0) then
