@@ -90,7 +90,7 @@ module GEOS_IrradGridCompMod
    integer, parameter :: NB_CHOU   = 10        ! #bands in IRRAD calcs for Chou
    integer, parameter :: NB_RRTMG  = 16        ! #bands in IRRAD calcs for RRTMG
    integer, parameter :: NB_RRTMGP = 16        ! #bands in IRRAD calcs for RRTMGP
-    
+
    integer, parameter :: NB_CHOU_SORAD   = 8   ! #bands in SORAD calcs for Chou
    integer, parameter :: NB_RRTMG_SORAD  = 14  ! #bands in SORAD calcs for RRTMG
    integer, parameter :: NB_RRTMGP_SORAD = 14  ! #bands in SORAD calcs for RRTMGP
@@ -637,7 +637,6 @@ contains
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') 0,0 !nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
 
              call MAPL_AddExportSpec(GC,                                      &
                 SHORT_NAME = 'OLRB'//bb//'RG',                                &
@@ -1097,7 +1096,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
       USE_RRTMGP,       USE_RRTMG,       USE_CHOU,       __RC__)
     call choose_solar_scheme (MAPL, &
       USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD, __RC__)
-      
+
     ! Set number of IRRAD bands
     if (USE_RRTMGP) then
       NB_IRRAD = NB_RRTMGP
@@ -1262,7 +1261,7 @@ contains
    use cloud_condensate_inhomogeneity, only: condensate_inhomogeneous, zcw_lookup
    use cloud_subcol_gen, only : &
      correlation_length_cloud_fraction, correlation_length_condensate
-   
+
    integer,                   intent(IN )    :: IM, JM, LM
    real,    dimension(IM,JM), intent(IN )    :: LATS, LONS
    integer, optional,         intent(OUT)    :: RC
@@ -1319,9 +1318,9 @@ contains
 
    ! 3d pointer arrays to be associated with several 4d arrays for RRTMGP blocking.
    ! Collapses first two horizontal dimensions of these 4d arrays. OK since the
-   ! latter arrays are not MAPL and so can be assumed contiguous. 
+   ! latter arrays are not MAPL and so can be assumed contiguous.
    real, dimension(:,:,:), pointer :: TAUA_3d, SSAA_3d, ASYA_3d
-   real, dimension(:,:,:), pointer :: CWC_3d, REFF_3d 
+   real, dimension(:,:,:), pointer :: CWC_3d, REFF_3d
 
    ! type(C_PTR) :: cptr  ! = c_loc(var), but done implicitly with c_loc below
 
@@ -1385,12 +1384,6 @@ contains
    real, parameter :: N2   = 0.7906400E+00 ! approx from rrtmgp input file
    real, parameter :: CCL4 = 0.1105000E-09 ! preexisting
    real, parameter :: CO   = 0.            ! currently zero
-
-   integer                    :: in
-   real                       :: xx
-   type (ESMF_Time)           :: CURRENTTIME
-   real, dimension (LM+1)     :: TLEV
-   real, dimension (LM)       :: DP
 
 ! variables for RRTMGP code
 ! -------------------------
@@ -1582,8 +1575,8 @@ contains
    RH = Q/GEOS_QSAT(T,PL,PASCALS=.true.)
 
    ! make a copy of 'FCLD' so can optionally change it without changing import state
-   FCLD = FCLD_IN 
-   
+   FCLD = FCLD_IN
+
    ! Option to force binary clouds for LW
    call MAPL_GetResource(MAPL,ibinary,"RADLW_BINARY_CLOUDS:",DEFAULT=0,__RC__)
    if (ibinary /= 0) where (FCLD > 0.) FCLD = 1.
@@ -1971,7 +1964,7 @@ contains
       ! (do before any KLUGE to top pressure so optical paths wont be affected)
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
       dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
-   
+
       ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
@@ -2128,7 +2121,7 @@ contains
                  flux_dn_allnoa(ncol,LM+1), &
                  dfupdts_allnoa(ncol,LM+1), __STAT__)
         if (allnoa_to_allsky_band_xfer_needed) then
-          allocate(bnd_flux_up_allnoa(ncol,LM+1,nbnd), &   
+          allocate(bnd_flux_up_allnoa(ncol,LM+1,nbnd), &
                    bnd_dfupdts_allnoa(ncol,LM+1,nbnd), __STAT__)
         end if
       end if
@@ -2142,7 +2135,7 @@ contains
                  flux_dn_allsky(ncol,LM+1), &
                  dfupdts_allsky(ncol,LM+1), __STAT__)
         if (any_band_output) then
-          allocate(bnd_flux_up_allsky(ncol,LM+1,nbnd), &   
+          allocate(bnd_flux_up_allsky(ncol,LM+1,nbnd), &
                    bnd_dfupdts_allsky(ncol,LM+1,nbnd), __STAT__)
         end if
       end if
@@ -2150,7 +2143,7 @@ contains
       ! =======================================================================================
       ! IMPORTANT: Specify the type (#streams) of the LW RT calculations in clean_optical_props
       ! =======================================================================================
-      ! While the cloud optics file currently provides two-stream properties, as does the 
+      ! While the cloud optics file currently provides two-stream properties, as does the
       ! aerosol system, we may choose any number of streams for the actual RT calculations by
       ! the appropriate instantiation of clean_optical_props here. The increment() statements
       ! below implicitly convert all component optical properties to this number of streams.
@@ -2546,7 +2539,7 @@ contains
         if (need_cloud_optical_props) then
 
           call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-          
+
           ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
           ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
           error_msg = cloud_optics%cloud_optics( &
@@ -2558,11 +2551,11 @@ contains
               cloud_optics%get_min_radius_ice()), cloud_optics%get_max_radius_ice()), &
             cloud_props_bnd)
           TEST_(error_msg)
-              
+
           call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-          
+
           call MAPL_TimerOn(MAPL,"---RRTMGP_MCICA",__RC__)
-            
+
           ! exponential inter-layer correlations
           ! [alpha|rcorr](k) is correlation between layers k and k+1
           ! dzmid(k) is separation between midpoints of layers k and k+1
@@ -2577,7 +2570,7 @@ contains
                 rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
               enddo
             endif
-          endif 
+          endif
 
           ! Generate McICA random numbers for block.
           ! Perhaps later this can be parallelized?

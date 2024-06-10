@@ -789,7 +789,6 @@ contains
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') 0,0
     
              call MAPL_AddInternalSpec(GC,                                                  &
                 SHORT_NAME = 'OSRB'//bb//'RGN',                                             &
@@ -2668,7 +2667,6 @@ contains
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') 0,0
     
              call MAPL_AddExportSpec(GC,                                         &
                 SHORT_NAME = 'OSRB'//bb//'RG',                                   &
