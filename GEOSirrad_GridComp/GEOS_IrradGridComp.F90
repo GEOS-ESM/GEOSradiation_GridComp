@@ -637,7 +637,6 @@ contains
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-             write(wvn_rng,'(I0,"-",I0)') 0,0 !nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
 
              call MAPL_AddExportSpec(GC,                                      &
                 SHORT_NAME = 'OLRB'//bb//'RG',                                &
@@ -1385,12 +1384,6 @@ contains
    real, parameter :: N2   = 0.7906400E+00 ! approx from rrtmgp input file
    real, parameter :: CCL4 = 0.1105000E-09 ! preexisting
    real, parameter :: CO   = 0.            ! currently zero
-
-   integer                    :: in
-   real                       :: xx, LWT, IWT
-   type (ESMF_Time)           :: CURRENTTIME
-   real, dimension (LM+1)     :: TLEV
-   real, dimension (LM)       :: DP
 
 ! variables for RRTMGP code
 ! -------------------------
