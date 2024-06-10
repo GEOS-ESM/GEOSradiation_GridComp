@@ -182,7 +182,8 @@ module GEOS_SolarGridCompMod
   use rad_types, only: rptr1d_wrap
   use cloud_subcol_gen, only: &
      generate_stochastic_clouds, clearCounts_threeBand
-  use rad_utils, only: Tbr_from_band_flux
+  use rad_utils, only: Tbr_from_band_flux, &
+    choose_solar_scheme, choose_irrad_scheme
 
   use mo_rte_kind, only: wp
 
@@ -204,9 +205,9 @@ module GEOS_SolarGridCompMod
 
 !EOP
 
-  ! -------------------------------------------
-  ! Select which RRTMG bands support OSR output
-  ! -------------------------------------------
+  ! ----------------------------------------------
+  ! Select which RRTMG[P] bands support OSR output
+  ! ----------------------------------------------
   !    via OSRBbbRG, ISRBbbRG, and TBRBbbRG exports ...
   ! (These exports require support space in the
   ! internal state so we choose only the ones we want
@@ -217,8 +218,16 @@ module GEOS_SolarGridCompMod
   ! runtime band selection via the EXPORTS chosen.)
 
   ! Which bands are supported?
-  !    (Currently RRTMG only)
-  !    (actual calculation only if export is requested)
+  !   (Currently RRTMG & RRTMGP only:
+  !    RRTMG & RRTMGP have the same number of bands but they are reordered.
+  !      Specifically RRTMG band 14, which was out of order, now becomes
+  !      RRTMGP band 1, now in wavenumber order, and all other RRTMG bands
+  !      are moved to the next higher RRTMGP band, i.e.,
+  !      RRTMG->RRTMGP: 1->2, 2->3, ..., 13->14, 14->1.
+  !    The band wavenumber limits change only SLIGHTLY, and only for the
+  !      upper limit of RRTMGP band 1 (which is also the lower limit of
+  !      RRTMGP band 2).
+  !   (actual calculation only if export is requested)
   ! Supported?    Band  Requested by (and use)
   logical, parameter :: band_output_supported (nbndsw) = [ &
      .false. , &!  01
@@ -228,13 +237,14 @@ module GEOS_SolarGridCompMod
      .false. , &!  05
      .false. , &!  06
      .false. , &!  07
-     .true.  , &!  08   W. Putman (GOES-"Veggie")
-     .true.  , &!  09   W. Putman (GOES-Red)
-     .true.  , &!  10   W. Putman (GOES-Blue)
-     .false. , &!  11
+     .true.  , &!  08   W. Putman (RRTMG: GOES-"Veggie")
+     .true.  , &!  09   W. Putman (RRTMG: GOES-Red)       (RRTMGP: GOES-"Veggie")
+     .true.  , &!  10   W. Putman (RRTMG: GOES-Blue)      (RRTMGP: GOES-Red)
+     .true.  , &!  11   W. Putman                         (RRTMGP: GOES-Blue)
      .false. , &!  12
      .false. , &!  13
      .false. ]  !  14
+  ! PMN TODO: change to a more flexible runtime-selectable method? An in LW too.
 
   ! -----------------------------------------------
   ! RRTMGP internal state:
@@ -443,17 +453,11 @@ contains
 
 !=============================================================================
 
-! ErrLog Variables
-
     character(len=ESMF_MAXSTR) :: IAm
     character(len=ESMF_MAXSTR) :: COMP_NAME
     integer                    :: STATUS
 
-! Local derived type aliases
-
     type (MAPL_MetaComp), pointer :: MAPL
-
-! Locals
 
     integer :: RUN_DT
     integer :: MY_STEP
@@ -469,8 +473,7 @@ contains
 
     ! for OSRBbbRG, ISRBbbRG, and TBRBbbRG
     integer :: ibnd 
-    character*2  :: bb
-    character*11 :: wvn_rng  ! xxxxx-yyyyy
+    character*2 :: bb
 
 !=============================================================================
 
@@ -777,30 +780,30 @@ contains
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationEdge,                                __RC__)
 
-    if (USE_RRTMG) then
-       ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)]
-       ! in [cm^-1]. The index jpb1:jpb2 (16:29) is over the 14 bands.
+    if (USE_RRTMG .or. USE_RRTMGP) then
+
+       ! Stating the obvious ...
+       _ASSERT(NB_RRTMG == nbndsw, 'Number of RRTMG bands error!')
+       _ASSERT(NB_RRTMGP == NB_RRTMG, 'Broken assumption for OSRB diagnostics')
 
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
              write(wvn_rng,'(I0,"-",I0)') 0,0
     
-             call MAPL_AddInternalSpec(GC,                                   &
-                SHORT_NAME = 'OSRB'//bb//'RGN',                              &
-                LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
-                UNITS      = '1',                                            &
-                DIMS       = MAPL_DimsHorzOnly,                              &
-                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+             call MAPL_AddInternalSpec(GC,                                                  &
+                SHORT_NAME = 'OSRB'//bb//'RGN',                                             &
+                LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
+                UNITS      = '1',                                                           &
+                DIMS       = MAPL_DimsHorzOnly,                                             &
+                VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
    
-             call MAPL_AddInternalSpec(GC,                                   &
-                SHORT_NAME = 'ISRB'//bb//'RGN',                              &
-                LONG_NAME  = 'normalized_downwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
-                UNITS      = '1',                                            &
-                DIMS       = MAPL_DimsHorzOnly,                              &
-                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+             call MAPL_AddInternalSpec(GC,                                                  &
+                SHORT_NAME = 'ISRB'//bb//'RGN',                                             &
+                LONG_NAME  = 'normalized_downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = '1',                                                           &
+                DIMS       = MAPL_DimsHorzOnly,                                             &
+                VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
    
           end if
        end do
@@ -2661,38 +2664,32 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
-    if (USE_RRTMG) then
-       ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)]
-       ! in [cm^-1]. The index jpb1:jpb2 (16:29) is over the 14 bands.
-
+    if (USE_RRTMG .or. USE_RRTMGP) then
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
              write(wvn_rng,'(I0,"-",I0)') 0,0
     
-             call MAPL_AddExportSpec(GC,                                     &
-                SHORT_NAME = 'OSRB'//bb//'RG',                               &
-                LONG_NAME  = 'upwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
-                UNITS      = 'W m-2',                                        &
-                DIMS       = MAPL_DimsHorzOnly,                              &
-                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'OSRB'//bb//'RG',                                   &
+                LONG_NAME  = 'upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
+                UNITS      = 'W m-2',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
    
-             call MAPL_AddExportSpec(GC,                                     &
-                SHORT_NAME = 'ISRB'//bb//'RG',                               &
-                LONG_NAME  = 'downwelling_shortwave_flux_at_TOA_in_RRTMG_band' &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
-                UNITS      = 'W m-2',                                        &
-                DIMS       = MAPL_DimsHorzOnly,                              &
-                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'ISRB'//bb//'RG',                                   &
+                LONG_NAME  = 'downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = 'W m-2',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
    
-             call MAPL_AddExportSpec(GC,                                     &
-                SHORT_NAME = 'TBRB'//bb//'RG',                               &
-                LONG_NAME  = 'brightness_temperature_in_RRTMG_SW_band'       &
-                                //bb//' ('//trim(wvn_rng)//' cm-1)',         &
-                UNITS      = 'K',                                            &
-                DIMS       = MAPL_DimsHorzOnly,                              &
-                VLOCATION  = MAPL_VLocationNone,                      __RC__ )
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'TBRB'//bb//'RG',                                   &
+                LONG_NAME  = 'brightness_temperature_in_RR_SW_band'//bb,         &
+                UNITS      = 'K',                                                &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
     
           end if
        end do
@@ -2965,7 +2962,7 @@ contains
     type(S_), allocatable :: list(:)
 
     ! which bands require OSR output?
-    ! (only RRTMG currently; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
+    ! (only RRTMG[P]; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
     logical :: band_output (nbndsw)
     integer :: ibnd
     character*2 :: bb  
@@ -3079,9 +3076,9 @@ contains
 
    ! select which bands require OSRB output ...                                  
    ! ------------------------------------------
-   ! Currently only available for RRTMG
-   ! must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
-   if (USE_RRTMG) then
+   ! Only available for RRTMG[P]
+   ! Must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
+   if (USE_RRTMG .or. USE_RRTMGP) then
       do ibnd = 1,nbndsw
          band_output(ibnd) = .false.
          if (.not. band_output_supported(ibnd)) cycle
@@ -4164,6 +4161,21 @@ contains
             end if
          end if
 
+         ! Don't calculate [IO]SRBbbRGN for .not. include_aerosols
+         if (.not. include_aerosols) then
+           if (USE_RRTMG .or. USE_RRTMGP) then
+             do ibnd = 1,nbndsw
+               if (band_output(ibnd)) then
+                 write(bb,'(I0.2)') ibnd
+                 if (short_name == 'OSRB'//bb//'RGN' .or. short_name == 'ISRB'//bb//'RGN') then
+                    SlicesInt(k) = 0
+                    cycle
+                 end if
+               end if
+             end do
+           endif
+         end if
+
          if (associated(ugdims)) then
             ! ungridded dims are present, make sure just one
             _ASSERT(size(ugdims)==1,'Only one ungridded dimension allowed')
@@ -4855,8 +4867,8 @@ contains
       ! write(*,*) 'band_lims_wvn(2,nbnd):', k_dist%get_band_lims_wavenumber() ! reordered below
       !               820., 2680., 3250., 4000., 4650., 5150., 6150., 7700.,  8050., 12850., 16000., 22650., 29000., 38000.
       !              2680., 3250., 4000., 4650., 5150., 6150., 7700., 8050., 12850., 16000., 22650., 29000., 38000., 50000.
-      ! clearly there are some differences ... so aerosol tables were redone
-      !   mainly band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
+      ! clearly there are some differences ... so aerosol tables were redone:
+      !   specifically, band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
       ! gpoint limits for each band
@@ -6210,6 +6222,17 @@ contains
             DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
          end do
       endif
+      ! TOA band fluxes
+      if (include_aerosols) then          
+        if (USE_RRTMG .or. USE_RRTMGP) then
+          do ib = 1, nbnd
+            if (band_output(ib)) then 
+              ISRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib))
+              OSRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib) - bnd_flux_net_allsky(:,1,ib))
+            end if
+          end do
+        end if
+      end if
 
       ! surface direct and diffuse downward in super-bands
       ! for *diffuse* downward must subtract direct (downward) from total downward
@@ -7012,8 +7035,10 @@ contains
       type (ty_RRTMGP_wrap)                :: wrap
       character (len=ESMF_MAXPATHLEN)      :: k_dist_file
       character (len=ESMF_MAXSTR)          :: error_msg
-      type (ty_gas_optics_rrtmgp), pointer :: k_dist
       type (ty_gas_concs)                  :: gas_concs
+
+      logical :: rrtmgp_state_set = .false.
+      logical :: have_rrtmgp_wavenums = .false.
 
       ! OBIO bands (start,finish) in [nm]
       real, parameter :: OBIO_bands_nm (2,NB_OBIO) = reshape([ &
@@ -7811,9 +7836,7 @@ contains
 ! band OSR, ISR, and/or TBR output
 ! --------------------------------
 
-      if (USE_RRTMG) then
-        ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
-        ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+      if (USE_RRTMG .or. USE_RRTMGP) then
 
         do ibnd = 1,nbndsw
           if (band_output(ibnd)) then
@@ -7857,8 +7880,59 @@ contains
             ! calculate TBRBbbRG if requested
             call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
             if (associated(ptr2d)) then
-               wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
-               call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+              if (USE_RRTMG) then
+
+                ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
+                ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+                wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
+                call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+
+              else  ! USE_RRTMGP
+
+                ! get RRTMGP wavenumbers
+                if (.not. have_rrtmgp_wavenums) then 
+
+                  ! access RRTMGP internal state from the GC
+                  if (.not. rrtmgp_state_set) then
+                    call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+                    VERIFY_(status)
+                    rrtmgp_state => wrap%ptr
+                    rrtmgp_state_set = .true.
+                  end if 
+
+! helper for testing RRTMGP error status on return;
+! allows line number reporting cf. original call method
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+
+                  ! initialize k-distribution if not already done
+                  ! remember: its possible to have UPDATE_FIRST
+                  if (.not. rrtmgp_state%initialized) then
+                    call MAPL_GetResource( & 
+                      MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                      DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
+                    ! gas_concs needed only to access required gas names
+                    error_msg = gas_concs%init([character(3) :: &
+                      'h2o','co2','o3','n2o','co','ch4','o2','n2'])
+                    TEST_(error_msg)
+                    call load_and_init( &
+                      rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
+                    if (.not. rrtmgp_state%k_dist%source_is_external()) then
+                      TEST_('RRTMGP-SW: does not seem to be SW')
+                    endif
+                    rrtmgp_state%initialized = .true.
+                  endif
+#undef TEST_
+                  ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1],
+                  SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
+                  have_rrtmgp_wavenums = .true.
+                end if
+
+                ! get brightness temperature
+                wn1 = SOLAR_bands_wavenum(1,ibnd)*100. ! [m-1]
+                wn2 = SOLAR_bands_wavenum(2,ibnd)*100. ! [m-1]
+                call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+
+              end if
             end if
 
             deallocate(OSRB,ISRB,__STAT__)
@@ -7866,7 +7940,7 @@ contains
           end if
         end do
 
-      endif  ! RRTMG
+      endif  ! RRTMG[P]
 
 ! SOLAR TO OBIO conversion ...
 ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
@@ -7880,43 +7954,46 @@ contains
 
             if (USE_RRTMGP) then
 
+               ! get RRTMGP wavenumbers
+               if (.not. have_rrtmgp_wavenums) then 
+
+                 ! access RRTMGP internal state from the GC
+                 if (.not. rrtmgp_state_set) then
+                   call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+                   VERIFY_(status)
+                   rrtmgp_state => wrap%ptr
+                   rrtmgp_state_set = .true.
+                 end if 
+
 ! helper for testing RRTMGP error status on return;
 ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
-               ! access RRTMGP internal state from the GC
-               call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-               VERIFY_(status)
-               rrtmgp_state => wrap%ptr
-
-               ! initialize k-distribution if not already done
-               ! remember: its possible to have UPDATE_FIRST
-               if (.not. rrtmgp_state%initialized) then
-                  call MAPL_GetResource( &
-                     MAPL, k_dist_file, "RRTMGP_DATA_SW:", &
-                     DEFAULT='rrtmgp-data-sw.nc', __RC__)
-                  ! gas_concs needed only to access required gas names
-                  error_msg = gas_concs%init([character(3) :: &
+                 ! initialize k-distribution if not already done
+                 ! remember: its possible to have UPDATE_FIRST
+                 if (.not. rrtmgp_state%initialized) then
+                   call MAPL_GetResource( & 
+                     MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                     DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
+                   ! gas_concs needed only to access required gas names
+                   error_msg = gas_concs%init([character(3) :: &
                      'h2o','co2','o3','n2o','co','ch4','o2','n2'])
-                  TEST_(error_msg)
-                  call load_and_init( &
+                   TEST_(error_msg)
+                   call load_and_init( &
                      rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
-                  if (.not. rrtmgp_state%k_dist%source_is_external()) then
+                   if (.not. rrtmgp_state%k_dist%source_is_external()) then
                      TEST_('RRTMGP-SW: does not seem to be SW')
-                  endif
-                  rrtmgp_state%initialized = .true.
-               endif
-
-               ! access by shorter name
-               k_dist => rrtmgp_state%k_dist
-
-               ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
-               SOLAR_bands_wavenum = k_dist%get_band_lims_wavenumber()
+                   endif
+                   rrtmgp_state%initialized = .true.
+                 endif
+#undef TEST_
+                 ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
+                 SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
+                 have_rrtmgp_wavenums = .true.
+               end if
 
                ! RRTMGP bands are already ordered in increasing wavenumber
                SOLAR_band_number_in_wvn_order = [(i, i=1,NUM_BANDS_SOLAR)]
-
-#undef TEST_
 
             elseif (USE_RRTMG) then
 
@@ -8084,61 +8161,5 @@ contains
     end do
 
   end subroutine UnPackIt
-
-  ! Decide which radiation to use for thermodynamics state evolution.
-  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
-  ! Chou-Suarez is the default if nothing else asked for in Resource file.
-  !----------------------------------------------------------------------
-
-  subroutine choose_solar_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_solar_scheme
-
-
-  subroutine choose_irrad_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_irrad_scheme
 
 end module GEOS_SolarGridCompMod
