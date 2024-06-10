@@ -637,6 +637,7 @@ contains
        do ibnd = 1,nbndlw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
+             write(wvn_rng,'(I0,"-",I0)') 0,0 !nint(wavenum1(ibnd)), nint(wavenum2(ibnd))
 
              call MAPL_AddExportSpec(GC,                                      &
                 SHORT_NAME = 'OLRB'//bb//'RG',                                &
@@ -1494,6 +1495,13 @@ contains
    ! block size for efficient column processing (set from resource file)
    integer :: rrtmgp_blockSize
 
+! For aerosol
+   integer                    :: in
+   real                       :: xx, LWT, IWT
+   type (ESMF_Time)           :: CURRENTTIME
+   real, dimension (LM+1)     :: TLEV
+   real, dimension (LM)       :: DP
+
 ! pointers to import
 !-------------------
 
@@ -1643,12 +1651,12 @@ contains
    WHERE (RL == MAPL_UNDEF) RL = 14.e-6
    WHERE (RR == MAPL_UNDEF) RR = 50.e-6
    WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-   WHERE (RG == MAPL_UNDEF) RG = 50.e-6
+   WHERE (RG == MAPL_UNDEF) RG = 50.e-6     
    REFF(:,:,:,KICE    ) = RI * 1.0e6
    REFF(:,:,:,KLIQUID ) = RL * 1.0e6
    REFF(:,:,:,KRAIN   ) = RR * 1.0e6
    REFF(:,:,:,KSNOW   ) = RS * 1.0e6
-   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6
+   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
 
 ! Determine the model level separating high-middle and low-middle clouds
 !-----------------------------------------------------------------------
@@ -2335,7 +2343,7 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])        
         call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
 
       end if ! need_cloud_optical_props
