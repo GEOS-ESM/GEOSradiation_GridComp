@@ -926,6 +926,7 @@ contains
         LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature',&
         UNITS      = 'W m-2 K-1',                                 &
         DIMS       = MAPL_DimsHorzVert,                           &
+        add2export = .true., &
         VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
 
     call MAPL_AddInternalSpec(GC,                                 &
@@ -3611,6 +3612,9 @@ contains
          ! Zero out the correct RAT gas field
           ! O3 CO2 CH4 N2O CFC11 CFC12 CFC22 CCl4
          select case(nameRATS(n))
+         case('H2O')
+            TMP_R = Q_R
+            Q_R = 0.e0
          case('O3')
             TMP_R = O3_R
             O3_R = 0.e0
@@ -3659,6 +3663,8 @@ contains
 
          ! Make sure to set the RAT gas column back to correct vals
          select case(nameRATS(n))
+         case('H2O')
+            Q_R = TMP_R
          case('O3')
             O3_R = TMP_R
          case('CO2')
@@ -4288,29 +4294,30 @@ contains
          endif
          gen_str = 'NETTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
          call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
-         if (associated(RAT_2d)) then
-            RAT_2d = (FLXU_INT(:,:,LM) + DFDTS(:,:,LM) * DELT) - &
-                     (FLXU_INT(:,:, 0) + DFDTS(:,:,0 ) * DELT)
-            RAT_2d = RAT_2d - &
-                    ((FLXU_INT_RAT(:,:,LM,n) + DFDTS_RAT(:,:,LM,n) * DELT) - &
-                     (FLXU_INT_RAT(:,:, 0,n) + DFDTS_RAT(:,:,0 ,n) * DELT))
+         if (associated(RAT_2d)) then 
+            RAT_2d = (FLX_INT(:,:,LM) + DFDTS(:,:,LM) * DELT) - &  ! Net DOWNWARD flux
+                     (FLX_INT(:,:, 0) + DFDTS(:,:,0 ) * DELT)
+            RAT_2d = RAT_2d - & 
+                    ((FLX_INT_RAT(:,:,LM,n) + DFDTS_RAT(:,:,LM,n) * DELT) - & ! Net DOWNWARD flux without RAT at index "n"
+                     (FLX_INT_RAT(:,:, 0,n) + DFDTS_RAT(:,:,0 ,n) * DELT))
             RAT_2d => null()
          endif
          gen_str = 'COLTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-         call MAPL_GetPointer(IMPORT, AREA,   'AREA',   RC=STATUS); VERIFY_(STATUS)
+!         call MAPL_GetPointer(IMPORT, AREA,   'AREA',   RC=STATUS); VERIFY_(STATUS) ! Uncomment for AREA
          call MAPL_GetPointer(EXPORT,   RAT_3d, trim(gen_str),   RC=STATUS) ! Don't verify.
          if (associated(RAT_3d)) then
             do K = 1, LM
                RAT_3d(:,:,K) = &
-                     (FLXU_INT(:,:,K  ) + DFDTS(:,:,K  ) * DELT) - &
-                     (FLXU_INT(:,:,K-1) + DFDTS(:,:,K-1) * DELT)
-               RAT_3d(:,:,K) = AREA(:,:) * ( &
+                     (FLX_INT(:,:,K  ) + DFDTS(:,:,K  ) * DELT) - &
+                     (FLX_INT(:,:,K-1) + DFDTS(:,:,K-1) * DELT)
+!               RAT_3d(:,:,K) = AREA(:,:) * ( & ! Uncomment this and comment the line below to multiply by area
+               RAT_3d(:,:,K) = ( &    ! Comment this and uncomment the line above to multiply by area
                     RAT_3d(:,:,K) - &
-                    ((FLXU_INT_RAT(:,:,K  ,n) + DFDTS_RAT(:,:,K  ,n) * DELT) - &
-                     (FLXU_INT_RAT(:,:,K-1,n) + DFDTS_RAT(:,:,K-1,n) * DELT)))
+                    ((FLX_INT_RAT(:,:,K  ,n) + DFDTS_RAT(:,:,K  ,n) * DELT) - &
+                     (FLX_INT_RAT(:,:,K-1,n) + DFDTS_RAT(:,:,K-1,n) * DELT)))
             enddo
             RAT_3d => null()
-            AREA => null()
+!            AREA => null() ! Uncomment for AREA
       endif
       enddo
    endif
