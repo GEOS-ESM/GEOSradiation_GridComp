@@ -202,7 +202,7 @@ module GEOS_RadiationGridCompMod
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADLW',                                           &
-         LONG_NAME  = 'air_temperature_tendency_due_to_longwave',        &
+         LONG_NAME  = 'tendency_of_air_temperature_due_to_longwave',        &
          UNITS      = 'K s-1',                                           &
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
@@ -211,7 +211,7 @@ module GEOS_RadiationGridCompMod
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSW',                                           &
-         LONG_NAME  = 'air_temperature_tendency_due_to_shortwave',       &
+         LONG_NAME  = 'tendency_of_air_temperature_due_to_shortwave',       &
          UNITS      = 'K s-1',                                           &
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
