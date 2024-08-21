@@ -6678,17 +6678,40 @@ contains
       end if
 
       ! undef versions of cloud optical thicknesses
-      COTTP = merge(COTNTP/COTDTP, MAPL_UNDEF, COTDTP > 0. .and. COTDTP > 0.)
-      COTHP = merge(COTNHP/COTDHP, MAPL_UNDEF, COTDHP > 0. .and. COTDHP > 0.)
-      COTMP = merge(COTNMP/COTDMP, MAPL_UNDEF, COTDMP > 0. .and. COTDMP > 0.)
-      COTLP = merge(COTNLP/COTDLP, MAPL_UNDEF, COTDLP > 0. .and. COTDLP > 0.)
+      ! We cannot use a merge here because some compilers (e.g. Intel)
+      ! will will evaluate the first argument first and if both are
+      ! zero, it will return NaNs.
+      where (COTNTP > 0. .and. COTDTP > 0.)
+         COTTP = COTNTP/COTDTP
+      elsewhere
+         COTTP = MAPL_UNDEF
+      end where
+
+      where (COTNHP > 0. .and. COTDHP > 0.)
+         COTHP = COTNHP/COTDHP
+      elsewhere
+         COTHP = MAPL_UNDEF
+      end where
+
+      where (COTNMP > 0. .and. COTDMP > 0.)
+         COTMP = COTNMP/COTDMP
+      elsewhere
+         COTMP = MAPL_UNDEF
+      end where
+
+      where (COTNLP > 0. .and. COTDLP > 0.)
+         COTLP = COTNLP/COTDLP
+      elsewhere
+         COTLP = MAPL_UNDEF
+      end where
 
 #ifdef SOLAR_RADVAL
       ! zero versions of cloud optical thicknesses
-      TAUTP = merge(COTTP, 0., COTDTP > 0. .and. COTDTP > 0.)
-      TAUHP = merge(COTHP, 0., COTDHP > 0. .and. COTDHP > 0.)
-      TAUMP = merge(COTMP, 0., COTDMP > 0. .and. COTDMP > 0.)
-      TAULP = merge(COTLP, 0., COTDLP > 0. .and. COTDLP > 0.)
+      ! We can use merge() here because we cannot divide by zero
+      TAUTP = merge(COTTP, 0., COTNTP > 0. .and. COTDTP > 0.)
+      TAUHP = merge(COTHP, 0., COTNHP > 0. .and. COTDHP > 0.)
+      TAUMP = merge(COTMP, 0., COTNMP > 0. .and. COTDMP > 0.)
+      TAULP = merge(COTLP, 0., COTNLP > 0. .and. COTDLP > 0.)
 #endif
 
       ! fluxes
