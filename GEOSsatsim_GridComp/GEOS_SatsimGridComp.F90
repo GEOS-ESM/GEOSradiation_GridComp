@@ -2759,6 +2759,17 @@ contains
     VERIFY_(STATUS)
     Iam = trim(COMP_NAME) // Iam
 
+    ! Do not run during predictor
+    block
+      TYPE(ESMF_Alarm)                    :: PredictorIsActive
+      call ESMF_ClockGetAlarm(clock, "PredictorActive", PredictorIsActive, _RC)
+      if(ESMF_AlarmIsCreated(PredictorIsActive)) then
+         if(ESMF_AlarmIsRinging(PredictorIsActive)) then
+            _RETURN(0)
+         end IF
+      end if
+    end block
+
 
 ! Get my internal MAPL_Generic state
 !-----------------------------------
