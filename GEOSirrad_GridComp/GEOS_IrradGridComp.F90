@@ -960,8 +960,13 @@ contains
 !--------------------------------------------------------------------------------------
     call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS) ! Use STATUS to test if label was found
 
+    IF (STATUS .eq. ESMF_SUCCESS) THEN 
+       n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
+       VERIFY_(STATUS)
+    ENDIF
+    
     ! No error thrown. Just go around this if nothing learnable from config.
-    IF (STATUS .eq. ESMF_SUCCESS) THEN ! if the label was found...
+    IF (STATUS .eq. ESMF_SUCCESS .and. n .ne. 0 ) THEN ! if the label was found...
 
        ! Get number of words in config line
        n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
@@ -3346,7 +3351,7 @@ contains
             TMP_R = CO2_R
 !            CO2_R = CO2_FIXED! Testing
             CO2_R = 0.e0
-!            CO2_R = CO2_R-1d-6
+!            CO2_R = CO2_R*0.99e0
          case('CH4')
             TMP_R = CH4_R
             CH4_R = 0.e0
