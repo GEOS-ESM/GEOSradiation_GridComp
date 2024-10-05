@@ -40,7 +40,7 @@ foreach (file ${k_g_srcs})
 endforeach ()
 
 esma_add_library (${this} SRCS ${srcs} ${k_g_srcs}
-  DEPENDENCIES GEOS_Shared MAPL RRTMG_SW_mods GEOS_RadiationShared esmf NetCDF::NetCDF_Fortran)
+  DEPENDENCIES GEOS_Shared MAPL RRTMG_SW_mods GEOS_RadiationShared ESMF::ESMF NetCDF::NetCDF_Fortran)
 
 if(ENABLE_SOLAR_RADVAL)
    target_compile_definitions(${this} PRIVATE SOLAR_RADVAL)
