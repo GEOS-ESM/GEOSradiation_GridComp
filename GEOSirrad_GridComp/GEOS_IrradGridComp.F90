@@ -464,6 +464,16 @@ contains
     
     ! If using 3-D CO2, set up the import
     if (DT.eq.-2.0) then
+       call ESMF_ConfigFindLabel( CF,'CO2_PROVIDER',rc=RC )
+       n = ESMF_ConfigGetLen(CF,label='CO2_PROVIDER',rc=status)
+       call ESMF_ConfigFindLabel( CF,'CO2_PROVIDER',rc=RC ) ! Godda reset!
+       call ESMF_ConfigGetAttribute(CF, gen_str, Label='CO2_PROVIDER', default='none', RC=STATUS)
+       ! If CO2: is invalid, raise an error
+       if (n .le. 0 .or. ESMF_UtilStringLowerCase(trim(gen_str)) .eq. 'none') then
+          gen_str = 'In AGCM.rc, cannot set CO2: to -2 and not give a valid CO2_PROVIDER'
+          __raise__(MAPL_RC_ERROR, gen_str)
+       endif
+    
        call MAPL_AddImportSpec(GC,                                  &
             SHORT_NAME         = 'CO2',                               &
             LONG_NAME          = 'carbondioxide_concentration',       &
