@@ -461,7 +461,7 @@ contains
     ! Using DT below since it is already declared, and avoids adding an additional var - MSL
     call ESMF_ConfigGetAttribute(CF, DT, Label='CO2:', default=-1.0, RC=STATUS)
     VERIFY_(STATUS)
-    
+
     ! If using 3-D CO2, set up the import
     if (DT.eq.-2.0) then
        call ESMF_ConfigFindLabel( CF,'CO2_PROVIDER',rc=RC )
@@ -473,7 +473,7 @@ contains
           gen_str = 'In AGCM.rc, cannot set CO2: to -2 and not give a valid CO2_PROVIDER'
           __raise__(MAPL_RC_ERROR, gen_str)
        endif
-    
+
        call MAPL_AddImportSpec(GC,                                  &
             SHORT_NAME         = 'CO2',                               &
             LONG_NAME          = 'carbondioxide_concentration',       &
@@ -970,11 +970,11 @@ contains
 !--------------------------------------------------------------------------------------
     call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS) ! Use STATUS to test if label was found
 
-    IF (STATUS .eq. ESMF_SUCCESS) THEN 
+    IF (STATUS .eq. ESMF_SUCCESS) THEN
        n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
        VERIFY_(STATUS)
     ENDIF
-    
+
     ! No error thrown. Just go around this if nothing learnable from config.
     IF (STATUS .eq. ESMF_SUCCESS .and. n .ne. 0 ) THEN ! if the label was found...
 
@@ -993,7 +993,7 @@ contains
        DO i=1,n
           call ESMF_ConfigGetAttribute(CF,gen_str,RC=STATUS)
           VERIFY_(STATUS)
-          
+
           nameRATS(i) = trim(gen_str)
 
           ! Test if label 'gen_str' has an import
@@ -1095,7 +1095,7 @@ contains
               UNGRIDDED_DIMS     = (/N/),                               &
               DIMS       = MAPL_DimsHorzVert,                           &
               VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
-         
+
               call MAPL_AddInternalSpec(GC,                             &
               SHORT_NAME = 'FLXD_RAT',                                  &
               LONG_NAME  = 'upward_longwave_flux_in_air',               &
@@ -1103,7 +1103,7 @@ contains
               UNGRIDDED_DIMS     = (/N/),                               &
               DIMS       = MAPL_DimsHorzVert,                           &
               VLOCATION  = MAPL_VLocationEdge,                   __RC__ )
-         
+
               call MAPL_AddInternalSpec(GC,                             &
               SHORT_NAME = 'FLX_RAT',                                   &
               LONG_NAME  = 'net_downward_longwave_flux_in_air',         &
@@ -1309,7 +1309,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
       USE_RRTMGP,       USE_RRTMG,       USE_CHOU,       __RC__)
     call choose_solar_scheme (MAPL, &
       USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD, __RC__)
-      
+
     ! Set number of IRRAD bands
     if (USE_RRTMGP) then
       NB_IRRAD = NB_RRTMGP
@@ -1471,7 +1471,7 @@ contains
    use cloud_condensate_inhomogeneity, only: condensate_inhomogeneous, zcw_lookup
    use cloud_subcol_gen, only : &
      correlation_length_cloud_fraction, correlation_length_condensate
-   
+
    integer,                   intent(IN )    :: IM, JM, LM
    real,    dimension(IM,JM), intent(IN )    :: LATS, LONS
    integer, optional,         intent(OUT)    :: RC
@@ -1528,9 +1528,9 @@ contains
 
    ! 3d pointer arrays to be associated with several 4d arrays for RRTMGP blocking.
    ! Collapses first two horizontal dimensions of these 4d arrays. OK since the
-   ! latter arrays are not MAPL and so can be assumed contiguous. 
+   ! latter arrays are not MAPL and so can be assumed contiguous.
    real, dimension(:,:,:), pointer :: TAUA_3d, SSAA_3d, ASYA_3d
-   real, dimension(:,:,:), pointer :: CWC_3d, REFF_3d 
+   real, dimension(:,:,:), pointer :: CWC_3d, REFF_3d
 
    ! type(C_PTR) :: cptr  ! = c_loc(var), but done implicitly with c_loc below
 
@@ -1710,7 +1710,8 @@ contains
    real, pointer, dimension(:,:,:)   :: RI,  RL, RR, RS, FCLD_IN
    real, pointer, dimension(:,:,:,:) :: RAERO
    real, pointer, dimension(:,:,:)   :: QAERO
-   real, pointer, dimension(:,:,:)   :: CO2_3d, tmp_3d ! <<>> MSL
+   real, pointer, dimension(:,:,:)   :: CO2_3d => null() ! <<>> MSL
+   real, pointer, dimension(:,:,:)   :: tmp_3d => null() ! <<>> MSL
 
 ! pointers to exports
 !--------------------
@@ -1776,8 +1777,8 @@ contains
    RH = Q/GEOS_QSAT(T,PL,PASCALS=.true.)
 
    ! make a copy of 'FCLD' so can optionally change it without changing import state
-   FCLD = FCLD_IN 
-   
+   FCLD = FCLD_IN
+
    ! Option to force binary clouds for LW
    call MAPL_GetResource(MAPL,ibinary,"RADLW_BINARY_CLOUDS:",DEFAULT=0,__RC__)
    if (ibinary /= 0) where (FCLD > 0.) FCLD = 1.
@@ -1825,11 +1826,11 @@ contains
 ! -- This is done every call to Run(), when it really only needs to be done once
 !----------------------------------------------------------------------------------------
    IF (first) then
-   
+
    call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS) ! Use STATUS to test if label was found
-   
+
    nRATS = 0 ! Default, no RAT diags
-   
+
    ! No error thrown. Just go around this if nothing learnable from config.
    IF (STATUS .eq. ESMF_SUCCESS) THEN ! if the label was found...
 
@@ -2223,7 +2224,7 @@ contains
       ! (do before any KLUGE to top pressure so optical paths wont be affected)
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
       dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
-   
+
       ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
@@ -2387,7 +2388,7 @@ contains
       ! =======================================================================================
       ! IMPORTANT: Specify the type (#streams) of the LW RT calculations in clean_optical_props
       ! =======================================================================================
-      ! While the cloud optics file currently provides two-stream properties, as does the 
+      ! While the cloud optics file currently provides two-stream properties, as does the
       ! aerosol system, we may choose any number of streams for the actual RT calculations by
       ! the appropriate instantiation of clean_optical_props here. The increment() statements
       ! below implicitly convert all component optical properties to this number of streams.
@@ -2580,7 +2581,7 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,4])        
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,4])
         call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,4])
 
       end if ! need_cloud_optical_props
@@ -2783,7 +2784,7 @@ contains
         if (need_cloud_optical_props) then
 
           call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-          
+
           ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
           ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
           error_msg = cloud_optics%cloud_optics( &
@@ -2795,11 +2796,11 @@ contains
               cloud_optics%get_min_radius_ice()), cloud_optics%get_max_radius_ice()), &
             cloud_props_bnd)
           TEST_(error_msg)
-              
+
           call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-          
+
           call MAPL_TimerOn(MAPL,"---RRTMGP_MCICA",__RC__)
-            
+
           ! exponential inter-layer correlations
           ! [alpha|rcorr](k) is correlation between layers k and k+1
           ! dzmid(k) is separation between midpoints of layers k and k+1
@@ -2814,7 +2815,7 @@ contains
                 rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
               enddo
             endif
-          endif 
+          endif
 
           ! Generate McICA random numbers for block.
           ! Perhaps later this can be parallelized?
@@ -3988,7 +3989,7 @@ contains
          ! OLR
 !<<>>         if (MAPL_am_I_root()) then
 !<<>>            write(*,*) '<<>> alloc? ', allocated(nameRATS), ' n: ', n, ' nRATS: ', nRATS
-!<<>>            if (allocated(nameRATS)) write(*,*) '<<>> nameRATS: ', trim(nameRATS(n)) 
+!<<>>            if (allocated(nameRATS)) write(*,*) '<<>> nameRATS: ', trim(nameRATS(n))
 !<<>>         endif
          gen_str = 'dOLR_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
          call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
@@ -4006,7 +4007,7 @@ contains
          gen_str = 'dFLNS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
          call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
          if (associated(RAT_2d)) then
-            RAT_2d = (FLX_INT(:,:,LM)) - (FLX_INT_RAT(:,:,LM,n)) 
+            RAT_2d = (FLX_INT(:,:,LM)) - (FLX_INT_RAT(:,:,LM,n))
             RAT_2d => null()
          endif
          gen_str = 'dSFCEM_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
@@ -4018,10 +4019,10 @@ contains
          endif
          gen_str = 'NETTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
          call MAPL_GetPointer(EXPORT,   RAT_2d, trim(gen_str),   RC=STATUS) ! Don't verify.
-         if (associated(RAT_2d)) then 
+         if (associated(RAT_2d)) then
             RAT_2d = (FLX_INT(:,:,LM)) - &  ! Net DOWNWARD flux
                      (FLX_INT(:,:, 0))
-            RAT_2d = RAT_2d - & 
+            RAT_2d = RAT_2d - &
                     ((FLX_INT_RAT(:,:,LM,n)) - & ! Net DOWNWARD flux without RAT at index "n"
                      (FLX_INT_RAT(:,:, 0,n)))
             RAT_2d => null()
@@ -4251,10 +4252,10 @@ end subroutine RUN
       USE_RRTMG = RFLAG /= 0.
       USE_CHOU  = .not.USE_RRTMG
     end if
-      
+
     _RETURN(_SUCCESS)
   end subroutine choose_solar_scheme
-      
+
   subroutine choose_irrad_scheme (MAPL, &
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
@@ -4262,10 +4263,10 @@ end subroutine RUN
     type (MAPL_MetaComp), pointer, intent(in) :: MAPL
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
-      
+
     real :: RFLAG
-    integer :: STATUS 
-      
+    integer :: STATUS
+
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
