@@ -2837,12 +2837,6 @@ contains
     type(StringVectorIterator) :: string_vec_iter
     character(len=:), pointer :: string_pointer
 
-    ! which bands require OSR output?
-    ! (only RRTMG[P]; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
-    logical :: band_output (nbndsw)
-    integer :: ibnd
-    character*2 :: bb
-
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
