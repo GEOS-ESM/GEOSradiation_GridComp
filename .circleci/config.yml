@@ -5,7 +5,7 @@ version: 2.1
 #bcs_version: &bcs_version v11.4.0
 
 orbs:
-  ci: geos-esm/circleci-tools@2
+  ci: geos-esm/circleci-tools@4
 
 workflows:
   build-test:
@@ -17,7 +17,7 @@ workflows:
             - docker-hub-creds
           matrix:
             parameters:
-              compiler: [gfortran, ifort]
+              compiler: [gfortran, ifort, ifx]
           #baselibs_version: *baselibs_version
           repo: GEOSgcm
           checkout_fixture: true
@@ -31,7 +31,7 @@ workflows:
             - docker-hub-creds
           matrix:
             parameters:
-              compiler: [gfortran, ifort]
+              compiler: [gfortran, ifort, ifx]
           requires:
             - build-GEOSgcm-on-<< matrix.compiler >>
           repo: GEOSgcm
@@ -45,7 +45,7 @@ workflows:
             - docker-hub-creds
           matrix:
             parameters:
-              compiler: [gfortran, ifort]
+              compiler: [gfortran, ifort, ifx]
           requires:
             - build-GEOSgcm-on-<< matrix.compiler >>
           repo: GEOSgcm
