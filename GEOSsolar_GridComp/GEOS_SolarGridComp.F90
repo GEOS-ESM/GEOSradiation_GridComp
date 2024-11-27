@@ -3376,7 +3376,7 @@ contains
           call string_vec_iter%next()
        end do
 
-       if (.not.do_no_aero_calc)
+       if (.not. do_no_aero_calc) then
 
          call string_vec%clear()
 
