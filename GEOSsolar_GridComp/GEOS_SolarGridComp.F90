@@ -167,6 +167,7 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
+  use gFTL_StringVector
 
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -2832,12 +2833,9 @@ contains
 
     logical :: do_no_aero_calc
 
-    ! list of strings facility
-    integer :: i
-    type S_
-      character(len=:), allocatable :: str
-    end type S_
-    type(S_), allocatable :: list(:)
+    type(StringVector) :: string_vec
+    type(StringVectorIterator) :: string_vec_iter
+    character(len=:), pointer :: string_pointer
 
 !=============================================================================
 
@@ -3204,26 +3202,49 @@ contains
        ! Optional without-aerosol diagnostics
        ! ------------------------------------
 
-       ! this line temporarily needed because of compiler bug
-       allocate(list(1)); list(1) = S_('dummy')
-
        ! are without-aerosol exports requested?
        do_no_aero_calc = .false.
-       list = [S_('FSWNA'), S_('FSWUNA'), S_('FSWDNA'), &
-               S_('FSCNA'), S_('FSCUNA'), S_('FSCDNA'), &
-               S_('FSWBANDNA')]
-       do i = 1, size(list)
-         call MAPL_GetPointer( EXPORT, ptr3d, list(i)%str, __RC__)
-         do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
+
+       call string_vec%push_back('FSWNA')
+       call string_vec%push_back('FSWUNA')
+       call string_vec%push_back('FSWDNA')
+       call string_vec%push_back('FSCNA')
+       call string_vec%push_back('FSCUNA')
+       call string_vec%push_back('FSCDNA')
+       call string_vec%push_back('FSWBANDNA')
+
+       string_vec_iter = string_vec%begin()
+       do while ( string_vec_iter /= string_vec%end() )
+          string_pointer => string_vec_iter%get()
+          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
+          do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
+          call string_vec_iter%next()
        end do
-       list = [S_('RSRNA'), S_('RSRSNA'), S_('OSRNA') , &
-               S_('RSCNA'), S_('RSCSNA'), S_('OSRCNA'), &
-               S_('SLRSFNA'),  S_('SLRSUFNA'), &
-               S_('SLRSFCNA'), S_('SLRSUFCNA')]
-       do i = 1, size(list)
-         call MAPL_GetPointer( EXPORT, ptr2d, list(i)%str, __RC__)
-         do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
-       end do
+
+       if (.not. do_no_aero_calc) then
+
+         call string_vec%clear()
+
+         call string_vec%push_back('RSRNA')
+         call string_vec%push_back('RSRSNA')
+         call string_vec%push_back('OSRNA')
+         call string_vec%push_back('RSCNA')
+         call string_vec%push_back('RSCSNA')
+         call string_vec%push_back('OSRCNA')
+         call string_vec%push_back('SLRSFNA')
+         call string_vec%push_back('SLRSUFNA')
+         call string_vec%push_back('SLRSFCNA')
+         call string_vec%push_back('SLRSUFCNA')
+
+         string_vec_iter = string_vec%begin()
+
+         do while ( string_vec_iter /= string_vec%end() )
+            string_pointer => string_vec_iter%get()
+            call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
+            do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
+            call string_vec_iter%next()
+         end do
+       end if
 
        if (do_no_aero_calc) then
 
@@ -3239,11 +3260,19 @@ contains
        else
 
           ! otherwise, zero the no-aerosol internals
-          list = [S_('FSWNAN'), S_('FSWUNAN'), &
-                  S_('FSCNAN'), S_('FSCUNAN'), S_('FSWBANDNAN')]
-          do i = 1, size(list)
-            call MAPL_GetPointer( INTERNAL, ptr3d, list(i)%str, __RC__)
-            ptr3d = 0.
+          call string_vec%clear()
+
+          call string_vec%push_back('FSWNAN')
+          call string_vec%push_back('FSWUNAN')
+          call string_vec%push_back('FSCNAN')
+          call string_vec%push_back('FSCUNAN')
+          call string_vec%push_back('FSWBANDNAN')
+          string_vec_iter = string_vec%begin()
+          do while ( string_vec_iter /= string_vec%end() )
+             string_pointer => string_vec_iter%get()
+             call MAPL_GetPointer( INTERNAL, ptr3d, string_pointer, __RC__)
+             ptr3d = 0.
+             call string_vec_iter%next()
           end do
 
        end if
