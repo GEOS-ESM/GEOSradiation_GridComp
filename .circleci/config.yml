@@ -48,7 +48,7 @@ workflows:
             - docker-hub-creds
           matrix:
             parameters:
-              compiler: [ifort, ifx]
+              compiler: [ifort]
           requires:
             - build-GEOSgcm-on-<< matrix.compiler >>
           repo: GEOSgcm
