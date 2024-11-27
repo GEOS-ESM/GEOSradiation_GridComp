@@ -167,6 +167,7 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
+  use gFTL_StringVector
 
   ! for RRTMGP
   use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
