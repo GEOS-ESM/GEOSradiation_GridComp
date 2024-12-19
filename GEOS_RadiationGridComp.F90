@@ -242,6 +242,15 @@ module GEOS_RadiationGridCompMod
     VERIFY_(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
+         SHORT_NAME = 'RADLWNA',                                         &
+         LONG_NAME  = 'air_temperature_tendency_due_to_longwave_no_aerosol', &
+         UNITS      = 'K s-1',                                           &
+         DIMS       = MAPL_DimsHorzVert,                                 &
+         VLOCATION  = MAPL_VLocationCenter,                              &
+                                                              RC=STATUS  )
+    VERIFY_(STATUS)
+
+    call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSWNA',                                         &
          LONG_NAME  = 'air_temperature_tendency_due_to_shortwave_no_aerosol', &
          UNITS      = 'K s-1',                                           &
@@ -639,6 +648,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   real, pointer, dimension(:,:  )     :: DSFDTS
   real, pointer, dimension(:,:  )     :: TRD
   real, pointer, dimension(:,:,:)     :: FLW
+  real, pointer, dimension(:,:,:)     :: FLWNA
   real, pointer, dimension(:,:,:)     :: FLWCLR
   real, pointer, dimension(:,:,:)     :: FLA
 
@@ -660,6 +670,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   real, pointer, dimension(:,:,:)     :: RADSW
   real, pointer, dimension(:,:,:)     :: RADLWC
   real, pointer, dimension(:,:,:)     :: RADSWC
+  real, pointer, dimension(:,:,:)     :: RADLWNA
   real, pointer, dimension(:,:,:)     :: RADSWNA
   real, pointer, dimension(:,:,:)     :: RADLWCNA
   real, pointer, dimension(:,:,:)     :: RADSWCNA
@@ -730,6 +741,8 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     VERIFY_(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWC  , 'RADSWC'  ,  RC=STATUS )
     VERIFY_(STATUS)
+    call MAPL_GetPointer ( EXPORT, RADLWNA , 'RADLWNA' ,  RC=STATUS )
+    VERIFY_(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWNA , 'RADSWNA' ,  RC=STATUS )
     VERIFY_(STATUS)
     call MAPL_GetPointer ( EXPORT, RADLWCNA, 'RADLWCNA',  RC=STATUS )
@@ -770,6 +783,11 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        VERIFY_(STATUS)
     end if
 
+    if (associated(RADLWNA)                           ) then
+       call MAPL_GetPointer ( GEX(IRR), FLWNA,  'FLXA'   ,  alloc=.TRUE.,RC=STATUS )
+       VERIFY_(STATUS)
+    end if
+
     if (associated(RADLWCNA)                          ) then
        call MAPL_GetPointer ( GEX(IRR), FLA   , 'FLA'    ,  alloc=.TRUE.,RC=STATUS )
        VERIFY_(STATUS)
@@ -804,7 +822,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     if( associated (RADLW ) .or. associated (RADSW )   .or. &
         associated (RADLWC) .or. associated (RADSWC)   .or. &
         associated (RADSWNA).or. associated (RADSWCNA) .or. &
-        associated (RADLWCNA)                             ) then
+        associated (RADLWNA).or. associated (RADLWCNA) ) then
 
        allocate(DMI(IM,JM,LM),stat=STATUS)
        VERIFY_(STATUS)
@@ -814,6 +832,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        if( associated (RADSW   ) ) RADSW    = (FSW   (:,:,0:LM-1) - FSW   (:,:,1:LM))*DMI
        if( associated (RADLWC  ) ) RADLWC   = (FLWCLR(:,:,0:LM-1) - FLWCLR(:,:,1:LM))*DMI
        if( associated (RADSWC  ) ) RADSWC   = (FSWCLR(:,:,0:LM-1) - FSWCLR(:,:,1:LM))*DMI
+       if( associated (RADLWNA ) ) RADLWNA  = (FLWNA (:,:,0:LM-1) - FLWNA (:,:,1:LM))*DMI
        if( associated (RADSWNA ) ) RADSWNA  = (FSWNA (:,:,0:LM-1) - FSWNA (:,:,1:LM))*DMI
        if( associated (RADLWCNA) ) RADLWCNA = (FLA   (:,:,0:LM-1) - FLA   (:,:,1:LM))*DMI
        if( associated (RADSWCNA) ) RADSWCNA = (FSCNA (:,:,0:LM-1) - FSCNA (:,:,1:LM))*DMI
