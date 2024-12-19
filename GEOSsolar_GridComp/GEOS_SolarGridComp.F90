@@ -3330,7 +3330,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
               end if
 
               ! SSA from AERO_PROVIDER (actually EXT * SSA)
@@ -3339,7 +3339,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
               end if
 
               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
@@ -3348,7 +3348,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
               end if
 
            end do SOLAR_BANDS
@@ -4744,8 +4744,8 @@ contains
       allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
-      WHERE(PL < 100.)
-         O3 = O3 * EXP(-1.5*(LOG10(PL)-2.)**2)
+      WHERE(PL < 1000.)
+         O3 = O3 * EXP(-1.5*(LOG10(PL/10.0)-2.)**4)
       ENDWHERE
 
       ! SORAD expects non-negative ozone fraction by MASS
