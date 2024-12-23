@@ -1772,7 +1772,7 @@ contains
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
             if (associated(AS_PTR_3D)) then
-               AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
+               AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
             end if
          end if
 
@@ -1784,7 +1784,7 @@ contains
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
             if (associated(AS_PTR_3D)) then
-               AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+               AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
             end if
          end if
 
@@ -1797,7 +1797,7 @@ contains
             VERIFY_(STATUS)
 
             if (associated(AS_PTR_3D)) then
-               AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+               AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
             end if
          end if
       end do IR_BANDS
