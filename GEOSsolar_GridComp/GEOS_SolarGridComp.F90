@@ -3004,11 +3004,11 @@ contains
     ! If this is our DYCORE, turn off load balancing.
     !---------------------------------------------
     call MAPL_GetResource (MAPL, DYCORE, 'DYCORE:', __RC__)
-    call MAPL_GetResource (MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', DEFAULT=1, __RC__)
+    call MAPL_GetResource (MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', DEFAULT=0, __RC__)
     if (adjustl(DYCORE)=="DATMO" .OR. SOLAR_LOAD_BALANCE==0) then
        LoadBalance = .FALSE.
     else
-       LoadBalance = .TRUE.
+       LoadBalance = .false.
     end if
 
     ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
@@ -3496,7 +3496,7 @@ contains
       type (ESMF_VM)                 :: VM
       integer                        :: COMM
 
-      real,    dimension(IM,JM)      :: ZTH, SLR
+      real, target,   dimension(IM,JM)      :: ZTH, SLR
       logical, dimension(IM,JM)      :: daytime
 
       ! Daytime ONLY copy of variables
@@ -3506,7 +3506,8 @@ contains
       real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, OX, CL, &
                                         QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
       real, pointer, dimension(:)    :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
-                                        Ig1D, Jg1D, ALAT, SLR1D, ZT
+                                        ALAT, SLR1D, ZT
+      integer, pointer, dimension(:) :: Ig1D, Jg1D
 
       ! outputs (via internals)
       real, pointer, dimension(:,:)  :: FSW, FSC, FSWA, FSCA, FSWU, FSCU, FSWUA, FSCUA, &
@@ -3693,7 +3694,7 @@ contains
       ! for global gcolumn index seeding of PRNGs
       integer :: iBeg, iEnd, jBeg, jEnd
       integer :: IM_World, JM_World, Gdims(3)
-      integer, dimension(IM,JM) :: Ig, Jg
+      integer, dimension(IM,JM), target :: Ig, Jg
 
       integer, parameter :: KICE     = 1
       integer, parameter :: KLIQUID  = 2
@@ -3738,10 +3739,6 @@ contains
 
       ! For Aerosol
       real, pointer, dimension(:,:,:)     :: taua, ssaa, asya
-      real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_EXT => null()
-      real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_SSA => null()
-      real, pointer, dimension(:,:,:)     :: BUFIMP_AEROSOL_ASY => null()
-      real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
       integer :: I, J, K, L, LV, i1, iN
@@ -3755,7 +3752,6 @@ contains
       logical, allocatable :: IntInOut(:)
       character(len=ESMF_MAXSTR), allocatable :: NamesInp(:), NamesInt(:)
       integer, allocatable :: SlicesInp(:), SlicesInt(:)
-      real, target, allocatable :: BufInp(:), BufInOut(:), BufOut(:)
       integer, allocatable :: rgDim(:), ugDim(:)
       real, pointer :: buf(:)
       integer :: NumImp, NumInt, NumInp
@@ -3809,8 +3805,6 @@ contains
 
 !  Load balancing by packing the lit points and sharing work with night regions
 !------------------------------------------------------------------------------
-
-      call MAPL_TimerOn(MAPL,"-BALANCE")
 
 !  Identify lit soundings with the daytime mask
 !----------------------------------------------
@@ -3884,6 +3878,10 @@ contains
          num_aero_vars = 0
       end if
 
+      ! number of columns
+      NCOL = IM*JM
+
+
 ! @@@@@@@@@@@@@@
 ! @@@ Inputs @@@
 ! @@@@@@@@@@@@@@
@@ -3950,8 +3948,6 @@ contains
       ! and balanced data on the local PE for Input vars. The inner
       ! dimension of its 2D representation must be NumMax.
       ! -------------------------------------------------------------
-      allocate(BufInp(NumMax*sum(SlicesInp)),__STAT__)
-      BufInp = MAPL_UNDEF
 
       ! Loop over imports, packing into the buffer that will be
       ! load balanced and used in the solar calculations.
@@ -3960,51 +3956,11 @@ contains
       INPUT_VARS_2: do k=1,NumInp
          if (SlicesInp(k) == 0) cycle
 
-         i1 = iN + 1
-
          if (NamesInp(k)=="AERO") then
 
             _ASSERT(size(AEROSOL_EXT,3)==LM,'mal-dimensioned AEROSOL_EXT')
             _ASSERT(size(AEROSOL_SSA,3)==LM,'mal-dimensioned AEROSOL_SSA')
             _ASSERT(size(AEROSOL_ASY,3)==LM,'mal-dimensioned AEROSOL_ASY')
-
-            allocate(BUF_AEROSOL(size(AEROSOL_EXT,1), &
-                                 size(AEROSOL_EXT,2), &
-                                 size(AEROSOL_EXT,3)), __STAT__)
-
-            ! pack extinctions
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_EXT(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_EXT => ptr3(1:Num2do,:,:)
-
-            ! pack single scattering albedos
-            i1 = iN + 1
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_SSA(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_SSA => ptr3(1:Num2do,:,:)
-
-            ! pack asymmetry factors
-            i1 = iN + 1
-            BUF_AEROSOL = MAPL_UNDEF
-            do j=1,NUM_BANDS_SOLAR
-               BUF_AEROSOL = AEROSOL_ASY(:,:,:,j)
-               call PackIt(BufInp(i1+(j-1)*LM*NumMax),BUF_AEROSOL,daytime,NumMax,HorzDims,LM)
-            end do
-            iN = i1 + NumMax*LM*NUM_BANDS_SOLAR - 1
-            ptr3(1:NumMax,1:LM,1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
-            BUFIMP_AEROSOL_ASY => ptr3(1:Num2do,:,:)
-
-            deallocate(BUF_AEROSOL, __STAT__)
 
          else  ! Non-aerosol imports
 
@@ -4012,28 +3968,25 @@ contains
 
                ! pack 3D imports
                call ESMFL_StateGetPointerToData(IMPORT,ptr3,NamesInp(k),__RC__)
-               call PackIt(BufInp(i1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-               iN = i1 + NumMax*size(ptr3,3) - 1
 
             else  ! case(MAPL_DIMSHORZONLY)
 
                ! pack auxilliary variables
+
                if (NamesInp(k) == 'Ig') then
-                  call PackIt(BufInp(i1),real(Ig),daytime,NumMax,HorzDims,1)
+                  ptr2 => null()
                else if (NamesInp(k) == 'Jg') then
-                  call PackIt(BufInp(i1),real(Jg),daytime,NumMax,HorzDims,1)
+                  ptr2 => null()
                else if (NamesInp(k) == 'LATS') then
-                  call PackIt(BufInp(i1),LATS,    daytime,NumMax,HorzDims,1)
+                  ptr2 => LATS
                else if (NamesInp(k) == 'SLR') then
-                  call PackIt(BufInp(i1),SLR,     daytime,NumMax,HorzDims,1)
+                  ptr2 => SLR
                else if (NamesInp(k) == 'ZTH') then
-                  call PackIt(BufInp(i1),ZTH,     daytime,NumMax,HorzDims,1)
+                  ptr2 => ZTH
                else
                   ! pack 2D imports
                   call ESMFL_StateGetPointerToData(IMPORT,ptr2,NamesInp(k),__RC__)
-                  call PackIt(BufInp(i1),ptr2,daytime,NumMax,HorzDims,1)
                end if
-               iN = i1 + NumMax - 1
 
             end if
 
@@ -4041,75 +3994,67 @@ contains
             ! These use Fortran 2003 syntax for reshaping a 1D
             ! vector into a higher rank array.
             !--------------------------------------------------
-            ptr2(1:NumMax,1:SlicesInp(k)) => BufInp(i1:iN)
 
             select case(NamesInp(k))
                case('PLE')
-                  PLE   => ptr2(1:Num2do,:)
+                  PLE(1:ncol,1:size(ptr3,3))   => ptr3
                case('TS')
-                  TS    => ptr2(1:Num2do,1)
+                  TS(1:ncol)   => ptr2
                case('CH4')
-                  CH4   => ptr2(1:Num2do,:)
+                  CH4(1:ncol,1:size(ptr3,3))   => ptr3
                case('N2O')
-                  N2O   => ptr2(1:Num2do,:)
+                  N2O(1:ncol,1:size(ptr3,3))   => ptr3
                case('T')
-                  T     => ptr2(1:Num2do,:)
+                  T(1:ncol,1:size(ptr3,3))   => ptr3
                case('QV')
-                  Q     => ptr2(1:Num2do,:)
+                  Q(1:ncol,1:size(ptr3,3))   => ptr3
                case('OX')
-                  OX    => ptr2(1:Num2do,:)
+                  OX(1:ncol,1:size(ptr3,3))   => ptr3
                case('FCLD')
-                  CL    => ptr2(1:Num2do,:)
+                  CL(1:ncol,1:size(ptr3,3))   => ptr3
                case('QL')
-                  QL    => ptr2(1:Num2do,:)
+                  QL(1:ncol,1:size(ptr3,3))   => ptr3
                case('QI')
-                  QI    => ptr2(1:Num2do,:)
+                  QI(1:ncol,1:size(ptr3,3))   => ptr3
                case('QR')
-                  QR    => ptr2(1:Num2do,:)
+                  QR(1:ncol,1:size(ptr3,3))   => ptr3
                case('QS')
-                  QS    => ptr2(1:Num2do,:)
+                  QS(1:ncol,1:size(ptr3,3))   => ptr3
                case('QG')               
-                  QG    => ptr2(1:Num2do,:)
+                  QG(1:ncol,1:size(ptr3,3))   => ptr3
                case('RL')
-                  RL    => ptr2(1:Num2do,:)
+                  RL(1:ncol,1:size(ptr3,3))   => ptr3
                case('RI')
-                  RI    => ptr2(1:Num2do,:)
+                  RI(1:ncol,1:size(ptr3,3))   => ptr3
                case('RR')
-                  RR    => ptr2(1:Num2do,:)
+                  RR(1:ncol,1:size(ptr3,3))   => ptr3
                case('RS')
-                  RS    => ptr2(1:Num2do,:)
+                  RS(1:ncol,1:size(ptr3,3))   => ptr3
                case('RG')
-                  RG    => ptr2(1:Num2do,:)
+                  RG(1:ncol,1:size(ptr3,3))   => ptr3
                case('ALBVR')
-                  ALBVR => ptr2(1:Num2do,1)
+                  ALBVR(1:ncol)   => ptr2
                case('ALBVF')
-                  ALBVF => ptr2(1:Num2do,1)
+                  ALBVF(1:ncol)   => ptr2
                case('ALBNR')
-                  ALBNR => ptr2(1:Num2do,1)
+                  ALBNR(1:ncol)   => ptr2
                case('ALBNF')
-                  ALBNF => ptr2(1:Num2do,1)
+                  ALBNF(1:ncol)   => ptr2
                case('Ig')
-                  Ig1D  => ptr2(1:Num2do,1)
+                  Ig1D(1:ncol)  => Ig
                case('Jg')
-                  Jg1D  => ptr2(1:Num2do,1)
+                  Jg1D(1:ncol)  => Jg
                case('LATS')
-                  ALAT  => ptr2(1:Num2do,1)
+                  ALAT(1:ncol)   => ptr2
                case('SLR')
-                  SLR1D => ptr2(1:Num2do,1)
+                  SLR1D(1:ncol)   => ptr2
                case('ZTH')
-                  ZT    => ptr2(1:Num2do,1)
+                  ZT(1:ncol)   => ptr2
             end select
 
          end if
 
       enddo INPUT_VARS_2
-
-      ! Load balance the Inputs
-      ! -----------------------
-
-      call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
-      if (LoadBalance) call MAPL_BalanceWork(BufInp,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-      call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
 ! @@@@@@@@@@@@@@@@@@@@@@
 ! @@@ InOuts/Outputs @@@
@@ -4203,53 +4148,16 @@ contains
 
       enddo INT_VARS_1
 
-      ! Allocate buffers with enough space to hold both the unbalanced
-      ! and balanced data on the local PE for InOut/Out vars
-      ! --------------------------------------------------------------
-      allocate(BufInOut(NumMax*sum(SlicesInt,MASK=IntInOut)),__STAT__)
-      BufInOut = MAPL_UNDEF
-      allocate(BufOut(NumMax*sum(SlicesInt,MASK=.not.IntInOut)),__STAT__)
-      BufOut = MAPL_UNDEF
-
-      ! Loop over Internals (InOuts/Outs), packing them into buffers
-      ! that will be load balanced and used in the solar calculations.
-      ! --------------------------------------------------------------
-      iNInOut = 0; iNOut = 0
       INT_VARS_2: do k=1,NumInt
          if (SlicesInt(k) == 0) cycle
-
-         if (IntInOut(k)) then
-            buf => bufInOut; pi1 => i1InOut; piN => iNInOut
-         else
-            buf => bufOut;   pi1 => i1Out;   piN => iNOut
-         endif
-         pi1 = piN + 1
 
          if (ugDim(k) > 0) then  ! has ungridded dimensions
 
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
-                  do j=1,ugDim(k)
-!pmn compiler       call PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    if (IntInOut(k)) then
-                      call PackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    else
-                      call PackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
-                    endif
-                  end do
-                  piN = pi1 + NumMax*size(ptr4,3)*ugDim(k) - 1
-                  ptr3(1:NumMax,1:size(ptr4,3),1:ugDim(k)) => Buf(pi1:piN)
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
-                  if (IntInOut(k)) then
-                    call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
-                  else
-                    call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
-                  endif
-                  piN = pi1 + NumMax*ugDim(k) - 1
-                  ptr2(1:NumMax,1:ugDim(k)) => Buf(pi1:piN)
             end select
 
          else  ! no ungridded dimensions
@@ -4257,25 +4165,9 @@ contains
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  if (IntInOut(k)) then
-                     call PackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  else
-                     call PackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  endif
-                  piN = pi1 + NumMax*size(ptr3,3) - 1
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
-!pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
-                  if (IntInOut(k)) then
-                     call PackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
-                  else
-                     call PackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1)
-                  endif
-                  piN = pi1 + NumMax - 1
             end select
-            ptr2(1:NumMax,1:SlicesInt(k)) => Buf(pi1:piN)
-
          end if
 
          ! Handles for the working InOut/Out variables.
@@ -4283,402 +4175,390 @@ contains
          ! ---------------------------------------------------
          select case(NamesInt(k))
             case('FSWN')
-               FSW       => ptr2(1:Num2do,:)
+               FSW(1:ncol,1:size(ptr3,3))   => ptr3
             case('FSCN')
-               FSC       => ptr2(1:Num2do,:)
+               FSC(1:ncol,1:size(ptr3,3))   => ptr3
             case('FSWUN')
-               FSWU      => ptr2(1:Num2do,:)
+               FSWU(1:ncol,1:size(ptr3,3))  => ptr3
             case('FSCUN')
-               FSCU      => ptr2(1:Num2do,:)
+               FSCU(1:ncol,1:size(ptr3,3))  => ptr3
             case('FSWBANDN')
-               FSWBAND   => ptr2(1:Num2do,:)
+               FSWBAND(1:ncol,1:size(ptr3,3)) => ptr3
             case('DRUVRN')
-               UVRR      => ptr2(1:Num2do,1)
+               UVRR(1:ncol) => ptr2
             case('DFUVRN')
-               UVRF      => ptr2(1:Num2do,1)
+               UVRF(1:ncol) => ptr2
             case('DRPARN')
-               PARR      => ptr2(1:Num2do,1)
+               PARR(1:ncol) => ptr2
             case('DFPARN')
-               PARF      => ptr2(1:Num2do,1)
+               PARF(1:ncol) => ptr2
             case('DRNIRN')
-               NIRR      => ptr2(1:Num2do,1)
+               NIRR(1:ncol) => ptr2
             case('DFNIRN')
-               NIRF      => ptr2(1:Num2do,1)
+               NIRF(1:ncol) => ptr2
             case('DRBANDN')
-               DRBAND    => ptr2(1:Num2do,:)
+               DRBAND(1:ncol,1:size(ptr3,3)) => ptr3
             case('DFBANDN')
-               DFBAND    => ptr2(1:Num2do,:)
+               DFBAND(1:ncol,1:size(ptr3,3)) => ptr3
             case('FSWNAN')
-               FSWA      => ptr2(1:Num2do,:)
+               FSWA(1:ncol,1:size(ptr3,3)) => ptr3
             case('FSCNAN')
-               FSCA      => ptr2(1:Num2do,:)
+               FSCA(1:ncol,1:size(ptr3,3)) => ptr3
             case('FSWUNAN')
-               FSWUA     => ptr2(1:Num2do,:)
+               FSWUA(1:ncol,1:size(ptr3,3)) => ptr3
             case('FSCUNAN')
-               FSCUA     => ptr2(1:Num2do,:)
+               FSCUA(1:ncol,1:size(ptr3,3)) => ptr3
             case('FSWBANDNAN')
-               FSWBANDA  => ptr2(1:Num2do,:)
+               FSWBANDA(1:ncol,1:size(ptr3,3)) => ptr3
             ! ===============
             case('OSRB01RGN')
-               OSRBRGN( 1) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 1) % p(1:ncol) => ptr2
             case('OSRB02RGN')
-               OSRBRGN( 2) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 2) % p(1:ncol) => ptr2
             case('OSRB03RGN')
-               OSRBRGN( 3) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 3) % p(1:ncol) => ptr2
             case('OSRB04RGN')
-               OSRBRGN( 4) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 4) % p(1:ncol) => ptr2
             case('OSRB05RGN')
-               OSRBRGN( 5) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 5) % p(1:ncol) => ptr2
             case('OSRB06RGN')
-               OSRBRGN( 6) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 6) % p(1:ncol) => ptr2
             case('OSRB07RGN')
-               OSRBRGN( 7) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 7) % p(1:ncol) => ptr2
             case('OSRB08RGN')
-               OSRBRGN( 8) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 8) % p(1:ncol) => ptr2
             case('OSRB09RGN')
-               OSRBRGN( 9) % p => ptr2(1:Num2do,1)
+               OSRBRGN( 9) % p(1:ncol) => ptr2
             case('OSRB10RGN')
-               OSRBRGN(10) % p => ptr2(1:Num2do,1)
+               OSRBRGN(10) % p(1:ncol) => ptr2
             case('OSRB11RGN')
-               OSRBRGN(11) % p => ptr2(1:Num2do,1)
+               OSRBRGN(11) % p(1:ncol) => ptr2
             case('OSRB12RGN')
-               OSRBRGN(12) % p => ptr2(1:Num2do,1)
+               OSRBRGN(12) % p(1:ncol) => ptr2
             case('OSRB13RGN')
-               OSRBRGN(13) % p => ptr2(1:Num2do,1)
+               OSRBRGN(13) % p(1:ncol) => ptr2
             case('OSRB14RGN')
-               OSRBRGN(14) % p => ptr2(1:Num2do,1)
+               OSRBRGN(14) % p(1:ncol) => ptr2
             ! ===============
             case('ISRB01RGN')
-               ISRBRGN( 1) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 1) % p(1:ncol) => ptr2
             case('ISRB02RGN')
-               ISRBRGN( 2) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 2) % p(1:ncol) => ptr2
             case('ISRB03RGN')
-               ISRBRGN( 3) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 3) % p(1:ncol) => ptr2
             case('ISRB04RGN')
-               ISRBRGN( 4) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 4) % p(1:ncol) => ptr2
             case('ISRB05RGN')
-               ISRBRGN( 5) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 5) % p(1:ncol) => ptr2
             case('ISRB06RGN')
-               ISRBRGN( 6) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 6) % p(1:ncol) => ptr2
             case('ISRB07RGN')
-               ISRBRGN( 7) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 7) % p(1:ncol) => ptr2
             case('ISRB08RGN')
-               ISRBRGN( 8) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 8) % p(1:ncol) => ptr2
             case('ISRB09RGN')
-               ISRBRGN( 9) % p => ptr2(1:Num2do,1)
+               ISRBRGN( 9) % p(1:ncol) => ptr2
             case('ISRB10RGN')
-               ISRBRGN(10) % p => ptr2(1:Num2do,1)
+               ISRBRGN(10) % p(1:ncol) => ptr2
             case('ISRB11RGN')
-               ISRBRGN(11) % p => ptr2(1:Num2do,1)
+               ISRBRGN(11) % p(1:ncol) => ptr2
             case('ISRB12RGN')
-               ISRBRGN(12) % p => ptr2(1:Num2do,1)
+               ISRBRGN(12) % p(1:ncol) => ptr2
             case('ISRB13RGN')
-               ISRBRGN(13) % p => ptr2(1:Num2do,1)
+               ISRBRGN(13) % p(1:ncol) => ptr2
             case('ISRB14RGN')
-               ISRBRGN(14) % p => ptr2(1:Num2do,1)
+               ISRBRGN(14) % p(1:ncol) => ptr2
             ! ===============
             case('COSZSW')
-               COSZSW    => ptr2(1:Num2do,1)
+               COSZSW(1:ncol) => ptr2
             case('CLDTTSW')
-               CLDTS     => ptr2(1:Num2do,1)
+               CLDTS(1:ncol) => ptr2
             case('CLDHISW')
-               CLDHS     => ptr2(1:Num2do,1)
+               CLDHS(1:ncol) => ptr2
             case('CLDMDSW')
-               CLDMS     => ptr2(1:Num2do,1)
+               CLDMS(1:ncol) => ptr2
             case('CLDLOSW')
-               CLDLS     => ptr2(1:Num2do,1)
+               CLDLS(1:ncol) => ptr2
 #ifdef SOLAR_RADVAL
             case('TAUTTPAR')
-               TAUTP     => ptr2(1:Num2do,1)
+               TAUTP(1:ncol) => ptr2
             case('TAUHIPAR')
-               TAUHP     => ptr2(1:Num2do,1)
+               TAUHP(1:ncol) => ptr2
             case('TAUMDPAR')
-               TAUMP     => ptr2(1:Num2do,1)
+               TAUMP(1:ncol) => ptr2
             case('TAULOPAR')
-               TAULP     => ptr2(1:Num2do,1)
+               TAULP(1:ncol) => ptr2
 #endif
             case('COTTTPAR')
-               COTTP     => ptr2(1:Num2do,1)
+               COTTP(1:ncol) => ptr2
             case('COTHIPAR')
-               COTHP     => ptr2(1:Num2do,1)
+               COTHP(1:ncol) => ptr2
             case('COTMDPAR')
-               COTMP     => ptr2(1:Num2do,1)
+               COTMP(1:ncol) => ptr2
             case('COTLOPAR')
-               COTLP     => ptr2(1:Num2do,1)
+               COTLP(1:ncol) => ptr2
             case('COTDENTTPAR')
-               COTDTP    => ptr2(1:Num2do,1)
+               COTDTP(1:ncol) => ptr2
             case('COTDENHIPAR')
-               COTDHP    => ptr2(1:Num2do,1)
+               COTDHP(1:ncol) => ptr2
             case('COTDENMDPAR')
-               COTDMP    => ptr2(1:Num2do,1)
+               COTDMP(1:ncol) => ptr2
             case('COTDENLOPAR')
-               COTDLP    => ptr2(1:Num2do,1)
+               COTDLP(1:ncol) => ptr2
             case('COTNUMTTPAR')
-               COTNTP    => ptr2(1:Num2do,1)
+               COTNTP(1:ncol) => ptr2
             case('COTNUMHIPAR')
-               COTNHP    => ptr2(1:Num2do,1)
+               COTNHP(1:ncol) => ptr2
             case('COTNUMMDPAR')
-               COTNMP    => ptr2(1:Num2do,1)
+               COTNMP(1:ncol) => ptr2
             case('COTNUMLOPAR')
-               COTNLP    => ptr2(1:Num2do,1)
+               COTNLP(1:ncol) => ptr2
 #ifdef SOLAR_RADVAL
             case('COTDSDENTTPAR')
-               CDSDTP    => ptr2(1:Num2do,1)
+               CDSDTP(1:ncol) => ptr2
             case('COTDSDENHIPAR')
-               CDSDHP    => ptr2(1:Num2do,1)
+               CDSDHP(1:ncol) => ptr2
             case('COTDSDENMDPAR')
-               CDSDMP    => ptr2(1:Num2do,1)
+               CDSDMP(1:ncol) => ptr2
             case('COTDSDENLOPAR')
-               CDSDLP    => ptr2(1:Num2do,1)
+               CDSDLP(1:ncol) => ptr2
             case('COTDSNUMTTPAR')
-               CDSNTP    => ptr2(1:Num2do,1)
+               CDSNTP(1:ncol) => ptr2
             case('COTDSNUMHIPAR')
-               CDSNHP    => ptr2(1:Num2do,1)
+               CDSNHP(1:ncol) => ptr2
             case('COTDSNUMMDPAR')
-               CDSNMP    => ptr2(1:Num2do,1)
+               CDSNMP(1:ncol) => ptr2
             case('COTDSNUMLOPAR')
-               CDSNLP    => ptr2(1:Num2do,1)
+               CDSNLP(1:ncol) => ptr2
             case('COTLDENTTPAR')
-               COTLDTP    => ptr2(1:Num2do,1)
+               COTLDTP(1:ncol) => ptr2
             case('COTLDENHIPAR')
-               COTLDHP    => ptr2(1:Num2do,1)
+               COTLDHP(1:ncol) => ptr2
             case('COTLDENMDPAR')
-               COTLDMP    => ptr2(1:Num2do,1)
+               COTLDMP(1:ncol) => ptr2
             case('COTLDENLOPAR')
-               COTLDLP    => ptr2(1:Num2do,1)
+               COTLDLP(1:ncol) => ptr2
             case('COTLNUMTTPAR')
-               COTLNTP    => ptr2(1:Num2do,1)
+               COTLNTP(1:ncol) => ptr2
             case('COTLNUMHIPAR')
-               COTLNHP    => ptr2(1:Num2do,1)
+               COTLNHP(1:ncol) => ptr2
             case('COTLNUMMDPAR')
-               COTLNMP    => ptr2(1:Num2do,1)
+               COTLNMP(1:ncol) => ptr2
             case('COTLNUMLOPAR')
-               COTLNLP    => ptr2(1:Num2do,1)
+               COTLNLP(1:ncol) => ptr2
             case('COTLDSDENTTPAR')
-               CDSLDTP    => ptr2(1:Num2do,1)
+               CDSLDTP(1:ncol) => ptr2
             case('COTLDSDENHIPAR')
-               CDSLDHP    => ptr2(1:Num2do,1)
+               CDSLDHP(1:ncol) => ptr2
             case('COTLDSDENMDPAR')
-               CDSLDMP    => ptr2(1:Num2do,1)
+               CDSLDMP(1:ncol) => ptr2
             case('COTLDSDENLOPAR')
-               CDSLDLP    => ptr2(1:Num2do,1)
+               CDSLDLP(1:ncol) => ptr2
             case('COTLDSNUMTTPAR')
-               CDSLNTP    => ptr2(1:Num2do,1)
+               CDSLNTP(1:ncol) => ptr2
             case('COTLDSNUMHIPAR')
-               CDSLNHP    => ptr2(1:Num2do,1)
+               CDSLNHP(1:ncol) => ptr2
             case('COTLDSNUMMDPAR')
-               CDSLNMP    => ptr2(1:Num2do,1)
+               CDSLNMP(1:ncol) => ptr2
             case('COTLDSNUMLOPAR')
-               CDSLNLP    => ptr2(1:Num2do,1)
+               CDSLNLP(1:ncol) => ptr2
             case('COTIDENTTPAR')
-               COTIDTP    => ptr2(1:Num2do,1)
+               COTIDTP(1:ncol) => ptr2
             case('COTIDENHIPAR')
-               COTIDHP    => ptr2(1:Num2do,1)
+               COTIDHP(1:ncol) => ptr2
             case('COTIDENMDPAR')
-               COTIDMP    => ptr2(1:Num2do,1)
+               COTIDMP(1:ncol) => ptr2
             case('COTIDENLOPAR')
-               COTIDLP    => ptr2(1:Num2do,1)
+               COTIDLP(1:ncol) => ptr2
             case('COTINUMTTPAR')
-               COTINTP    => ptr2(1:Num2do,1)
+               COTINTP(1:ncol) => ptr2
             case('COTINUMHIPAR')
-               COTINHP    => ptr2(1:Num2do,1)
+               COTINHP(1:ncol) => ptr2
             case('COTINUMMDPAR')
-               COTINMP    => ptr2(1:Num2do,1)
+               COTINMP(1:ncol) => ptr2
             case('COTINUMLOPAR')
-               COTINLP    => ptr2(1:Num2do,1)
+               COTINLP(1:ncol) => ptr2
             case('COTIDSDENTTPAR')
-               CDSIDTP    => ptr2(1:Num2do,1)
+               CDSIDTP(1:ncol) => ptr2
             case('COTIDSDENHIPAR')
-               CDSIDHP    => ptr2(1:Num2do,1)
+               CDSIDHP(1:ncol) => ptr2
             case('COTIDSDENMDPAR')
-               CDSIDMP    => ptr2(1:Num2do,1)
+               CDSIDMP(1:ncol) => ptr2
             case('COTIDSDENLOPAR')
-               CDSIDLP    => ptr2(1:Num2do,1)
+               CDSIDLP(1:ncol) => ptr2
             case('COTIDSNUMTTPAR')
-               CDSINTP    => ptr2(1:Num2do,1)
+               CDSINTP(1:ncol) => ptr2
             case('COTIDSNUMHIPAR')
-               CDSINHP    => ptr2(1:Num2do,1)
+               CDSINHP(1:ncol) => ptr2
             case('COTIDSNUMMDPAR')
-               CDSINMP    => ptr2(1:Num2do,1)
+               CDSINMP(1:ncol) => ptr2
             case('COTIDSNUMLOPAR')
-               CDSINLP    => ptr2(1:Num2do,1)
+               CDSINLP(1:ncol) => ptr2
             case('SSALDENLOPAR')
-               SSALDLP    => ptr2(1:Num2do,1)
+               SSALDLP(1:ncol) => ptr2
             case('SSALNUMLOPAR')
-               SSALNLP    => ptr2(1:Num2do,1)
+               SSALNLP(1:ncol) => ptr2
             case('SSAIDENLOPAR')
-               SSAIDLP    => ptr2(1:Num2do,1)
+               SSAIDLP(1:ncol) => ptr2
             case('SSAINUMLOPAR')
-               SSAINLP    => ptr2(1:Num2do,1)
+               SSAINLP(1:ncol) => ptr2
             case('ASMLDENLOPAR')
-               ASMLDLP    => ptr2(1:Num2do,1)
+               ASMLDLP(1:ncol) => ptr2
             case('ASMLNUMLOPAR')
-               ASMLNLP    => ptr2(1:Num2do,1)
+               ASMLNLP(1:ncol) => ptr2
             case('ASMIDENLOPAR')
-               ASMIDLP    => ptr2(1:Num2do,1)
+               ASMIDLP(1:ncol) => ptr2
             case('ASMINUMLOPAR')
-               ASMINLP    => ptr2(1:Num2do,1)
+               ASMINLP(1:ncol) => ptr2
             case('SSALDENMDPAR')
-               SSALDMP    => ptr2(1:Num2do,1)
+               SSALDMP(1:ncol) => ptr2
             case('SSALNUMMDPAR')
-               SSALNMP    => ptr2(1:Num2do,1)
+               SSALNMP(1:ncol) => ptr2
             case('SSAIDENMDPAR')
-               SSAIDMP    => ptr2(1:Num2do,1)
+               SSAIDMP(1:ncol) => ptr2
             case('SSAINUMMDPAR')
-               SSAINMP    => ptr2(1:Num2do,1)
+               SSAINMP(1:ncol) => ptr2
             case('ASMLDENMDPAR')
-               ASMLDMP    => ptr2(1:Num2do,1)
+               ASMLDMP(1:ncol) => ptr2
             case('ASMLNUMMDPAR')
-               ASMLNMP    => ptr2(1:Num2do,1)
+               ASMLNMP(1:ncol) => ptr2
             case('ASMIDENMDPAR')
-               ASMIDMP    => ptr2(1:Num2do,1)
+               ASMIDMP(1:ncol) => ptr2
             case('ASMINUMMDPAR')
-               ASMINMP    => ptr2(1:Num2do,1)
+               ASMINMP(1:ncol) => ptr2
             case('SSALDENHIPAR')
-               SSALDHP    => ptr2(1:Num2do,1)
+               SSALDHP(1:ncol) => ptr2
             case('SSALNUMHIPAR')
-               SSALNHP    => ptr2(1:Num2do,1)
+               SSALNHP(1:ncol) => ptr2
             case('SSAIDENHIPAR')
-               SSAIDHP    => ptr2(1:Num2do,1)
+               SSAIDHP(1:ncol) => ptr2
             case('SSAINUMHIPAR')
-               SSAINHP    => ptr2(1:Num2do,1)
+               SSAINHP(1:ncol) => ptr2
             case('ASMLDENHIPAR')
-               ASMLDHP    => ptr2(1:Num2do,1)
+               ASMLDHP(1:ncol) => ptr2
             case('ASMLNUMHIPAR')
-               ASMLNHP    => ptr2(1:Num2do,1)
+               ASMLNHP(1:ncol) => ptr2
             case('ASMIDENHIPAR')
-               ASMIDHP    => ptr2(1:Num2do,1)
+               ASMIDHP(1:ncol) => ptr2
             case('ASMINUMHIPAR')
-               ASMINHP    => ptr2(1:Num2do,1)
+               ASMINHP(1:ncol) => ptr2
             case('SSALDENTTPAR')
-               SSALDTP    => ptr2(1:Num2do,1)
+               SSALDTP(1:ncol) => ptr2
             case('SSALNUMTTPAR')
-               SSALNTP    => ptr2(1:Num2do,1)
+               SSALNTP(1:ncol) => ptr2
             case('SSAIDENTTPAR')
-               SSAIDTP    => ptr2(1:Num2do,1)
+               SSAIDTP(1:ncol) => ptr2
             case('SSAINUMTTPAR')
-               SSAINTP    => ptr2(1:Num2do,1)
+               SSAINTP(1:ncol) => ptr2
             case('ASMLDENTTPAR')
-               ASMLDTP    => ptr2(1:Num2do,1)
+               ASMLDTP(1:ncol) => ptr2
             case('ASMLNUMTTPAR')
-               ASMLNTP    => ptr2(1:Num2do,1)
+               ASMLNTP(1:ncol) => ptr2
             case('ASMIDENTTPAR')
-               ASMIDTP    => ptr2(1:Num2do,1)
+               ASMIDTP(1:ncol) => ptr2
             case('ASMINUMTTPAR')
-               ASMINTP    => ptr2(1:Num2do,1)
+               ASMINTP(1:ncol) => ptr2
             case('SSALDSDENLOPAR')
-               SDSLDLP    => ptr2(1:Num2do,1)
+               SDSLDLP(1:ncol) => ptr2
             case('SSALDSNUMLOPAR')
-               SDSLNLP    => ptr2(1:Num2do,1)
+               SDSLNLP(1:ncol) => ptr2
             case('SSAIDSDENLOPAR')
-               SDSIDLP    => ptr2(1:Num2do,1)
+               SDSIDLP(1:ncol) => ptr2
             case('SSAIDSNUMLOPAR')
-               SDSINLP    => ptr2(1:Num2do,1)
+               SDSINLP(1:ncol) => ptr2
             case('ASMLDSDENLOPAR')
-               ADSLDLP    => ptr2(1:Num2do,1)
+               ADSLDLP(1:ncol) => ptr2
             case('ASMLDSNUMLOPAR')
-               ADSLNLP    => ptr2(1:Num2do,1)
+               ADSLNLP(1:ncol) => ptr2
             case('ASMIDSDENLOPAR')
-               ADSIDLP    => ptr2(1:Num2do,1)
+               ADSIDLP(1:ncol) => ptr2
             case('ASMIDSNUMLOPAR')
-               ADSINLP    => ptr2(1:Num2do,1)
+               ADSINLP(1:ncol) => ptr2
             case('SSALDSDENMDPAR')
-               SDSLDMP    => ptr2(1:Num2do,1)
+               SDSLDMP(1:ncol) => ptr2
             case('SSALDSNUMMDPAR')
-               SDSLNMP    => ptr2(1:Num2do,1)
+               SDSLNMP(1:ncol) => ptr2
             case('SSAIDSDENMDPAR')
-               SDSIDMP    => ptr2(1:Num2do,1)
+               SDSIDMP(1:ncol) => ptr2
             case('SSAIDSNUMMDPAR')
-               SDSINMP    => ptr2(1:Num2do,1)
+               SDSINMP(1:ncol) => ptr2
             case('ASMLDSDENMDPAR')
-               ADSLDMP    => ptr2(1:Num2do,1)
+               ADSLDMP(1:ncol) => ptr2
             case('ASMLDSNUMMDPAR')
-               ADSLNMP    => ptr2(1:Num2do,1)
+               ADSLNMP(1:ncol) => ptr2
             case('ASMIDSDENMDPAR')
-               ADSIDMP    => ptr2(1:Num2do,1)
+               ADSIDMP(1:ncol) => ptr2
             case('ASMIDSNUMMDPAR')
-               ADSINMP    => ptr2(1:Num2do,1)
+               ADSINMP(1:ncol) => ptr2
             case('SSALDSDENHIPAR')
-               SDSLDHP    => ptr2(1:Num2do,1)
+               SDSLDHP(1:ncol) => ptr2
             case('SSALDSNUMHIPAR')
-               SDSLNHP    => ptr2(1:Num2do,1)
+               SDSLNHP(1:ncol) => ptr2
             case('SSAIDSDENHIPAR')
-               SDSIDHP    => ptr2(1:Num2do,1)
+               SDSIDHP(1:ncol) => ptr2
             case('SSAIDSNUMHIPAR')
-               SDSINHP    => ptr2(1:Num2do,1)
+               SDSINHP(1:ncol) => ptr2
             case('ASMLDSDENHIPAR')
-               ADSLDHP    => ptr2(1:Num2do,1)
+               ADSLDHP(1:ncol) => ptr2
             case('ASMLDSNUMHIPAR')
-               ADSLNHP    => ptr2(1:Num2do,1)
+               ADSLNHP(1:ncol) => ptr2
             case('ASMIDSDENHIPAR')
-               ADSIDHP    => ptr2(1:Num2do,1)
+               ADSIDHP(1:ncol) => ptr2
             case('ASMIDSNUMHIPAR')
-               ADSINHP    => ptr2(1:Num2do,1)
+               ADSINHP(1:ncol) => ptr2
             case('SSALDSDENTTPAR')
-               SDSLDTP    => ptr2(1:Num2do,1)
+               SDSLDTP(1:ncol) => ptr2
             case('SSALDSNUMTTPAR')
-               SDSLNTP    => ptr2(1:Num2do,1)
+               SDSLNTP(1:ncol) => ptr2
             case('SSAIDSDENTTPAR')
-               SDSIDTP    => ptr2(1:Num2do,1)
+               SDSIDTP(1:ncol) => ptr2
             case('SSAIDSNUMTTPAR')
-               SDSINTP    => ptr2(1:Num2do,1)
+               SDSINTP(1:ncol) => ptr2
             case('ASMLDSDENTTPAR')
-               ADSLDTP    => ptr2(1:Num2do,1)
+               ADSLDTP(1:ncol) => ptr2
             case('ASMLDSNUMTTPAR')
-               ADSLNTP    => ptr2(1:Num2do,1)
+               ADSLNTP(1:ncol) => ptr2
             case('ASMIDSDENTTPAR')
-               ADSIDTP    => ptr2(1:Num2do,1)
+               ADSIDTP(1:ncol) => ptr2
             case('ASMIDSNUMTTPAR')
-               ADSINTP    => ptr2(1:Num2do,1)
+               ADSINTP(1:ncol) => ptr2
             case('FORLDENLOPAR')
-               FORLDLP    => ptr2(1:Num2do,1)
+               FORLDLP(1:ncol) => ptr2
             case('FORLNUMLOPAR')
-               FORLNLP    => ptr2(1:Num2do,1)
+               FORLNLP(1:ncol) => ptr2
             case('FORIDENLOPAR')
-               FORIDLP    => ptr2(1:Num2do,1)
+               FORIDLP(1:ncol) => ptr2
             case('FORINUMLOPAR')
-               FORINLP    => ptr2(1:Num2do,1)
+               FORINLP(1:ncol) => ptr2
             case('FORLDENMDPAR')
-               FORLDMP    => ptr2(1:Num2do,1)
+               FORLDMP(1:ncol) => ptr2
             case('FORLNUMMDPAR')
-               FORLNMP    => ptr2(1:Num2do,1)
+               FORLNMP(1:ncol) => ptr2
             case('FORIDENMDPAR')
-               FORIDMP    => ptr2(1:Num2do,1)
+               FORIDMP(1:ncol) => ptr2
             case('FORINUMMDPAR')
-               FORINMP    => ptr2(1:Num2do,1)
+               FORINMP(1:ncol) => ptr2
             case('FORLDENHIPAR')
-               FORLDHP    => ptr2(1:Num2do,1)
+               FORLDHP(1:ncol) => ptr2
             case('FORLNUMHIPAR')
-               FORLNHP    => ptr2(1:Num2do,1)
+               FORLNHP(1:ncol) => ptr2
             case('FORIDENHIPAR')
-               FORIDHP    => ptr2(1:Num2do,1)
+               FORIDHP(1:ncol) => ptr2
             case('FORINUMHIPAR')
-               FORINHP    => ptr2(1:Num2do,1)
+               FORINHP(1:ncol) => ptr2
             case('FORLDENTTPAR')
-               FORLDTP    => ptr2(1:Num2do,1)
+               FORLDTP(1:ncol) => ptr2
             case('FORLNUMTTPAR')
-               FORLNTP    => ptr2(1:Num2do,1)
+               FORLNTP(1:ncol) => ptr2
             case('FORIDENTTPAR')
-               FORIDTP    => ptr2(1:Num2do,1)
+               FORIDTP(1:ncol) => ptr2
             case('FORINUMTTPAR')
-               FORINTP    => ptr2(1:Num2do,1)
+               FORINTP(1:ncol) => ptr2
 #endif
          end select
 
       enddo INT_VARS_2
 
-      ! Load balance the InOuts for Input
-      !----------------------------------
-      call MAPL_TimerOn(MAPL,"--DISTRIBUTE")
-      if (size(BufInOut) > 0) then
-         if (LoadBalance) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Distribute,Handle=SolarBalanceHandle,__RC__)
-      end if
-      call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
-
-      ! number of columns after load balancing
-      NCOL = size(Q,1)
-
-      call MAPL_TimerOff(MAPL,"-BALANCE")
 
 ! Do shortwave calculations on a list of soundings
 !-------------------------------------------------
@@ -4770,9 +4650,9 @@ contains
 
       ! If we have aerosols, load them.
       if (num_aero_vars > 0) then
-         TAUA = BUFIMP_AEROSOL_EXT
-         SSAA = BUFIMP_AEROSOL_SSA
-         ASYA = BUFIMP_AEROSOL_ASY
+         TAUA = reshape(AEROSOL_EXT, shape=[NCOL,LM,NUM_BANDS_SOLAR])
+         SSAA = reshape(AEROSOL_SSA, shape=[NCOL,LM,NUM_BANDS_SOLAR])
+         ASYA = reshape(AEROSOL_ASY, shape=[NCOL,LM,NUM_BANDS_SOLAR])
       end if
 
       call MAPL_TimerOff(MAPL,"-MISC")
@@ -5430,7 +5310,8 @@ contains
           ! initialize the Philox PRNG
           ! set word1 of key based on GLOBAL location
           ! 32-bits can hold all forseeable resolutions
-          seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
+!ALT          seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
+          seeds(1) = Jg1D(icol) * IM_World + Ig1D(icol)
           ! instantiate a random number stream for the column
           call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
           ! draw the random numbers for the column
@@ -6776,15 +6657,6 @@ contains
       ! Complete load balancing by retrieving work done remotely
       !---------------------------------------------------------
 
-      call MAPL_TimerOn(MAPL,"-BALANCE")
-
-      call MAPL_TimerOn(MAPL,"--RETRIEVE")
-      if (LoadBalance) then
-         if (size(BufOut)   > 0) call MAPL_BalanceWork(BufOut,  NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-         if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut,NumMax,Direction=MAPL_Retrieve,Handle=SolarBalanceHandle,__RC__)
-      end if
-      call MAPL_TimerOff(MAPL,"--RETRIEVE")
-
       ! Unpack the results. Fills "masked" (night) locations with default value from internal state
       !--------------------------------------------------------------------------------------------
       ! resulting internals are then contiguous versions
@@ -6806,41 +6678,15 @@ contains
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr4,NamesInt(k),__RC__)
-                  if (IntInOut(k)) then
-                     do j=1,ugDim(k)
-                        call UnPackIt(BufInOut(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                           daytime,NumMax,HorzDims,size(ptr4,3))
-                     end do
-                  else
-                     do j=1,ugDim(k)
-                        call UnPackIt(BufOut  (pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j), &
-                           daytime,NumMax,HorzDims,size(ptr4,3),def)
-                     end do
-                  endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-                  if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
-                  else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k),def)
-                  endif
             end select
          else
             select case(rgDim(k))
                case(MAPL_DIMSHORZVERT)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr3,NamesInt(k),__RC__)
-                  if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
-                  else
-                     call UnPackIt(BufOut  (pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3),def)
-                  endif
                case(MAPL_DIMSHORZONLY)
                   call ESMFL_StateGetPointerToData(INTERNAL,ptr2,NamesInt(k),__RC__)
-                  if (IntInOut(k)) then
-                     call UnPackIt(BufInOut(pi1),ptr2,daytime,NumMax,HorzDims,1)
-                  else
-                     call UnPackIt(BufOut  (pi1),ptr2,daytime,NumMax,HorzDims,1,def)
-                  endif
             end select
          end if
          pi1 = pi1 + NumMax*SlicesInt(k)
@@ -6851,12 +6697,6 @@ contains
       deallocate(SlicesInp,NamesInp,__STAT__)
       deallocate(SlicesInt,NamesInt,__STAT__)
       deallocate(IntInOut,rgDim,ugDim,__STAT__)
-      deallocate(BufInp,BufInOut,BufOut,__STAT__)
-      call MAPL_TimerOn(MAPL,"--DESTROY")
-      if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
-      call MAPL_TimerOff(MAPL,"--DESTROY")
-
-      call MAPL_TimerOff(MAPL,"-BALANCE")
 
       RETURN_(ESMF_SUCCESS)
     end subroutine SORADCORE
