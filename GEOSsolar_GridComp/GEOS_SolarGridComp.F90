@@ -3328,7 +3328,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
+                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
               end if
 
               ! SSA from AERO_PROVIDER (actually EXT * SSA)
@@ -3337,7 +3337,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
               end if
 
               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
@@ -3346,7 +3346,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
               end if
 
            end do SOLAR_BANDS
@@ -4773,8 +4773,8 @@ contains
       allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
-      WHERE(PL < 1000.)
-         O3 = O3 * EXP(-1.5*(LOG10(PL/10.0)-2.)**4)
+      WHERE(PL < 100.)
+         O3 = O3 * EXP(-1.5*(LOG10(PL)-2.)**2)
       ENDWHERE
 
       ! SORAD expects non-negative ozone fraction by MASS
@@ -6487,14 +6487,6 @@ contains
       CO2_R (:,1:LM  ) = CO2
       O2_R  (:,1:LM  ) = O2
       FCLD_R(:,1:LM  ) = CL (:,LM:1:-1)
-
-! Clean up negatives
-      WHERE (Q_R < 0.) Q_R = 0.
-      WHERE (O3_R < 0.) O3_R = 0.
-      WHERE (CH4_R < 0.) CH4_R = 0.
-      WHERE (CO2_R < 0.) CO2_R = 0.
-      WHERE (O2_R < 0.) O2_R = 0.
-      WHERE (FCLD_R < 0.) FCLD_R = 0.
 
       ! Adjustment for Earth/Sun distance, from MAPL_SunGetInsolation
       ADJES = DIST
