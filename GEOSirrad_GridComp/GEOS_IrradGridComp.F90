@@ -1526,10 +1526,10 @@ contains
    ! for compact multi-export handling
    real, pointer, dimension(:,:  ) :: ptr2d
    real, pointer, dimension(:,:,:) :: ptr3d
-   type S_
-     character(len=:), allocatable :: str
-   end type S_
-   type(S_), allocatable :: list(:)
+
+   type(StringVector) :: string_vec
+   type(StringVectorIterator) :: string_vec_iter
+   character(len=:), pointer :: string_pointer
 
 ! helper for testing RRTMGP error status on return;
 ! allows line number reporting cf. original call method
@@ -2033,63 +2033,111 @@ contains
       ! for efficiency sake, we try to calculate only what we export ...
       ! =================================================================
 
-      ! this line temporarily needed because of compiler bug
-      allocate(list(1)); list(1) = S_('dummy')
-
       ! are clear clean exports requested?
       export_clrnoa = .false.
-      list = [S_('FLA'), S_('FLAD'), S_('FLAU')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr3d, list(i)%str, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr3d))
+
+      call string_vec%push_back('FLA')
+      call string_vec%push_back('FLAD')
+      call string_vec%push_back('FLAU')
+      string_vec_iter = string_vec%begin()
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
+         export_clrnoa = (export_clrnoa .or. associated(ptr3d))
+         call string_vec_iter%next()
       end do
-      list = [S_('OLA'), S_('FLNSA'), S_('LAS')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr2d, list(i)%str, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr2d))
+
+      call string_vec%clear()
+      call string_vec%push_back('OLA')
+      call string_vec%push_back('FLNSA')
+      call string_vec%push_back('LAS')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
+         export_clrnoa = (export_clrnoa .or. associated(ptr2d))
+         call string_vec_iter%next()
       end do
 
       ! are clear dirty exports requested?
       export_clrsky = .false.
-      list = [S_('FLC'), S_('FLCD'), S_('FLCU')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr3d, list(i)%str, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr3d))
+
+      call string_vec%clear()
+      call string_vec%push_back('FLC')
+      call string_vec%push_back('FLCD')
+      call string_vec%push_back('FLCU')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
+         export_clrsky = (export_clrsky .or. associated(ptr3d))
+         call string_vec_iter%next()
       end do
-      list = [S_('OLC'), S_('OLCC5'), S_('FLNSC'), S_('LCS'), S_('LCSC5')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr2d, list(i)%str, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr2d))
+
+      call string_vec%clear()
+      call string_vec%push_back('OLC')
+      call string_vec%push_back('OLCC5')
+      call string_vec%push_back('FLNSC')
+      call string_vec%push_back('LCS')
+      call string_vec%push_back('LCSC5')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
+         export_clrsky = (export_clrsky .or. associated(ptr2d))
+         call string_vec_iter%next()
       end do
 
       ! are cloudy clean exports requested?
       export_allnoa = .false.
-      list = [S_('FLXA'), S_('FLXAD'), S_('FLXAU')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr3d, list(i)%str, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr3d))
+
+      call string_vec%clear()
+      call string_vec%push_back('FLXA')
+      call string_vec%push_back('FLXAD')
+      call string_vec%push_back('FLXAU')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
+         export_allnoa = (export_allnoa .or. associated(ptr3d))
+         call string_vec_iter%next()
       end do
-      list = [S_('OLRA'), S_('FLNSNA'), S_('LWSA')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr2d, list(i)%str, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr2d))
+
+      call string_vec%clear()
+      call string_vec%push_back('OLRA')
+      call string_vec%push_back('FLNSNA')
+      call string_vec%push_back('LWSA')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
+         export_allnoa = (export_allnoa .or. associated(ptr2d))
+         call string_vec_iter%next()
       end do
 
       ! are cloudy dirty exports requested?
       export_allsky = .false.
-      list = [S_('FLX'), S_('FLXD'), S_('FLXU')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr3d, list(i)%str, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr3d))
+
+      call string_vec%clear()
+      call string_vec%push_back('FLX')
+      call string_vec%push_back('FLXD')
+      call string_vec%push_back('FLXU')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
+         export_allsky = (export_allsky .or. associated(ptr3d))
+         call string_vec_iter%next()
       end do
-      list = [S_('OLR'), S_('SFCEM'), S_('FLNS'), S_('LWS')]
-      do i = 1, size(list)
-        call MAPL_GetPointer(EXPORT, ptr2d, list(i)%str, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr2d))
+
+      call string_vec%clear()
+      call string_vec%push_back('OLR')
+      call string_vec%push_back('SFCEM')
+      call string_vec%push_back('FLNS')
+      call string_vec%push_back('LWS')
+      do while ( string_vec_iter /= string_vec%end() )
+         string_pointer => string_vec_iter%get()
+         call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
+         export_allsky = (export_allsky .or. associated(ptr2d))
+         call string_vec_iter%next()
       end do
+
       ! band outputs are all-sky only for the moment
       export_allsky = (export_allsky .or. any_band_output)
-      deallocate(list,__STAT__)
 
       ! which fluxes to calculate?
       ! the clean fluxes are also used for "dirty" fluxes if no aerosols
