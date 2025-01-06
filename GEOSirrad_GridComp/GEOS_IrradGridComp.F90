@@ -62,6 +62,7 @@ module GEOS_IrradGridCompMod
   use ESMF
   use MAPL
   use GEOS_UtilsMod
+  use gFTL_StringVector
 
   use rrtmg_lw_rad, only: rrtmg_lw
   use rrtmg_lw_init, only: rrtmg_lw_ini
