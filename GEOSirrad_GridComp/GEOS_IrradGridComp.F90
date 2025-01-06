@@ -1645,12 +1645,12 @@ contains
    WHERE (RL == MAPL_UNDEF) RL = 14.e-6
    WHERE (RR == MAPL_UNDEF) RR = 50.e-6
    WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-   WHERE (RG == MAPL_UNDEF) RG = 50.e-6     
+   WHERE (RG == MAPL_UNDEF) RG = 50.e-6
    REFF(:,:,:,KICE    ) = RI * 1.0e6
    REFF(:,:,:,KLIQUID ) = RL * 1.0e6
    REFF(:,:,:,KRAIN   ) = RR * 1.0e6
    REFF(:,:,:,KSNOW   ) = RS * 1.0e6
-   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
+   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6
 
 ! Determine the model level separating high-middle and low-middle clouds
 !-----------------------------------------------------------------------
@@ -2052,6 +2052,7 @@ contains
       call string_vec%push_back('OLA')
       call string_vec%push_back('FLNSA')
       call string_vec%push_back('LAS')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
@@ -2066,6 +2067,7 @@ contains
       call string_vec%push_back('FLC')
       call string_vec%push_back('FLCD')
       call string_vec%push_back('FLCU')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
@@ -2079,6 +2081,7 @@ contains
       call string_vec%push_back('FLNSC')
       call string_vec%push_back('LCS')
       call string_vec%push_back('LCSC5')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
@@ -2093,6 +2096,7 @@ contains
       call string_vec%push_back('FLXA')
       call string_vec%push_back('FLXAD')
       call string_vec%push_back('FLXAU')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
@@ -2104,6 +2108,7 @@ contains
       call string_vec%push_back('OLRA')
       call string_vec%push_back('FLNSNA')
       call string_vec%push_back('LWSA')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
@@ -2118,6 +2123,7 @@ contains
       call string_vec%push_back('FLX')
       call string_vec%push_back('FLXD')
       call string_vec%push_back('FLXU')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
@@ -2130,6 +2136,7 @@ contains
       call string_vec%push_back('SFCEM')
       call string_vec%push_back('FLNS')
       call string_vec%push_back('LWS')
+      string_vec_iter = string_vec%begin()
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
@@ -2385,7 +2392,7 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])        
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])
         call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
 
       end if ! need_cloud_optical_props
