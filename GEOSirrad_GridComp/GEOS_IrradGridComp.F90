@@ -1938,7 +1938,7 @@ contains
         ! allow a small decrease of tmax
         call MAPL_GetResource (MAPL, &
            tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
-           DEFAULT = 15._wp, __RC__)
+           DEFAULT = 30._wp, __RC__)
         if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
           where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
         else
