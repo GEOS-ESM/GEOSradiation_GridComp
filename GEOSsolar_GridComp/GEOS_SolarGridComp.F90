@@ -5397,12 +5397,13 @@ contains
                 aer_props%g   = 0._wp
               end where
 
-              ! Because RRTMGP is (currently) compiled at R8, _wp is
-              ! R8. Apparently with aggressive compiler flags, it's
-              ! possible for, say, aer_props%ssa to become slightly
-              ! greater than one in the above renormalization. So, we
-              ! add clamps to the values based on the restrictions see
-              ! in RRTMGP/rte-frontend/mo_optical_props.F90
+              ! Because RRTMGP is (currently) compiled at R8,
+              ! _wp is R8. Apparently with aggressive compiler
+              ! flags using Intel, it's possible for, say,
+              ! aer_props%ssa to become slightly greater than one
+              ! in the above renormalization. So, we add clamps
+              ! to the values based on the restrictions see in
+              ! RRTMGP/rte-frontend/mo_optical_props.F90
               !
               ! In testing, the values seen were like 1.00000011905028
               ! so just slightly above one.
