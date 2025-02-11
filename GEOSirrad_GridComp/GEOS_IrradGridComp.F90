@@ -1935,18 +1935,18 @@ contains
       temp_ref_max = k_dist%get_temp_max() - 0.01_wp
       tmax = maxval(t_sfc)
       if (tmax > temp_ref_max) then
-        ! allow a small decrease of tmax
-        call MAPL_GetResource (MAPL, &
-           tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
-           DEFAULT = 30._wp, __RC__)
-        if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
+       !! allow a small decrease of tmax
+       !call MAPL_GetResource (MAPL, &
+       !   tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
+       !   DEFAULT = 30._wp, __RC__)
+       !if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
           where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
-        else
-          write(*,*) ' A ', tmax_decrease_OK_Kelvin, &
-                       'K decrease of tmax was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_sfc maximums (K)', temp_ref_max, tmax
-          TEST_('Found excessively warm surface temperature for RRTMGP')
-        endif
+       !else
+       !  write(*,*) ' A ', tmax_decrease_OK_Kelvin, &
+       !               'K decrease of tmax was insufficient'
+       !  write(*,*) ' RRTMGP, GEOS-5 t_sfc maximums (K)', temp_ref_max, tmax
+       !  TEST_('Found excessively warm surface temperature for RRTMGP')
+       !endif
       endif
 
       ! basic profiles
@@ -1971,17 +1971,17 @@ contains
       press_ref_min = k_dist%get_press_min()
       ptop = minval(p_lev(:,1))
       if (press_ref_min > ptop) then
-        ! allow a small increase of ptop
-        if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
+       !! allow a small increase of ptop
+       !if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
           where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
           ! make sure no pressure ordering issues were created
           _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-        else
-          write(*,*) ' A ', ptop_increase_OK_fraction, &
-                       ' fractional increase of ptop was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-          TEST_('Model top too high for RRTMGP')
-        endif
+       !else
+       !  write(*,*) ' A ', ptop_increase_OK_fraction, &
+       !               ' fractional increase of ptop was insufficient'
+       !  write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
+       !  TEST_('Model top too high for RRTMGP')
+       !endif
       endif
 
       ! pmn: temperature KLUGE
