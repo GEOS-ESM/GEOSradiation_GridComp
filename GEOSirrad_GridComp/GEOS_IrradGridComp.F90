@@ -1996,18 +1996,18 @@ contains
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
       tmin = minval(t_lay)
       if (temp_ref_min > tmin) then
-        ! allow a small increase of tmin
-        call MAPL_GetResource (MAPL, &
-           tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
-           DEFAULT = 30._wp, __RC__)
-        if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
+       !! allow a small increase of tmin
+       !call MAPL_GetResource (MAPL, &
+       !   tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
+       !   DEFAULT = 30._wp, __RC__)
+       !if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
           where (t_lay < temp_ref_min) t_lay = temp_ref_min
-        else
-          write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-                       'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
-          TEST_('Found excessively cold model temperature for RRTMGP')
-        endif
+       !else
+       !  write(*,*) ' A ', tmin_increase_OK_Kelvin, &
+       !               'K increase of tmin was insufficient'
+       !  write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
+       !  TEST_('Found excessively cold model temperature for RRTMGP')
+       !endif
       endif
 
       ! Calculate interface temperatures (t_lev) and layer midpoint separations (dzmid)
