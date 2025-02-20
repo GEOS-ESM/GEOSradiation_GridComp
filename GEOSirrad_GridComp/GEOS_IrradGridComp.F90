@@ -1997,18 +1997,18 @@ contains
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
       tmin = minval(t_lay)
       if (temp_ref_min > tmin) then
-        ! allow a small increase of tmin
-        call MAPL_GetResource (MAPL, &
-           tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
-           DEFAULT = 30._wp, __RC__)
-        if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
+       !! allow a small increase of tmin
+       !call MAPL_GetResource (MAPL, &
+       !   tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
+       !   DEFAULT = 30._wp, __RC__)
+       !if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
           where (t_lay < temp_ref_min) t_lay = temp_ref_min
-        else
-          write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-                       'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
-          TEST_('Found excessively cold model temperature for RRTMGP')
-        endif
+       !else
+       !  write(*,*) ' A ', tmin_increase_OK_Kelvin, &
+       !               'K increase of tmin was insufficient'
+       !  write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
+       !  TEST_('Found excessively cold model temperature for RRTMGP')
+       !endif
       endif
 
       ! Calculate interface temperatures (t_lev) and layer midpoint separations (dzmid)
@@ -2589,6 +2589,23 @@ contains
                 aer_props%ssa = 0._wp
                 aer_props%g   = 0._wp
               end where
+              ! Because RRTMGP is (currently) compiled at R8,
+              ! _wp is R8. Apparently with aggressive compiler
+              ! flags using Intel, it's possible for, say,
+              ! aer_props%ssa to become slightly greater than one
+              ! in the above renormalization. So, we add clamps
+              ! to the values based on the restrictions see in
+              ! RRTMGP/rte-frontend/mo_optical_props.F90
+              !
+              ! In testing, the values seen were like 1.00000011905028
+              ! so just slightly above one.
+
+              ! tau must be greater than 0.0
+              aer_props%tau = max(aer_props%tau, 0._wp)
+              ! ssa must be between 0.0 and 1.0
+              aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
+              ! g must be between -1.0 and 1.0
+              aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
           end select
         end if
 
