@@ -57,9 +57,12 @@ if (MKL_FOUND)
     rng/mo_rng_mklvsl.F90
     rng/mo_rng_mklvsl_plus.F90
     )
-
+  message(STATUS "MKL found. The mklvsl rng will be compiled.")
 else ()
-  ecbuild_warn("MKL was not found. The mklvsl rng will not be compiled. RRTMGP should not be used.")
+  list (APPEND SRCS
+    rng/mo_rng_mt19937.F90
+    )
+  message(STATUS "MKL not found. The mt19937 rng will be compiled.")
 endif()
 
 esma_add_library(${this}

@@ -3495,6 +3495,8 @@ contains
       !
       use MKL_VSL_TYPE
       use mo_rng_mklvsl_plus, only: ty_rng_mklvsl_plus
+#else
+      use mo_rng_mt19937, only: ty_rng_mt
 #endif
 
       ! for RRTMGP (use implicit inside RRTMG)
@@ -3733,6 +3735,8 @@ contains
       ! a column random number generator
 #ifdef HAVE_MKL
       type(ty_rng_mklvsl_plus) :: rng
+#else
+      type(ty_rng_mt) :: rng
 #endif
       integer, dimension(:), allocatable :: seeds
 
@@ -5470,7 +5474,6 @@ contains
 
         ! generate McICA random numbers for block
         ! Perhaps later this can be parallelized?
-#ifdef HAVE_MKL
         do isub = 1, ncols_block
           ! local 1d column index
           icol = colS + isub - 1
@@ -5478,8 +5481,12 @@ contains
           ! set word1 of key based on GLOBAL location
           ! 32-bits can hold all forseeable resolutions
           seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
+#ifdef HAVE_MKL
           ! instantiate a random number stream for the column
           call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
+#else
+          call rng%init(seeds)
+#endif
           ! draw the random numbers for the column
           urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
           if (gen_mro) then
@@ -5492,7 +5499,6 @@ contains
           ! free the rng
           call rng%end()
         end do
-#endif
 
         ! cloud sampling to gpoints
         select case (cloud_overlap_type)
