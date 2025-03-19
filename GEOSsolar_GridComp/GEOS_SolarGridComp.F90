@@ -4727,16 +4727,16 @@ contains
       QQ3(:,:,5) = QG
 
       ! Effective radii [microns]
-      WHERE (RI == MAPL_UNDEF) RI = 36.e-6
-      WHERE (RL == MAPL_UNDEF) RL = 14.e-6
-      WHERE (RR == MAPL_UNDEF) RR = 50.e-6
-      WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-      WHERE (RG == MAPL_UNDEF) RG = 50.e-6 
       RR3(:,:,1) = RI*1.e6
       RR3(:,:,2) = RL*1.e6
       RR3(:,:,3) = RR*1.e6
       RR3(:,:,4) = RS*1.e6
       RR3(:,:,5) = RG*1.e6
+      WHERE (RI == MAPL_UNDEF) RR3(:,:,1) = 36.
+      WHERE (RL == MAPL_UNDEF) RR3(:,:,2) = 14.
+      WHERE (RR == MAPL_UNDEF) RR3(:,:,3) = 50.
+      WHERE (RS == MAPL_UNDEF) RR3(:,:,4) = 50.
+      WHERE (RG == MAPL_UNDEF) RR3(:,:,5) = 50.
 
       ! Convert odd oxygen, which is the model prognostic, to ozone
       !------------------------------------------------------------
@@ -7530,6 +7530,10 @@ contains
          REFF(:,:,:,2) = RRL * 1.e6
          REFF(:,:,:,3) = RRR * 1.e6
          REFF(:,:,:,4) = RRS * 1.e6
+         WHERE (RRI == MAPL_UNDEF) REFF(:,:,:,1) = 36.
+         WHERE (RRL == MAPL_UNDEF) REFF(:,:,:,2) = 14.
+         WHERE (RRR == MAPL_UNDEF) REFF(:,:,:,3) = 50.
+         WHERE (RRS == MAPL_UNDEF) REFF(:,:,:,4) = 50.
 
          HYDROMETS(:,:,:,1) = RQI
          HYDROMETS(:,:,:,2) = RQL

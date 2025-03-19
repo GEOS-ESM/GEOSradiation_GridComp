@@ -1640,16 +1640,16 @@ contains
 
 
    ! Effective radii [microns]
-   WHERE (RI == MAPL_UNDEF) RI = 36.e-6
-   WHERE (RL == MAPL_UNDEF) RL = 14.e-6
-   WHERE (RR == MAPL_UNDEF) RR = 50.e-6
-   WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-   WHERE (RG == MAPL_UNDEF) RG = 50.e-6     
    REFF(:,:,:,KICE    ) = RI * 1.0e6
    REFF(:,:,:,KLIQUID ) = RL * 1.0e6
    REFF(:,:,:,KRAIN   ) = RR * 1.0e6
    REFF(:,:,:,KSNOW   ) = RS * 1.0e6
    REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
+   WHERE (RI == MAPL_UNDEF) REFF(:,:,:,KICE    ) = 36.
+   WHERE (RL == MAPL_UNDEF) REFF(:,:,:,KLIQUID ) = 14.
+   WHERE (RR == MAPL_UNDEF) REFF(:,:,:,KRAIN   ) = 50.
+   WHERE (RS == MAPL_UNDEF) REFF(:,:,:,KSNOW   ) = 50.
+   WHERE (RG == MAPL_UNDEF) REFF(:,:,:,KGRAUPEL) = 50.
 
 ! Determine the model level separating high-middle and low-middle clouds
 !-----------------------------------------------------------------------
