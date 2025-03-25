@@ -1641,16 +1641,16 @@ contains
 
 
    ! Effective radii [microns]
-   WHERE (RI == MAPL_UNDEF) RI = 36.e-6
-   WHERE (RL == MAPL_UNDEF) RL = 14.e-6
-   WHERE (RR == MAPL_UNDEF) RR = 50.e-6
-   WHERE (RS == MAPL_UNDEF) RS = 50.e-6
-   WHERE (RG == MAPL_UNDEF) RG = 50.e-6
    REFF(:,:,:,KICE    ) = RI * 1.0e6
    REFF(:,:,:,KLIQUID ) = RL * 1.0e6
    REFF(:,:,:,KRAIN   ) = RR * 1.0e6
    REFF(:,:,:,KSNOW   ) = RS * 1.0e6
-   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6
+   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
+   WHERE (RI == MAPL_UNDEF) REFF(:,:,:,KICE    ) = 36.
+   WHERE (RL == MAPL_UNDEF) REFF(:,:,:,KLIQUID ) = 14.
+   WHERE (RR == MAPL_UNDEF) REFF(:,:,:,KRAIN   ) = 50.
+   WHERE (RS == MAPL_UNDEF) REFF(:,:,:,KSNOW   ) = 50.
+   WHERE (RG == MAPL_UNDEF) REFF(:,:,:,KGRAUPEL) = 50.
 
 ! Determine the model level separating high-middle and low-middle clouds
 !-----------------------------------------------------------------------
@@ -2044,7 +2044,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-         export_clrnoa = (export_clrnoa .or. associated(ptr3d))
+        export_clrnoa = (export_clrnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2056,7 +2056,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-         export_clrnoa = (export_clrnoa .or. associated(ptr2d))
+        export_clrnoa = (export_clrnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2071,7 +2071,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-         export_clrsky = (export_clrsky .or. associated(ptr3d))
+        export_clrsky = (export_clrsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2085,7 +2085,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-         export_clrsky = (export_clrsky .or. associated(ptr2d))
+        export_clrsky = (export_clrsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2100,7 +2100,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-         export_allnoa = (export_allnoa .or. associated(ptr3d))
+        export_allnoa = (export_allnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2112,7 +2112,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-         export_allnoa = (export_allnoa .or. associated(ptr2d))
+        export_allnoa = (export_allnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2127,7 +2127,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-         export_allsky = (export_allsky .or. associated(ptr3d))
+        export_allsky = (export_allsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2140,7 +2140,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-         export_allsky = (export_allsky .or. associated(ptr2d))
+        export_allsky = (export_allsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2392,7 +2392,7 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])        
         call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
 
       end if ! need_cloud_optical_props
