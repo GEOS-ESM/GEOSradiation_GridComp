@@ -2593,6 +2593,7 @@ contains
                 aer_props%ssa = 0._wp
                 aer_props%g   = 0._wp
               end where
+
               ! Because RRTMGP is (currently) compiled at R8,
               ! _wp is R8. Apparently with aggressive compiler
               ! flags using Intel, it's possible for, say,
@@ -2610,6 +2611,9 @@ contains
               aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
               ! g must be between -1.0 and 1.0
               aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
+
+            class default
+              TEST_('aerosol optical properties hardwired 2-stream for now')
           end select
         end if
 
