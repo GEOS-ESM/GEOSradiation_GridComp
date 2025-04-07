@@ -476,6 +476,7 @@ contains
 ! If CO2 is provided as a RAT, import a CO2 field <<>> MSL
 !---------------------------------------------------------
     ! Using DT below since it is already declared, and avoids adding an additional var - MSL
+    call ESMF_GridCompGet(GC, CONFIG=CF, __RC__)
     call ESMF_ConfigGetAttribute(CF, DT, Label='CO2:', default=-1.0, RC=STATUS)
     VERIFY_(STATUS)
 
