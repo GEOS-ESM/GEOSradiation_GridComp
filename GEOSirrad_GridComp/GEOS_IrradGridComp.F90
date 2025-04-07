@@ -192,6 +192,7 @@ contains
     character(len=ESMF_MAXSTR) :: COMP_NAME
 
     type (MAPL_MetaComp), pointer :: MAPL
+    type (ESMF_Config) :: CF
 
     integer :: MY_STEP
     integer :: ACCUMINT
@@ -1930,7 +1931,7 @@ contains
    REFF(:,:,:,KLIQUID ) = RL * 1.0e6
    REFF(:,:,:,KRAIN   ) = RR * 1.0e6
    REFF(:,:,:,KSNOW   ) = RS * 1.0e6
-   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6         
+   REFF(:,:,:,KGRAUPEL) = RG * 1.0e6
    WHERE (RI == MAPL_UNDEF) REFF(:,:,:,KICE    ) = 36.
    WHERE (RL == MAPL_UNDEF) REFF(:,:,:,KLIQUID ) = 14.
    WHERE (RR == MAPL_UNDEF) REFF(:,:,:,KRAIN   ) = 50.
@@ -2678,7 +2679,7 @@ contains
         seeds(3) = 0
 
         ! get a view of cloud inputs with collapsed horizontal dimensions
-        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])        
+        call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])
         call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
 
       end if ! need_cloud_optical_props
