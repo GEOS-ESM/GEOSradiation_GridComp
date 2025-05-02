@@ -132,7 +132,7 @@ module GEOS_IrradGridCompMod
       .true.  , &!  05   W. Putman (CO2 Longwave IR, GOES Band 16)
       .true.  , &!  06   A. Collow (Longwave IR, GOES Band 14)
       .true.  , &!  07   W. Putman (Ozone IR, GOES Band 12)
-      .false. , &!  08
+      .true.  , &!  08   W. Putman (needed for lightning param)
       .true.  , &!  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
       .true.  , &!  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
       .true.  , &!  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
