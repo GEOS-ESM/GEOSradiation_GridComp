@@ -1519,7 +1519,6 @@ contains
    integer :: i, j, K, L, YY, DOY, ibinary
    integer :: N !<<>> MSL
 
-   real, dimension (IM,JM)         :: T2M   !  fractional cover of sub-grid regions
    real, dimension (IM,JM,NS)      :: FS    !  fractional cover of sub-grid regions
    real, dimension (IM,JM,NS)      :: TG    !  land or ocean surface temperature
    real, dimension (IM,JM,NS,10)   :: EG    !  land or ocean surface emissivity
@@ -1708,8 +1707,6 @@ contains
    real(wp) :: press_ref_min, ptop
    real(wp) ::  temp_ref_min, tmin
    real(wp) ::  temp_ref_max, tmax
-   real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
-   real(wp) :: tmin_increase_OK_Kelvin, tmax_decrease_OK_Kelvin
 
    ! block size for efficient column processing (set from resource file)
    integer :: rrtmgp_blockSize
@@ -1894,11 +1891,6 @@ contains
    else
       OFFSET = NB_CHOU_SORAD
    end if
-
-! Compute surface air temperature ("2 m") adiabatically
-!------------------------------------------------------
-
-   T2M = T(:,:,LM)*(0.5*(1.0 + PLE(:,:,LM-1)/PLE(:,:,LM)))**(-MAPL_KAPPA)
 
 ! For now, use the same emissivity for all bands
 !-----------------------------------------------
@@ -2119,7 +2111,7 @@ contains
 
       call MAPL_TimerOn(MAPL,"---IRRAD_RUN",__RC__)
       call IRRAD( IM*JM, LM,       PLE,                           &
-       T,        Q,      O3,    T2M,    CO2_FIXED,                &
+       T,        Q,      O3,    TS,     CO2_FIXED,                &
        TRACE,    N2O,   CH4,    CFC11,     CFC12, HCFC22,         &
        CWC,    FCLD,  LCLDMH, LCLDLM,    REFF,                    &
        NS,       FS,     TG,    EG,     TV,        EV,    RV,     &
@@ -2217,26 +2209,12 @@ contains
       t_sfc    = real(       reshape(TS  ,(/ncol/))        ,kind=wp)
       emis_sfc = real(spread(reshape(EMIS,(/ncol/)),1,nbnd),kind=wp)
 
-      ! pmn: surface temperature KLUGE
       ! Currently k_dist%temp_ref_max = 355K ~ 82C, but GEOS-5 seems to
       ! sometimes exceed the maximum temperature. See more comments under
       ! layer temperature kluge below. We clip it here as a kluge.
       temp_ref_max = k_dist%get_temp_max() - 0.01_wp
       tmax = maxval(t_sfc)
-      if (tmax > temp_ref_max) then
-       !! allow a small decrease of tmax
-       !call MAPL_GetResource (MAPL, &
-       !   tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
-       !   DEFAULT = 30._wp, __RC__)
-       !if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
-          where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
-       !else
-       !  write(*,*) ' A ', tmax_decrease_OK_Kelvin, &
-       !               'K decrease of tmax was insufficient'
-       !  write(*,*) ' RRTMGP, GEOS-5 t_sfc maximums (K)', temp_ref_max, tmax
-       !  TEST_('Found excessively warm surface temperature for RRTMGP')
-       !endif
-      endif
+      where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
 
       ! basic profiles
       p_lay = real(reshape(PL  ,(/ncol,LM  /)), kind=wp)
@@ -2254,50 +2232,23 @@ contains
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
       dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
 
-      ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
-      ptop = minval(p_lev(:,1))
-      if (press_ref_min > ptop) then
-       !! allow a small increase of ptop
-       !if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
-          where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
-          ! make sure no pressure ordering issues were created
-          _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-       !else
-       !  write(*,*) ' A ', ptop_increase_OK_fraction, &
-       !               ' fractional increase of ptop was insufficient'
-       !  write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-       !  TEST_('Model top too high for RRTMGP')
-       !endif
-      endif
+      where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
+      ! make sure no pressure ordering issues were created
+      _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
 
-      ! pmn: temperature KLUGE
       ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
       ! temperature below this occasionally (< 1% of time). (The lowest temp
       ! seen so far is above 145K). Consequently we will limit min(t_lay) to
       ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
       ! lower minimum temperature.
-      ! note: add 0.01K to lower limit so that t_lev calculated below will
-      !   not fall below k_dist%get_temp_min() due to roundoff issues.
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
-      tmin = minval(t_lay)
-      if (temp_ref_min > tmin) then
-       !! allow a small increase of tmin
-       !call MAPL_GetResource (MAPL, &
-       !   tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
-       !   DEFAULT = 30._wp, __RC__)
-       !if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
-          where (t_lay < temp_ref_min) t_lay = temp_ref_min
-       !else
-       !  write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-       !               'K increase of tmin was insufficient'
-       !  write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
-       !  TEST_('Found excessively cold model temperature for RRTMGP')
-       !endif
-      endif
+      where (t_lay < temp_ref_min) t_lay = temp_ref_min
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      where (t_lay > temp_ref_max) t_lay = temp_ref_max
 
       ! Calculate interface temperatures (t_lev) and layer midpoint separations (dzmid)
       ! pmn: t_lev is an optional argument of gas_optics(), and if not provided, it will supply its
@@ -2306,7 +2257,7 @@ contains
       !   is an INTERPOLATION, and since the t_lay are already KLUGED to >= temp_ref_min, this should
       !   not be a problem. But this is why the t_lev calculation must occur AFTER the t_lay KLUGE.
       !   Note that t_lev(1) gets a copy of t_lev(2), so will also be in range. We are not worried
-      !   about T2M being < temp_ref_min = 160K (surface values wont get that cold!)
+      !   about TS being < temp_ref_min = 160K (surface values wont get that cold!)
       ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, positive
       !   here). dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1
       !   is centered on LEVEL k+1 since the LEVEL indices are one-based.
@@ -2316,7 +2267,7 @@ contains
         dzmid(:,k) = t_lev(:,k+1) * real(MAPL_RGAS/MAPL_GRAV,kind=wp) * (p_lay(:,k+1) - p_lay(:,k)) / p_lev(:,k+1)
       end do
       t_lev(:,1) = t_lev(:,2)                              ! assume isotropic at TOA
-      t_lev(:,LM+1) = real(reshape(T2M,(/ncol/)),kind=wp)  ! ~surface air temperature
+      t_lev(:,LM+1) = real(reshape(TS,(/ncol/)),kind=wp)  ! ~surface air temperature
 
       ! =================================================================
       ! for efficiency sake, we try to calculate only what we export ...
@@ -3385,7 +3336,7 @@ contains
             TLEV(K) = (T(I,J,K-1) * DP(K) + T(I,J,K) * DP(K-1)) &
                       / (DP(K-1) + DP(K))
          enddo
-         TLEV(LM+1) = T2M(I,J) ! 'surface'
+         TLEV(LM+1) =  TS(I,J) ! 'surface'
          TLEV(   1) = TLEV(2)  ! model top
 
          !  Flip in vertical
