@@ -1459,7 +1459,7 @@ contains
    use mo_fluxes_byband,           only: ty_fluxes_byband
    use mo_rte_lw,                  only: rte_lw
    use mo_load_coefficients,       only: load_and_init
-   use mo_load_cloud_coefficients, only: load_cld_lutcoeff, load_cld_padecoeff
+   use mo_load_cloud_coefficients, only: load_cld_lutcoeff
 
    ! used to avoid a reshaped copy of some arrays in RRTMGP blocking
    ! (Tom Clune's suggestion)
@@ -1658,7 +1658,7 @@ contains
    class(ty_optical_props_arry), allocatable :: clean_optical_props, dirty_optical_props
 
    ! RRTMGP locals
-   logical :: top_at_1, u2s, partial_block, gen_mro, cond_inhomo
+   logical :: u2s, partial_block, gen_mro, cond_inhomo
    logical :: need_dirty_optical_props, need_cloud_optical_props
    logical :: export_clrnoa, export_clrsky, export_allnoa, export_allsky
    logical ::   calc_clrnoa,   calc_clrsky,   calc_allnoa,   calc_allsky
@@ -2222,11 +2222,6 @@ contains
       p_lev = real(reshape(PLE ,(/ncol,LM+1/)), kind=wp)
       cf_wp = real(reshape(FCLD,(/ncol,LM  /)), kind=wp)
 
-      ! RRTMGP's rte_lw takes a vertical ordering flag
-      ! (no need to flip columns as with RRTMG)
-      top_at_1 = p_lay(1, 1) < p_lay(1, LM)
-      _ASSERT(top_at_1, 'unexpected vertical ordering')
-
       ! layer pressure thicknesses used for cloud water path calculations
       ! (do before any KLUGE to top pressure so optical paths wont be affected)
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
@@ -2511,8 +2506,6 @@ contains
         call MAPL_TimerOn(MAPL,"---RRTMGP_IO_CLOUDS",__RC__)
         if (trim(cloud_optics_type)=='LUT') then
           call load_cld_lutcoeff (cloud_optics, cloud_optics_file)
-        elseif (trim(cloud_optics_type)=='PADE') then
-          call load_cld_padecoeff(cloud_optics, cloud_optics_file)
         else
           TEST_('unknown cloud_optics_type: '//trim(cloud_optics_file))
         end if
@@ -3014,7 +3007,7 @@ contains
           fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
           error_msg = rte_lw( &
             clean_optical_props, &
-            top_at_1, sources, emis_sfc(:,colS:colE), &
+            sources, emis_sfc(:,colS:colE), &
             fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
           TEST_(error_msg)
         end if
@@ -3059,7 +3052,7 @@ contains
             fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE,:,:)
             error_msg = rte_lw( &
               clean_optical_props, &
-              top_at_1, sources, emis_sfc(:,colS:colE), &
+              sources, emis_sfc(:,colS:colE), &
               fluxes_byband_allnoa, n_gauss_angles=nga, use_2stream=u2s)
             TEST_(error_msg)
           else
@@ -3069,7 +3062,7 @@ contains
             fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
             error_msg = rte_lw( &
               clean_optical_props, &
-              top_at_1, sources, emis_sfc(:,colS:colE), &
+              sources, emis_sfc(:,colS:colE), &
               fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s)
             TEST_(error_msg)
           endif
@@ -3091,7 +3084,7 @@ contains
               fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE,:)
               error_msg = rte_lw( &
                 dirty_optical_props, &
-                top_at_1, sources, emis_sfc(:,colS:colE), &
+                sources, emis_sfc(:,colS:colE), &
                 fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s)
               TEST_(error_msg)
             end if
@@ -3112,7 +3105,7 @@ contains
                 fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE,:,:)
                 error_msg = rte_lw( &
                   dirty_optical_props, &
-                  top_at_1, sources, emis_sfc(:,colS:colE), &
+                  sources, emis_sfc(:,colS:colE), &
                   fluxes_byband_allsky, n_gauss_angles=nga, use_2stream=u2s)
                 TEST_(error_msg)
               else
@@ -3121,7 +3114,7 @@ contains
                 fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
                 error_msg = rte_lw( &
                   dirty_optical_props, &
-                  top_at_1, sources, emis_sfc(:,colS:colE), &
+                  sources, emis_sfc(:,colS:colE), &
                   fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s)
                 TEST_(error_msg)
               end if

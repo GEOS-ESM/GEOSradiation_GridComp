@@ -2,10 +2,10 @@
 #define LIN2_ARG1(VAR,I,J,FINT) (VAR(I,J) + FINT * (VAR(I+1,J)-VAR(I,J)))
 
 ! ==============================================================================
-! Note: the SOLAR_RADVAL compile time flag (enabled with the ENABLE_SOLAR_RADVAL 
+! Note: the SOLAR_RADVAL compile time flag (enabled with the ENABLE_SOLAR_RADVAL
 ! CMake option) is used to select solar diagnostic features which are generally
 ! more advanced than what a regular user will need and mainly for use by the
-! the radiation code development team. They are chosen by compile time flag 
+! the radiation code development team. They are chosen by compile time flag
 ! because they bloat the restart state and may also incur other computational
 ! costs that are not warranted under normal (non-development) use.
 ! ==============================================================================
@@ -473,7 +473,7 @@ contains
     type (ty_RRTMGP_wrap)           :: wrap
 
     ! for OSRBbbRG, ISRBbbRG, and TBRBbbRG
-    integer :: ibnd 
+    integer :: ibnd
     character*2 :: bb
 
 !=============================================================================
@@ -521,7 +521,7 @@ contains
     ! Decide if should make OBIO exports
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
     VERIFY_(STATUS)
-    
+
     SOLAR_TO_OBIO = (DO_OBIO/=0)
 
 ! Set the state variable specs.
@@ -790,21 +790,21 @@ contains
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-    
+
              call MAPL_AddInternalSpec(GC,                                                  &
                 SHORT_NAME = 'OSRB'//bb//'RGN',                                             &
                 LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
                 UNITS      = '1',                                                           &
                 DIMS       = MAPL_DimsHorzOnly,                                             &
                 VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
-   
+
              call MAPL_AddInternalSpec(GC,                                                  &
                 SHORT_NAME = 'ISRB'//bb//'RGN',                                             &
                 LONG_NAME  = 'normalized_downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
                 UNITS      = '1',                                                           &
                 DIMS       = MAPL_DimsHorzOnly,                                             &
                 VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
-   
+
           end if
        end do
     end if
@@ -1475,7 +1475,7 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                                            &
        FRIENDLYTO = trim(COMP_NAME),                                                         __RC__)
 
-    ! super-layerized phase-split cloud SSA and ASM 
+    ! super-layerized phase-split cloud SSA and ASM
 
     call MAPL_AddInternalSpec(GC,                                                                  &
        SHORT_NAME = 'SSALDENLOPAR',                                                                &
@@ -2668,28 +2668,28 @@ contains
        do ibnd = 1,nbndsw
           if (band_output_supported(ibnd)) then
              write(bb,'(I0.2)') ibnd
-    
+
              call MAPL_AddExportSpec(GC,                                         &
                 SHORT_NAME = 'OSRB'//bb//'RG',                                   &
                 LONG_NAME  = 'upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
                 UNITS      = 'W m-2',                                            &
                 DIMS       = MAPL_DimsHorzOnly,                                  &
                 VLOCATION  = MAPL_VLocationNone,                          __RC__ )
-   
+
              call MAPL_AddExportSpec(GC,                                         &
                 SHORT_NAME = 'ISRB'//bb//'RG',                                   &
                 LONG_NAME  = 'downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
                 UNITS      = 'W m-2',                                            &
                 DIMS       = MAPL_DimsHorzOnly,                                  &
                 VLOCATION  = MAPL_VLocationNone,                          __RC__ )
-   
+
              call MAPL_AddExportSpec(GC,                                         &
                 SHORT_NAME = 'TBRB'//bb//'RG',                                   &
                 LONG_NAME  = 'brightness_temperature_in_RR_SW_band'//bb,         &
                 UNITS      = 'K',                                                &
                 DIMS       = MAPL_DimsHorzOnly,                                  &
                 VLOCATION  = MAPL_VLocationNone,                          __RC__ )
-    
+
           end if
        end do
     end if
@@ -2961,7 +2961,7 @@ contains
     ! (only RRTMG[P]; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
     logical :: band_output (nbndsw)
     integer :: ibnd
-    character*2 :: bb  
+    character*2 :: bb
 
 !=============================================================================
 
@@ -3070,7 +3070,7 @@ contains
       _FAIL('Total number of radiation bands is inconsistent!')
    end if
 
-   ! select which bands require OSRB output ...                                  
+   ! select which bands require OSRB output ...
    ! ------------------------------------------
    ! Only available for RRTMG[P]
    ! Must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
@@ -3080,16 +3080,16 @@ contains
          if (.not. band_output_supported(ibnd)) cycle
          write(bb,'(I0.2)') ibnd
          call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
-         if (associated(ptr2d)) then 
+         if (associated(ptr2d)) then
             band_output(ibnd) = .true.
             cycle
-         end if 
+         end if
          call MAPL_GetPointer(EXPORT, ptr2d, 'ISRB'//bb//'RG', __RC__)
-         if (associated(ptr2d)) then 
+         if (associated(ptr2d)) then
             band_output(ibnd) = .true.
             cycle
-         end if 
-         call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__) 
+         end if
+         call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
          if (associated(ptr2d)) then
             band_output(ibnd) = .true.
             cycle
@@ -3482,7 +3482,7 @@ contains
       use mo_fluxes_byband,           only: ty_fluxes_byband
       use mo_rte_sw,                  only: rte_sw
       use mo_load_coefficients,       only: load_and_init
-      use mo_load_cloud_coefficients, only: load_cld_lutcoeff, load_cld_padecoeff
+      use mo_load_cloud_coefficients, only: load_cld_lutcoeff
 
 #ifdef HAVE_MKL
       ! Type of MKL VSL Basic RNGs
@@ -3674,7 +3674,7 @@ contains
 
       ! PMN: my earlier RRTMGP implementations used cloud_props for liq and ice combined,
       ! but now, to allow separate delta-scaling for the two phases, we keep separate liq and
-      ! ice properties, and combine them later. There may be some speedup possible here, but 
+      ! ice properties, and combine them later. There may be some speedup possible here, but
       ! to allow for future more independent phases (e.g., separate condensate inhomogeneity
       ! for the phases), we keep the phase optical properties separate as long as possible.
 
@@ -3691,7 +3691,7 @@ contains
       class(ty_optical_props_arry), allocatable :: optical_props
 
       ! RRTMGP locals
-      logical :: top_at_1, partial_block, need_aer_optical_props
+      logical :: partial_block, need_aer_optical_props
       logical :: gen_mro, cond_inhomo
       logical :: rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice
       integer :: nbnd, ngpt, nmom, icergh
@@ -4101,7 +4101,7 @@ contains
                   QR    => ptr2(1:Num2do,:)
                case('QS')
                   QS    => ptr2(1:Num2do,:)
-               case('QG')               
+               case('QG')
                   QG    => ptr2(1:Num2do,:)
                case('RL')
                   RL    => ptr2(1:Num2do,:)
@@ -4955,11 +4955,6 @@ contains
       t_lay = real(T  , kind=wp)
       p_lev = real(PLE, kind=wp)
 
-      ! RRTMGP's rte_sw takes a vertical ordering flag
-      ! (no need to flip columns as with RRTMG)
-      top_at_1 = p_lay(1, 1) < p_lay(1, LM)
-      _ASSERT(top_at_1, 'unexpected vertical ordering')
-
       ! layer pressure thicknesses used for cloud water path calculations
       ! (do before any KLUGE to top pressure so optical paths wont be affected)
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
@@ -5065,8 +5060,6 @@ contains
       call MAPL_TimerOn(MAPL,"--RRTMGP_IO_CLOUDS",__RC__)
       if (trim(cloud_optics_type)=='LUT') then
         call load_cld_lutcoeff (cloud_optics, cloud_optics_file)
-      elseif (trim(cloud_optics_type)=='PADE') then
-        call load_cld_padecoeff(cloud_optics, cloud_optics_file)
       else
         TEST_('unknown cloud_optics_type: '//trim(cloud_optics_file))
       end if
@@ -5432,7 +5425,7 @@ contains
         ! liquid ...
         error_msg = cloud_optics%cloud_optics( &
           real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          dummy_wp(colS:colE,:), & 
+          dummy_wp(colS:colE,:), &
           min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
             cloud_optics%get_min_radius_liq()), &
             cloud_optics%get_max_radius_liq()), &
@@ -5601,7 +5594,7 @@ contains
             icol = colS + isub - 1
 
 #ifdef SOLAR_RADVAL
-            ! default (no cloud) for TAUx variant 
+            ! default (no cloud) for TAUx variant
             TAUTP(icol) = 0.
             TAUHP(icol) = 0.
             TAUMP(icol) = 0.
@@ -5640,7 +5633,7 @@ contains
               ! accumulate over gpts/subcolumns
               do ib = 1, nbnd
                 do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
-       
+
                   ! band weights for photosynthetically active radiation (PAR)
                   ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
                   if (ib >= 11 .and. ib <= 12) then
@@ -5857,7 +5850,7 @@ contains
 #endif
               end if
 
-            end if  ! potentially cloudy column 
+            end if  ! potentially cloudy column
           end do  ! isub
         end if  ! include_aerosols
         call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
@@ -5885,7 +5878,7 @@ contains
                 do ilay = 1,LM
                   ! only if at least potentially cloudy ...
                   if (CL(icol,ilay) > 0.) then
-  
+
                     ! prepare for radice interpolation ...
                     ! first get radice consistent with RRTMGP ice cloud optics
                     radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
@@ -5896,11 +5889,11 @@ contains
                     radfac = (radice - 2._wp) / 3._wp
                     radidx = min(max(int(radfac),1),45)
                     rfint = radfac - real(radidx,kind=wp)
-  
+
                     do ib = 1,nbnd
                       ! interpolate fdelta in radice for band ib
                       fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
-  
+
                       ! forwice calc for each g-point
                       do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
                         if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
@@ -5910,7 +5903,7 @@ contains
                         endif
                       enddo  ! g-points
                     enddo  ! bands
-  
+
                   endif  ! potentially cloudy
                 enddo  ! layers
               enddo  ! columns
@@ -6207,7 +6200,7 @@ contains
         fluxes_clrsky%flux_up  => flux_up_clrsky(colS:colE,:)
         fluxes_clrsky%flux_net => flux_net_clrsky(colS:colE,:)
         error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+          optical_props, mu0(colS:colE), toa_flux, &
           sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
           fluxes_clrsky)
         TEST_(error_msg)
@@ -6224,7 +6217,7 @@ contains
         fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky(colS:colE,:,:)
         fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky(colS:colE,:,:)
         error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+          optical_props, mu0(colS:colE), toa_flux, &
           sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
           fluxes_allsky)
         TEST_(error_msg)
@@ -6274,10 +6267,10 @@ contains
          end do
       endif
       ! TOA band fluxes
-      if (include_aerosols) then          
+      if (include_aerosols) then
         if (USE_RRTMG .or. USE_RRTMGP) then
           do ib = 1, nbnd
-            if (band_output(ib)) then 
+            if (band_output(ib)) then
               ISRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib))
               OSRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib) - bnd_flux_net_allsky(:,1,ib))
             end if
@@ -6394,9 +6387,9 @@ contains
       call MAPL_GetResource(MAPL,ICEFLGSW,'RRTMG_ICEFLG:',DEFAULT=3,__RC__)
       call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,__RC__)
 
-      if (LM > 72) then    
+      if (LM > 72) then
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
-        VERIFY_(STATUS)    
+        VERIFY_(STATUS)
       else
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
         VERIFY_(STATUS)
@@ -7174,8 +7167,8 @@ contains
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
       logical :: sfirst, ofirst
 
-      ! band wavenumber bounds (m-1) 
-      real :: wn1, wn2 
+      ! band wavenumber bounds (m-1)
+      real :: wn1, wn2
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -7683,7 +7676,7 @@ contains
             where (aCLDT > 0.) aTAUT = (aTAUL*aCLDL + aTAUM*aCLDM + aTAUH*aCLDH) / aCLDT
             if (associated(TAUX)) TAUX = aTAUT
             if (associated(COTT)) then
-              COTT = MAPL_UNDEF 
+              COTT = MAPL_UNDEF
               where (aCLDT > 0.) COTT = aTAUT
             end if
             if (associated(COTNT)) COTNT = aCLDT * aTAUT
@@ -7960,7 +7953,7 @@ contains
               else  ! USE_RRTMGP
 
                 ! get RRTMGP wavenumbers
-                if (.not. have_rrtmgp_wavenums) then 
+                if (.not. have_rrtmgp_wavenums) then
 
                   ! access RRTMGP internal state from the GC
                   if (.not. rrtmgp_state_set) then
@@ -7968,7 +7961,7 @@ contains
                     VERIFY_(status)
                     rrtmgp_state => wrap%ptr
                     rrtmgp_state_set = .true.
-                  end if 
+                  end if
 
 ! helper for testing RRTMGP error status on return;
 ! allows line number reporting cf. original call method
@@ -7977,7 +7970,7 @@ contains
                   ! initialize k-distribution if not already done
                   ! remember: its possible to have UPDATE_FIRST
                   if (.not. rrtmgp_state%initialized) then
-                    call MAPL_GetResource( & 
+                    call MAPL_GetResource( &
                       MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
                       DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
                     ! gas_concs needed only to access required gas names
@@ -8025,7 +8018,7 @@ contains
             if (USE_RRTMGP) then
 
                ! get RRTMGP wavenumbers
-               if (.not. have_rrtmgp_wavenums) then 
+               if (.not. have_rrtmgp_wavenums) then
 
                  ! access RRTMGP internal state from the GC
                  if (.not. rrtmgp_state_set) then
@@ -8033,7 +8026,7 @@ contains
                    VERIFY_(status)
                    rrtmgp_state => wrap%ptr
                    rrtmgp_state_set = .true.
-                 end if 
+                 end if
 
 ! helper for testing RRTMGP error status on return;
 ! allows line number reporting cf. original call method
@@ -8042,7 +8035,7 @@ contains
                  ! initialize k-distribution if not already done
                  ! remember: its possible to have UPDATE_FIRST
                  if (.not. rrtmgp_state%initialized) then
-                   call MAPL_GetResource( & 
+                   call MAPL_GetResource( &
                      MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
                      DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
                    ! gas_concs needed only to access required gas names
