@@ -2239,12 +2239,9 @@ contains
       ! make sure no pressure ordering issues were created
       _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
 
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
+      ! pmn: temperature KLUGE
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
+      ! larger temperature range.
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
       where (t_lay < temp_ref_min) t_lay = temp_ref_min
       temp_ref_max = k_dist%get_temp_max() - 0.01_wp
