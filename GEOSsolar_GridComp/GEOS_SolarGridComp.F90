@@ -3609,7 +3609,7 @@ contains
       real,    allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
       real,    allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
       real,    allocatable, dimension(:,:,:) :: TAUAER, SSAAER, ASMAER
-      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R
+      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R, N2O_R
 
       integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
       real,    allocatable, dimension(:,:)   :: SWUFLX,  SWDFLX,  SWUFLXC,  SWDFLXC
@@ -4843,6 +4843,22 @@ contains
         'h2o','co2','o3','n2o','co','ch4','o2','n2'])
       TEST_(error_msg)
 
+      allocate(  Q_R(NCOL,LM),__STAT__)
+      allocate( O3_R(NCOL,LM),__STAT__)
+      allocate(N2O_R(NCOL,LM),__STAT__)
+      allocate(CH4_R(NCOL,LM),__STAT__)
+
+        Q_R = Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW)
+       O3_R = O3      *(MAPL_AIRMW/MAPL_O3MW )
+      N2O_R = N2O
+      CH4_R = CH4
+
+      ! Clean up negatives
+      WHERE (   Q_R < 0.)   Q_R = 0.
+      WHERE (  O3_R < 0.)  O3_R = 0.
+      WHERE ( N2O_R < 0.) N2O_R = 0.
+      WHERE ( CH4_R < 0.) CH4_R = 0.
+
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
@@ -4851,10 +4867,15 @@ contains
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
-      TEST_(gas_concs%set_vmr('ch4', real(CH4                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('n2o', real(N2O                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('o3' , real(O3      *(MAPL_AIRMW/MAPL_O3MW ),kind=wp)))
-      TEST_(gas_concs%set_vmr('h2o', real(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),kind=wp)))
+      TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+
+      deallocate(   Q_R,__STAT__)
+      deallocate(  O3_R,__STAT__)
+      deallocate( N2O_R,__STAT__)
+      deallocate( CH4_R,__STAT__)
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
