@@ -4853,11 +4853,11 @@ contains
       N2O_R = N2O
       CH4_R = CH4
 
-      ! Clean up negatives
-      WHERE (   Q_R < 0.)   Q_R = 0.
-      WHERE (  O3_R < 0.)  O3_R = 0.
-      WHERE ( N2O_R < 0.) N2O_R = 0.
-      WHERE ( CH4_R < 0.) CH4_R = 0.
+     !! Clean up negatives (should never get to this point negative)
+     !WHERE (   Q_R < 0.)   Q_R = 0.
+     !WHERE (  O3_R < 0.)  O3_R = 0.
+     !WHERE ( N2O_R < 0.) N2O_R = 0.
+     !WHERE ( CH4_R < 0.) CH4_R = 0.
 
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
@@ -4991,9 +4991,20 @@ contains
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
-      where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
-      ! make sure no pressure ordering issues were created
-      _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
+      ptop = minval(p_lev(:,1))
+      if (press_ref_min > ptop) then
+       !! allow a small increase of ptop
+       !if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
+          where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
+          ! make sure no pressure ordering issues were created
+          _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
+       !else
+       !  write(*,*) ' A ', ptop_increase_OK_fraction, &
+       !               ' fractional increase of ptop was insufficient'
+       !  write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
+       !  TEST_('Model top too high for RRTMGP')
+       !endif
+      endif
 
       ! pmn: temperature KLUGE
       ! Find better solution, perhaps getting AER to produce a table with a

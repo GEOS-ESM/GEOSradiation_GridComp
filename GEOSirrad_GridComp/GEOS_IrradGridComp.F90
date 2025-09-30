@@ -2150,20 +2150,18 @@ contains
       allocate(N2O_R(IM*JM,LM),__STAT__)
       allocate(CH4_R(IM*JM,LM),__STAT__)
 
-      if (associated(  CO2_3d)) &
-      CO2_R = reshape( CO2_3d                          ,(/ncol,LM/))
+      if (associated(  CO2_3d)) CO2_R = reshape( CO2_3d,(/ncol,LM/))
         Q_R = reshape( Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),(/ncol,LM/))
        O3_R = reshape( O3      *(MAPL_AIRMW/MAPL_O3MW ),(/ncol,LM/))
       N2O_R = reshape( N2O                             ,(/ncol,LM/))
       CH4_R = reshape( CH4                             ,(/ncol,LM/))
 
-      ! Clean up negatives
-      if (associated(  CO2_3d)) &
-      WHERE ( CO2_R < 0.) CO2_R = 0.
-      WHERE (   Q_R < 0.)   Q_R = 0.
-      WHERE (  O3_R < 0.)  O3_R = 0.
-      WHERE ( N2O_R < 0.) N2O_R = 0.
-      WHERE ( CH4_R < 0.) CH4_R = 0.
+     !! Clean up negatives (should never get to this point negative)
+     !if (associated(  CO2_3d)) WHERE ( CO2_R < 0.) CO2_R = 0.
+     !WHERE (   Q_R < 0.)   Q_R = 0.
+     !WHERE (  O3_R < 0.)  O3_R = 0.
+     !WHERE ( N2O_R < 0.) N2O_R = 0.
+     !WHERE ( CH4_R < 0.) CH4_R = 0.
 
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
@@ -2173,17 +2171,16 @@ contains
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
       if (associated(  CO2_3d)) then
-      TEST_(gas_concs%set_vmr('co2', real(CO2_R,kind=wp)))
+         TEST_(gas_concs%set_vmr('co2', real(CO2_R,kind=wp)))
       else
-      TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
+         TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
       endif
       TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
       TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
       TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
       TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
 
-      if (associated(  CO2_3d)) &
-      deallocate( CO2_R,__STAT__)
+      if (associated(  CO2_3d)) deallocate( CO2_R,__STAT__)
       deallocate(   Q_R,__STAT__)
       deallocate(  O3_R,__STAT__)
       deallocate( N2O_R,__STAT__)
