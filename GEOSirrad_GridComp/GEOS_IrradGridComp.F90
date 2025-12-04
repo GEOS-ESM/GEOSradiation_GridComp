@@ -2143,19 +2143,51 @@ contains
         'h2o','co2','o3','n2o','co','ch4','o2','n2'])
       TEST_(error_msg)
 
+      if (associated(  CO2_3d)) &
+      allocate(CO2_R(IM*JM,LM),__STAT__)  
+      allocate(  Q_R(IM*JM,LM),__STAT__)
+      allocate( O3_R(IM*JM,LM),__STAT__)
+      allocate(N2O_R(IM*JM,LM),__STAT__)
+      allocate(CH4_R(IM*JM,LM),__STAT__)
+
+      if (associated(  CO2_3d)) &
+      CO2_R = reshape( CO2_3d                          ,(/ncol,LM/))
+        Q_R = reshape( Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),(/ncol,LM/))
+       O3_R = reshape( O3      *(MAPL_AIRMW/MAPL_O3MW ),(/ncol,LM/))
+      N2O_R = reshape( N2O                             ,(/ncol,LM/))
+      CH4_R = reshape( CH4                             ,(/ncol,LM/))
+
+      ! Clean up negatives
+      if (associated(  CO2_3d)) &
+      WHERE ( CO2_R < 0.) CO2_R = 0.
+      WHERE (   Q_R < 0.)   Q_R = 0.
+      WHERE (  O3_R < 0.)  O3_R = 0.
+      WHERE ( N2O_R < 0.) N2O_R = 0.
+      WHERE ( CH4_R < 0.) CH4_R = 0.
+
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
       TEST_(gas_concs%set_vmr('o2' , real(O2 ,kind=wp)))
-      if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
-      TEST_(gas_concs%set_vmr('ch4', real(reshape(CH4                             ,(/ncol,LM/)),kind=wp)))
-      TEST_(gas_concs%set_vmr('n2o', real(reshape(N2O                             ,(/ncol,LM/)),kind=wp)))
-      TEST_(gas_concs%set_vmr('o3' , real(reshape(O3      *(MAPL_AIRMW/MAPL_O3MW ),(/ncol,LM/)),kind=wp)))
-      TEST_(gas_concs%set_vmr('h2o', real(reshape(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),(/ncol,LM/)),kind=wp)))
-      if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d  ,(/ncol,LM/)),kind=wp))) !<<>> MSL
+      if (associated(  CO2_3d)) then
+      TEST_(gas_concs%set_vmr('co2', real(CO2_R,kind=wp)))
+      else
+      TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
+      endif
+      TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+
+      if (associated(  CO2_3d)) &
+      deallocate( CO2_R,__STAT__)
+      deallocate(   Q_R,__STAT__)
+      deallocate(  O3_R,__STAT__)
+      deallocate( N2O_R,__STAT__)
+      deallocate( CH4_R,__STAT__)
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
@@ -2239,12 +2271,9 @@ contains
       ! make sure no pressure ordering issues were created
       _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
 
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
+      ! pmn: temperature KLUGE
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
+      ! larger temperature range.
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
       where (t_lay < temp_ref_min) t_lay = temp_ref_min
       temp_ref_max = k_dist%get_temp_max() - 0.01_wp

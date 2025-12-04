@@ -3609,7 +3609,7 @@ contains
       real,    allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
       real,    allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
       real,    allocatable, dimension(:,:,:) :: TAUAER, SSAAER, ASMAER
-      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R
+      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R, N2O_R
 
       integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
       real,    allocatable, dimension(:,:)   :: SWUFLX,  SWDFLX,  SWUFLXC,  SWDFLXC
@@ -3763,6 +3763,7 @@ contains
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
       real(wp) ::  temp_ref_min, tmin
+      real(wp) ::  temp_ref_max, tmax
       real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
       real(wp) :: tmin_increase_OK_Kelvin
 
@@ -4842,6 +4843,22 @@ contains
         'h2o','co2','o3','n2o','co','ch4','o2','n2'])
       TEST_(error_msg)
 
+      allocate(  Q_R(NCOL,LM),__STAT__)
+      allocate( O3_R(NCOL,LM),__STAT__)
+      allocate(N2O_R(NCOL,LM),__STAT__)
+      allocate(CH4_R(NCOL,LM),__STAT__)
+
+        Q_R = Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW)
+       O3_R = O3      *(MAPL_AIRMW/MAPL_O3MW )
+      N2O_R = N2O
+      CH4_R = CH4
+
+      ! Clean up negatives
+      WHERE (   Q_R < 0.)   Q_R = 0.
+      WHERE (  O3_R < 0.)  O3_R = 0.
+      WHERE ( N2O_R < 0.) N2O_R = 0.
+      WHERE ( CH4_R < 0.) CH4_R = 0.
+
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
@@ -4850,10 +4867,15 @@ contains
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
-      TEST_(gas_concs%set_vmr('ch4', real(CH4                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('n2o', real(N2O                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('o3' , real(O3      *(MAPL_AIRMW/MAPL_O3MW ),kind=wp)))
-      TEST_(gas_concs%set_vmr('h2o', real(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),kind=wp)))
+      TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+
+      deallocate(   Q_R,__STAT__)
+      deallocate(  O3_R,__STAT__)
+      deallocate( N2O_R,__STAT__)
+      deallocate( CH4_R,__STAT__)
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
@@ -4969,44 +4991,18 @@ contains
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
-      ptop = minval(p_lev(:,1))
-      if (press_ref_min > ptop) then
-       !! allow a small increase of ptop
-       !if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
-          where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
-          ! make sure no pressure ordering issues were created
-          _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-       !else
-       !  write(*,*) ' A ', ptop_increase_OK_fraction, &
-       !               ' fractional increase of ptop was insufficient'
-       !  write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-       !  TEST_('Model top too high for RRTMGP')
-       !endif
-      endif
+      where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
+      ! make sure no pressure ordering issues were created
+      _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
 
       ! pmn: temperature KLUGE
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
+      ! larger temperature range.
+      temp_ref_min = k_dist%get_temp_min() + 0.01_wp
+      where (t_lay < temp_ref_min) t_lay = temp_ref_min
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      where (t_lay > temp_ref_max) t_lay = temp_ref_max
       temp_ref_min = k_dist%get_temp_min()
-      tmin = minval(t_lay)
-      if (temp_ref_min > tmin) then
-       !! allow a small increase of tmin
-       !call MAPL_GetResource (MAPL, &
-       !   tmin_increase_OK_Kelvin, 'RRTMGP_SW_TMIN_INC_OK_K:', &
-       !   DEFAULT = 30._wp, __RC__)
-       !if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
-          where (t_lay < temp_ref_min) t_lay = temp_ref_min
-       !else
-       !  write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-       !               'K increase of tmin was insufficient'
-       !  write(*,*) ' RRTMGP, GEOS-5 t_min (K)', temp_ref_min, tmin
-       !  TEST_('Found excessively cold model temperature for RRTMGP')
-       !endif
-      endif
 
       ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, +ve here).
       ! dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1 is centered
