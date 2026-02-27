@@ -131,7 +131,7 @@ module GEOS_IrradGridCompMod
       .true.  , &!  05   W. Putman (CO2 Longwave IR, GOES Band 16)
       .true.  , &!  06   A. Collow (Longwave IR, GOES Band 14)
       .true.  , &!  07   W. Putman (Ozone IR, GOES Band 12)
-      .false. , &!  08
+      .true.  , &!  08   W. Putman (needed for lightning param)
       .true.  , &!  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
       .true.  , &!  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
       .true.  , &!  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
@@ -1482,8 +1482,6 @@ contains
    real(wp) :: press_ref_min, ptop
    real(wp) ::  temp_ref_min, tmin
    real(wp) ::  temp_ref_max, tmax
-   real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
-   real(wp) :: tmin_increase_OK_Kelvin, tmax_decrease_OK_Kelvin
 
    ! block size for efficient column processing (set from resource file)
    integer :: rrtmgp_blockSize
@@ -1537,6 +1535,9 @@ contains
 
    logical :: USE_PRECIP_IN_RADIATION
    integer :: PARTITION_SIZE
+
+   real, parameter :: SSA_MAX = 0.999999
+   real, parameter :: ASY_MAX = 0.999
 
 !  Begin...
 !----------
@@ -1784,7 +1785,7 @@ contains
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
 
             if (associated(AS_PTR_3D)) then
-               AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+               AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
             end if
          end if
 
@@ -1797,7 +1798,7 @@ contains
             VERIFY_(STATUS)
 
             if (associated(AS_PTR_3D)) then
-               AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+               AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
             end if
          end if
       end do IR_BANDS
@@ -1934,20 +1935,7 @@ contains
       ! layer temperature kluge below. We clip it here as a kluge.
       temp_ref_max = k_dist%get_temp_max() - 0.01_wp
       tmax = maxval(t_sfc)
-      if (tmax > temp_ref_max) then
-        ! allow a small decrease of tmax
-        call MAPL_GetResource (MAPL, &
-           tmax_decrease_OK_Kelvin, 'RRTMGP_LW_TMAX_DEC_OK_K:', &
-           DEFAULT = 15._wp, __RC__)
-        if (tmax - temp_ref_max <= tmax_decrease_OK_Kelvin) then
-          where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
-        else
-          write(*,*) ' A ', tmax_decrease_OK_Kelvin, &
-                       'K decrease of tmax was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_sfc maximums (K)', temp_ref_max, tmax
-          TEST_('Found excessively warm surface temperature for RRTMGP')
-        endif
-      endif
+      where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
 
       ! basic profiles
       p_lay = real(reshape(PL  ,(/ncol,LM  /)), kind=wp)
@@ -1965,50 +1953,20 @@ contains
       ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
       dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
 
-      ! pmn: pressure KLUGE
       ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
       ! Find better solution, perhaps getting AER to add a higher top.
       press_ref_min = k_dist%get_press_min()
-      ptop = minval(p_lev(:,1))
-      if (press_ref_min > ptop) then
-        ! allow a small increase of ptop
-        if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
-          where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
-          ! make sure no pressure ordering issues were created
-          _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-        else
-          write(*,*) ' A ', ptop_increase_OK_fraction, &
-                       ' fractional increase of ptop was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-          TEST_('Model top too high for RRTMGP')
-        endif
-      endif
+      where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
+      ! make sure no pressure ordering issues were created
+      _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
 
       ! pmn: temperature KLUGE
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
-      ! note: add 0.01K to lower limit so that t_lev calculated below will
-      !   not fall below k_dist%get_temp_min() due to roundoff issues.
+      ! larger temperature range.
       temp_ref_min = k_dist%get_temp_min() + 0.01_wp
-      tmin = minval(t_lay)
-      if (temp_ref_min > tmin) then
-        ! allow a small increase of tmin
-        call MAPL_GetResource (MAPL, &
-           tmin_increase_OK_Kelvin, 'RRTMGP_LW_TMIN_INC_OK_K:', &
-           DEFAULT = 15._wp, __RC__)
-        if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
-          where (t_lay < temp_ref_min) t_lay = temp_ref_min
-        else
-          write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-                       'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_lay minimums (K)', temp_ref_min, tmin
-          TEST_('Found excessively cold model temperature for RRTMGP')
-        endif
-      endif
+      where (t_lay < temp_ref_min) t_lay = temp_ref_min
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      where (t_lay > temp_ref_max) t_lay = temp_ref_max
 
       ! Calculate interface temperatures (t_lev) and layer midpoint separations (dzmid)
       ! pmn: t_lev is an optional argument of gas_optics(), and if not provided, it will supply its

@@ -2963,6 +2963,9 @@ contains
     integer :: ibnd
     character*2 :: bb
 
+    real, parameter :: SSA_MAX = 0.999999
+    real, parameter :: ASY_MAX = 0.999
+
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
@@ -3337,7 +3340,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
               end if
 
               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
@@ -3346,7 +3349,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),1.0)
+                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
               end if
 
            end do SOLAR_BANDS
@@ -3759,6 +3762,7 @@ contains
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
       real(wp) ::  temp_ref_min, tmin
+      real(wp) ::  temp_ref_max, tmax
       real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
       real(wp) :: tmin_increase_OK_Kelvin
 
@@ -4773,8 +4777,8 @@ contains
       allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
-      WHERE(PL < 1000.)
-         O3 = O3 * EXP(-1.5*(LOG10(PL/10.0)-2.)**4)
+      WHERE(PL < 100.)
+         O3 = O3 * EXP(-1.5*(LOG10(PL)-2.)**2)
       ENDWHERE
 
       ! SORAD expects non-negative ozone fraction by MASS
@@ -4967,42 +4971,19 @@ contains
       press_ref_min = k_dist%get_press_min()
       ptop = minval(p_lev(:,1))
       if (press_ref_min > ptop) then
-        ! allow a small increase of ptop
-        if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
           where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
           ! make sure no pressure ordering issues were created
           _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-        else
-          write(*,*) ' A ', ptop_increase_OK_fraction, &
-                       ' fractional increase of ptop was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-          TEST_('Model top too high for RRTMGP')
-        endif
       endif
 
       ! pmn: temperature KLUGE
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
+      ! larger temperature range.
+      temp_ref_min = k_dist%get_temp_min() + 0.01_wp
+      where (t_lay < temp_ref_min) t_lay = temp_ref_min
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      where (t_lay > temp_ref_max) t_lay = temp_ref_max
       temp_ref_min = k_dist%get_temp_min()
-      tmin = minval(t_lay)
-      if (temp_ref_min > tmin) then
-        ! allow a small increase of tmin
-        call MAPL_GetResource (MAPL, &
-           tmin_increase_OK_Kelvin, 'RRTMGP_SW_TMIN_INC_OK_K:', &
-           DEFAULT = 15._wp, __RC__)
-        if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
-          where (t_lay < temp_ref_min) t_lay = temp_ref_min
-        else
-          write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-                       'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_min (K)', temp_ref_min, tmin
-          TEST_('Found excessively cold model temperature for RRTMGP')
-        endif
-      endif
 
       ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, +ve here).
       ! dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1 is centered
