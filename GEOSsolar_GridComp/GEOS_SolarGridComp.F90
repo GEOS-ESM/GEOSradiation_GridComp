@@ -4781,8 +4781,8 @@ contains
       allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
-      WHERE(PL < 1000.)
-         O3 = O3 * EXP(-1.5*(LOG10(PL/10.0)-2.)**4)
+      WHERE(PL < 100.)
+         O3 = O3 * EXP(-1.5*(LOG10(PL)-2.)**2)
       ENDWHERE
 
       ! SORAD expects non-negative ozone fraction by MASS
