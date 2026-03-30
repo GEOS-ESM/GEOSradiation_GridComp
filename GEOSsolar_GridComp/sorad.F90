@@ -15,7 +15,7 @@ module soradmod
          caib, caif
    use gettau
 
-   use MAPL_ConstantsMod, only: MAPL_R4, MAPL_R8, MAPL_GRAV
+   use MAPL_Constants, only: MAPL_R4, MAPL_R8, MAPL_GRAV
 
    implicit none
 

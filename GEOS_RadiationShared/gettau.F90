@@ -12,7 +12,7 @@ module gettau
 
 ! !USES:
 
-   use MAPL_ConstantsMod, only: MAPL_GRAV
+   use MAPL_Constants, only: MAPL_GRAV
 
    implicit none
    private
@@ -47,13 +47,13 @@ contains
       real,    intent(IN ) :: fcld(:)        !  Cloud fraction (used sometimes)
       real,    intent(IN ) :: reff(:,:)      !  Effective radius (microns)
       real,    intent(IN ) :: hydromets(:,:) !  Hydrometeors (kg/kg)
-      integer, intent(IN ) :: ict, icb       !  Flags for various uses 
+      integer, intent(IN ) :: ict, icb       !  Flags for various uses
 !                 ict  = 0   Indicates that in-cloud values have been given
 !                            and are expected
 !                 ict != 0   Indicates that overlap computation is needed, and:
 !                               ict is the level of the mid-high boundary
 !                               icb is the level of the low-mid  boundary
-!                
+!
 ! !OUTPUT PARAMETERS:
       real,    intent(OUT) :: taubeam(:,:)   !  Optical Depth for Beam Radiation
       real,    intent(OUT) :: taudiff(:,:)   !  Optical Depth for Diffuse Radiation
@@ -68,11 +68,11 @@ contains
 !                 3         Falling Liquid (Rain)
 !                 4         Falling Ice (Snow)
 !
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
+!  In the below calculations, the constants used in the tau calculation are in
+!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the
 !  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
 !
-! !REVISION HISTORY: 
+! !REVISION HISTORY:
 !    2011.10.27   Molod moved to Radiation_Shared and revised arg list, units
 !    2011.11.16   MAT: Generalized to a call that is per-column
 !
@@ -117,13 +117,13 @@ contains
       real,    intent(IN ) :: fcld(:)        !  Cloud fraction (used sometimes)
       real,    intent(IN ) :: reff(:,:)      !  Effective radius (microns)
       real,    intent(IN ) :: hydromets(:,:) !  Hydrometeors (kg/kg)
-      integer, intent(IN ) :: ict, icb           !  Flags for various uses 
+      integer, intent(IN ) :: ict, icb           !  Flags for various uses
 !                 ict  = 0   Indicates that in-cloud values have been given
 !                            and are expected
 !                 ict != 0   Indicates that overlap computation is needed, and:
 !                               ict is the level of the mid-high boundary
 !                               icb is the level of the low-mid  boundary
-!                
+!
 ! !OUTPUT PARAMETERS:
       real,    intent(OUT) :: taubeam(:,:)   !  Optical depth for beam radiation
       real,    intent(OUT) :: taudiff(:,:)   !  Optical depth for diffuse radiation
@@ -139,11 +139,11 @@ contains
 !                 3         Falling Liquid (Rain)
 !                 4         Falling Ice (Snow)
 !
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
+!  In the below calculations, the constants used in the tau calculation are in
+!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the
 !  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
 !
-! !REVISION HISTORY: 
+! !REVISION HISTORY:
 !    2011.10.27   Molod moved to Radiation_Shared and revised arg list, units
 !    2011.11.16   MAT: Generalized to a call that is per-column
 !
@@ -201,11 +201,11 @@ contains
 !                 3         Falling Liquid (Rain)
 !                 4         Falling Ice (Snow)
 !
-!  In the below calculations, the constants used in the tau calculation are in 
-!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the 
+!  In the below calculations, the constants used in the tau calculation are in
+!  m$^2$ g$^{-1}$ and m$^2$ g$^{-1}$ $\mu$m. Thus, we must convert the kg contained in the
 !  pressure (Pa = kg m$^{-1}$ s$^{-2}$) to grams.
 !
-! !REVISION HISTORY: 
+! !REVISION HISTORY:
 !    2011.11.18   MAT moved to Radiation_Shared and revised arg list, units
 !
 !EOP
