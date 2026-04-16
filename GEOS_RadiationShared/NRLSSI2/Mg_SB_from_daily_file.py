@@ -34,6 +34,7 @@ class Mg_SB_Daily(object):
                      'tsi-ssi_v02r01_model-input-time-series_s18820101_e20231231_c20240221.txt',
                      # Append your v03 file(s) for 2024+ at the end of this list.
                      'tsi-ssi_v03r00_model-input-time-series_s18740509_e20250331_c20250723.txt',
+                     'tsi-ssi_v03r00_model-input-time-series_s18740509_e20251231_c20260305.txt',
                  ],
                  verbose=True):
 
