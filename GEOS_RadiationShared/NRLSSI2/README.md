@@ -88,7 +88,7 @@ the `__main__` block of `TSI_Mg_SB_merged_from_daily.py`.
 ## E. Running the Preprocessor
 
 ```bash
-python TSI_Mg_SB_merged_from_daily.py
+python3 TSI_Mg_SB_merged_from_daily.py
 ```
 
 After the script completes, rename `NRLSSI2.vYYYY.txt` in `OUTDIR` to reflect the correct year.
