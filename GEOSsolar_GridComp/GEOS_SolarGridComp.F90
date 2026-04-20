@@ -3796,6 +3796,7 @@ contains
       integer :: NumMax, HorzDims(2)
       integer :: ibinary
       real :: def
+      real :: adl_fac, adl_pturn
 
       real :: xx
       real, allocatable, dimension(:) :: ILWT
@@ -5463,19 +5464,30 @@ contains
 
 !!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
 
+        call MAPL_GetResource (MAPL, adl_fac, Label="CLDCORFAC:", default=1., __RC__)
+        call MAPL_GetResource (MAPL, adl_pturn, Label="CLDCORPTURN:", default=800., __RC__)
+        
         ! exponential inter-layer correlations
         ! [alpha|rcorr](k) is correlation between layers k and k+1
         ! dzmid(k) is separation between midpoints of layers k and k+1
         if (gen_mro) then
           do ilay = 1,LM-1
-            ! cloud fraction correlation
-            alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
+             ! cloud fraction correlation
+             where (p_lay(colS:colE,ilay).gt.adl_pturn)
+                alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl_fac*adl(colS:colE),kind=wp))
+             elsewhere
+                alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
+             end where
           enddo
           if (cond_inhomo) then
             do ilay = 1,LM-1
               ! condensate correlation
-              rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
-            enddo
+             where (p_lay(colS:colE,ilay).gt.adl_pturn)
+                rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl_fac*rdl(colS:colE),kind=wp))
+             elsewhere
+                rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))              
+             end where
+           enddo
           endif
         endif
 
