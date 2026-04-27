@@ -184,6 +184,10 @@ module GEOS_SolarGridCompMod
 
   use mo_rte_kind, only: wp
 
+  ! +++ awlee
+  use MAPL_PythonBridge, only: MAPL_pybridge_gcinit, MAPL_pybridge_gcrun, MAPL_pybridge_gcrun_with_internal
+  ! --- alwee
+
   implicit none
   private
 
@@ -690,6 +694,43 @@ contains
 !  gets its value from that space.
 
 !  !INTERNAL STATE:
+
+    ! +++awlee
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_latitude',                                  &
+       UNITS      ='radians',                                                &
+       SHORT_NAME ='MLRAD_LATS',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_longitude',                                 &
+       UNITS      ='radians',                                                &
+       SHORT_NAME ='MLRAD_LONS',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_day_of_year',                               &
+       UNITS      ='1',                                                      &
+       SHORT_NAME ='MLRAD_DOY',                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_hour_utc',                                  &
+       UNITS      ='hour',                                                   &
+       SHORT_NAME ='MLRAD_HH',                                               &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_bottom_pressure',                           &
+       UNITS      ='hPa',                                                    &
+       SHORT_NAME ='MLRAD_PBOT',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+    ! --- awlee
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  ='normalized_net_downward_shortwave_flux_in_air',          &
@@ -2036,6 +2077,15 @@ contains
 
 !  !EXPORT STATE:
 
+    ! +++ awlee
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'ml_additional_shortwave_heating_rate',                  &
+       UNITS      = 'K s-1',                                                 &
+       SHORT_NAME = 'MLRADSW',                                               &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                              __RC__)
+    ! --- awlee
+
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  ='net_downward_shortwave_flux_in_air',                     &
        UNITS      ='W m-2',                                                  &
@@ -2765,6 +2815,15 @@ contains
     real, pointer, dimension(:,:) :: LONS
     real, pointer, dimension(:,:) :: LATS
 
+    ! +++ awlee
+    real, pointer, dimension(:,:,:) :: T, PLE
+    real, pointer, dimension(:,:)   :: MLRAD_LATS_2D
+    real, pointer, dimension(:,:)   :: MLRAD_LONS_2D
+    real, pointer, dimension(:,:)   :: MLRAD_DOY_2D
+    real, pointer, dimension(:,:)   :: MLRAD_HH_2D
+    real, pointer, dimension(:,:)   :: MLRAD_PBOT_2D
+    ! --- awlee
+
     real, pointer, dimension(:,:,:) :: ptr3d
     real, pointer, dimension(:,:  ) :: ptr2d
 
@@ -2803,8 +2862,9 @@ contains
 
     integer :: CalledLast
     integer :: LCLDMH, LCLDLM
-    integer :: YY, DOY
+    integer :: YY, DOY, HH ! +++ awlee add HH
     integer :: K
+    real    :: MLRAD_P_BOTTOM_HPA ! +++ awlee
     real    :: CO2
     real    :: PRS_LOW_MID
     real    :: PRS_MID_HIGH
@@ -2836,6 +2896,10 @@ contains
     type(StringVector) :: string_vec
     type(StringVectorIterator) :: string_vec_iter
     character(len=:), pointer :: string_pointer
+
+    ! +++ awlee
+    logical, save :: pybridgy_initialized = .false.
+    ! --- awlee
 
 !=============================================================================
 
@@ -2870,6 +2934,7 @@ contains
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
+    call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=0.1, __RC__) ! +++ awlee
 
     ! Should we load balance solar radiation?
     ! For the single-column model, we always use the DATMO DYCORE.
@@ -2889,7 +2954,7 @@ contains
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
-    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, __RC__)
+    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, __RC__) ! +++ awlee add H=HH
     if(CO2<0.0) then
        CO2 = GETCO2(YY,DOY)
        write(MSGSTRING,'(A,I4,A,I3,A,e12.5)') &
@@ -2904,6 +2969,42 @@ contains
        endif
        call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, __RC__)
     end if
+
+!   +++ awlee
+    call MAPL_GetPointer(IMPORT, T,   'T',   __RC__)
+    call MAPL_GetPointer(IMPORT, PLE, 'PLE', __RC__)
+
+    call MAPL_GetPointer(INTERNAL, MLRAD_LATS_2D, 'MLRAD_LATS', __RC__)
+    call MAPL_GetPointer(INTERNAL, MLRAD_LONS_2D, 'MLRAD_LONS', __RC__)
+    call MAPL_GetPointer(INTERNAL, MLRAD_DOY_2D,  'MLRAD_DOY',  __RC__)
+    call MAPL_GetPointer(INTERNAL, MLRAD_HH_2D,   'MLRAD_HH',   __RC__)
+    call MAPL_GetPointer(INTERNAL, MLRAD_PBOT_2D, 'MLRAD_PBOT', __RC__)
+
+    MLRAD_LATS_2D(:,:) = LATS(:,:)
+    MLRAD_LONS_2D(:,:) = LONS(:,:)
+    MLRAD_DOY_2D(:,:)  = real(DOY)
+    MLRAD_HH_2D(:,:)   = real(HH)
+    MLRAD_PBOT_2D(:,:) = MLRAD_P_BOTTOM_HPA
+
+    if (MAPL_AM_I_ROOT()) then
+       write(0,'(A,3(I0,1X))') '[MLRAD] IM JM LM = ', IM, JM, LM
+       write(0,'(A,2(I0,1X))') '[MLRAD] shape(LATS) = ', size(LATS,1), size(LATS,2)
+       write(0,'(A,2(I0,1X))') '[MLRAD] shape(LONS) = ', size(LONS,1), size(LONS,2)
+       write(0,'(A,3(I0,1X))') '[MLRAD] shape(T)   = ', size(T,1), size(T,2), size(T,3)
+       write(0,'(A,3(I0,1X))') '[MLRAD] shape(PLE) = ', size(PLE,1), size(PLE,2), size(PLE,3)
+       write(0,'(A,I0)') '[MLRAD] DOY = ', DOY
+       write(0,'(A,I0)') '[MLRAD] HH  = ', HH
+       write(0,'(A,ES12.4)') '[MLRAD] P bottom (hPa) = ', MLRAD_P_BOTTOM_HPA
+    end if
+
+    if (.not. pybridge_initialized) then
+       call MAPL_pybridge_gcinit("geos_mlrad_driver", MAPL, IMPORT, EXPORT)
+       pybridge_initialized = .true.
+    end if
+
+    call MAPL_pybridge_gcrun_with_internal("geos_mlrad_driver", MAPL, IMPORT, EXPORT, INTERNAL)
+
+!   --- awlee
 
     ! Decide which radiation to use:
     ! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
