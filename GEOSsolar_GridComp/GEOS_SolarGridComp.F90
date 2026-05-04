@@ -7118,7 +7118,7 @@ contains
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
     subroutine compute_rte_sw( &
         colS, colE, ngpt, &
-        tsi, toa_flux, need_aer_optical_props, aer_props, optical_props, &
+        tsi, toa_flux, optical_props, &
         top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
         fluxes_clrsky, flux_up_clrsky, flux_net_clrsky, &
         fluxes_allsky, flux_up_allsky, flux_net_allsky, &
@@ -7134,8 +7134,6 @@ contains
       integer,                              intent(in)    :: colS, colE, ngpt
       real(wp),                             intent(in)    :: tsi(:)
       real(wp),                             intent(inout) :: toa_flux(:,:)
-      logical,                              intent(in)    :: need_aer_optical_props
-      class(ty_optical_props_arry),         intent(inout) :: aer_props
       class(ty_optical_props_arry),         intent(inout) :: optical_props
       logical,                              intent(in)    :: top_at_1
       real(wp),                             intent(in)    :: mu0(:)
@@ -7164,11 +7162,6 @@ contains
       ! scale to our tsi
       ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
       toa_flux = toa_flux * spread(tsi(colS:colE)/sum(toa_flux,dim=2), 2, ngpt)
-
-      ! add in aerosol optical properties if requested and available
-      if (need_aer_optical_props) then
-        TEST_(aer_props%increment(optical_props))
-      end if
 
       ! clear-sky radiative transfer
       fluxes_clrsky%flux_up  => flux_up_clrsky
@@ -7514,9 +7507,16 @@ contains
         MAPL, __RC__)
 #endif
 
+      ! add in aerosol optical properties if requested and available
+      ! (done here rather than inside compute_rte_sw to avoid passing
+      !  an unallocated polymorphic aer_props when aerosols are inactive)
+      if (need_aer_optical_props) then
+        TEST_(aer_props%increment(optical_props))
+      end if
+
       call compute_rte_sw( &
         colS, colE, ngpt, &
-        tsi, toa_flux, need_aer_optical_props, aer_props, optical_props, &
+        tsi, toa_flux, optical_props, &
         top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
         fluxes_clrsky, flux_up_clrsky(colS:colE,:), flux_net_clrsky(colS:colE,:), &
         fluxes_allsky, flux_up_allsky(colS:colE,:), flux_net_allsky(colS:colE,:), &
