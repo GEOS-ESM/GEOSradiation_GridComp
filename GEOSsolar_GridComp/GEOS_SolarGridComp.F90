@@ -5234,26 +5234,13 @@ contains
         colE = colS + ncols_block - 1
 
         ! allocate per-block arrays sized to this block's column count
-        allocate(urand(ngpt,LM,ncols_block),__STAT__)
-        if (gen_mro) then
-          allocate(urand_aux(ngpt,LM,ncols_block),__STAT__)
-          if (cond_inhomo) then
-            allocate(urand_cond    (ngpt,LM,ncols_block),__STAT__)
-            allocate(urand_cond_aux(ngpt,LM,ncols_block),__STAT__)
-          end if
-        end if
+        ! Note: urand, urand_aux, urand_cond, urand_cond_aux, alpha, rcorr, zcw,
+        ! seeds, cld_mask are now local to compute_cloud_optics_mcica.
+        ! cld_mask is intent(out) and is allocated inside that subroutine.
 
         allocate(toa_flux(ncols_block,ngpt),    __STAT__)
-        allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
         allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
         allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
-        if (gen_mro) then
-          allocate(alpha(ncols_block,LM-1),     __STAT__)
-          if (cond_inhomo) then
-            allocate(rcorr(ncols_block,LM-1),   __STAT__)
-            allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
-          endif
-        endif
         if (include_aerosols) &
           allocate(ClearCounts(4,ncols_block),  __STAT__)
 
@@ -5296,157 +5283,16 @@ contains
         call compute_aer_optics(colS, colE, need_aer_optical_props, &
           taua, ssaa, asya, aer_props, __RC__)
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-        ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
-        ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
-        ! Do phases separately to allow for different forward scattering, etc., per earlier note.
-        ! liquid ...
-        error_msg = cloud_optics%cloud_optics( &
-          real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          dummy_wp(colS:colE,:), & 
-          min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
-            cloud_optics%get_min_radius_liq()), &
-            cloud_optics%get_max_radius_liq()), &
-          dummy_wp(colS:colE,:), &
-          cloud_props_bnd_liq)
-        TEST_(error_msg)
-        ! ice ...
-        error_msg = cloud_optics%cloud_optics( &
-          dummy_wp(colS:colE,:), &
-          real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          dummy_wp(colS:colE,:), &
-          min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
-            cloud_optics%get_min_radius_ice()), &
-            cloud_optics%get_max_radius_ice()), &
-          cloud_props_bnd_ice)
-        TEST_(error_msg)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
-
-!!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
-
-        ! exponential inter-layer correlations
-        ! [alpha|rcorr](k) is correlation between layers k and k+1
-        ! dzmid(k) is separation between midpoints of layers k and k+1
-        if (gen_mro) then
-          do ilay = 1,LM-1
-            ! cloud fraction correlation
-            alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
-          enddo
-          if (cond_inhomo) then
-            do ilay = 1,LM-1
-              ! condensate correlation
-              rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
-            enddo
-          endif
-        endif
-
-        ! generate McICA random numbers for block
-        ! Perhaps later this can be parallelized?
-        do isub = 1, ncols_block
-          ! local 1d column index
-          icol = colS + isub - 1
-          ! initialize the Philox PRNG
-          ! set word1 of key based on GLOBAL location
-          ! 32-bits can hold all forseeable resolutions
-          seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
-#ifdef HAVE_MKL
-          ! instantiate a random number stream for the column
-          call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
-#else
-          call rng%init(seeds)
-#endif
-          ! draw the random numbers for the column
-          urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-          if (gen_mro) then
-            urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            if (cond_inhomo) then
-              urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-              urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            endif
-          end if
-          ! free the rng
-          call rng%end()
-        end do
-
-        ! cloud sampling to gpoints
-        select case (cloud_overlap_type)
-          case ("MAX_RAN_OVERLAP")
-            error_msg = sampled_mask_max_ran( &
-              urand, real(CL(colS:colE,:),kind=wp), cld_mask)
-            TEST_(error_msg)
-          case ("EXP_RAN_OVERLAP")
-            ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
-            ! to be provided ... it is not the same as alpha, which is a probability
-!           error_msg = sampled_mask_exp_ran( &
-!             urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), corr_coeff, cld_mask)
-!           TEST_(error_msg)
-            TEST_('EXP_RAN_OVERLAP not implemented yet')
-          case ("GEN_MAX_RAN_OVERLAP")
-            ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
-            ! cloud presence and cloud condensate are separately generalized maximum-random:
-            error_msg = sampled_urand_gen_max_ran(alpha, &
-              urand,urand_aux)
-            TEST_(error_msg)
-            if (cond_inhomo) then
-              error_msg = sampled_urand_gen_max_ran(rcorr, &
-                urand_cond,urand_cond_aux)
-              TEST_(error_msg)
-            end if
-            do isub = 1,ncols_block
-              icol = colS + isub - 1
-              do ilay = 1,LM
-                cld_frac = CL(icol,ilay)
-
-                ! if grid-box clear, no subgrid variability
-                if (cld_frac <= 0.) then
-                  cld_mask(isub,ilay,:) = .false.
-                else
-                  ! subgrid-scale cloud mask
-                  cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
-
-                  ! subgrid-scale condensate
-                  if (cond_inhomo) then
-                    ! level of condensate inhomogeneity based on cloud fraction.
-                    if (cld_frac > 0.99) then
-                      sigma_qcw = 0.5
-                    elseif (cld_frac > 0.9) then
-                      sigma_qcw = 0.71
-                    else
-                      sigma_qcw = 1.0
-                    endif
-                    do igpt = 1,ngpt
-                      if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
-                        zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
-                    end do
-                  end if
-                end if
-
-              end do
-            end do
-
-          case default
-            TEST_('RRTMGP_SW: unknown cloud overlap')
-        end select
-
-        ! draw McICA optical property samples (band->gpt)
-        TEST_(draw_samples(cld_mask, cloud_props_bnd_liq, cloud_props_gpt_liq))
-        TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
-
-        ! Scaling to sub-gridscale water paths:
-        ! since tau for each phase is linear in the phase's water path
-        ! and since the scaling zcw applies equally to both phases, the
-        ! total g-point optical thickness tau will scale with zcw.
-        if (gen_mro) then
-          if (cond_inhomo) &
-            where (cld_mask) cloud_props_gpt_liq%tau = cloud_props_gpt_liq%tau * zcw
-            where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
-        end if
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+        call compute_cloud_optics_mcica( &
+          colS, colE, ncols_block, LM, ngpt, &
+          gen_mro, cond_inhomo, cloud_overlap_type, cwp_fac, IM_World, &
+          seeds(2), &
+          QQ3, RR3, dp_wp, dummy_wp, CL, dzmid, adl, rdl, Ig1D, Jg1D, &
+          cloud_optics, &
+          cloud_props_bnd_liq, cloud_props_bnd_ice, &
+          cloud_props_gpt_liq, cloud_props_gpt_ice, &
+          cld_mask, &
+          MAPL, __RC__)
 
         ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
         ! ** Calculated from subcolumn ensemble, so stochastic **
@@ -6104,25 +5950,12 @@ contains
         call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
 
         ! deallocate per-block arrays
-        deallocate(urand,         __STAT__)
-        if (gen_mro) then
-          deallocate(urand_aux,   __STAT__)
-          if (cond_inhomo) then
-            deallocate(urand_cond,     __STAT__)
-            deallocate(urand_cond_aux, __STAT__)
-          end if
-        end if
+        ! Note: urand*, alpha, rcorr, zcw are now local to compute_cloud_optics_mcica.
+        ! cld_mask is intent(out) from that subroutine; deallocate it here after use.
         deallocate(toa_flux,      __STAT__)
         deallocate(cld_mask,      __STAT__)
         deallocate(forwliq,       __STAT__)
         deallocate(forwice,       __STAT__)
-        if (gen_mro) then
-          deallocate(alpha,       __STAT__)
-          if (cond_inhomo) then
-            deallocate(rcorr,     __STAT__)
-            deallocate(zcw,       __STAT__)
-          endif
-        endif
         if (include_aerosols) &
           deallocate(ClearCounts, __STAT__)
 
@@ -6211,20 +6044,18 @@ contains
 
       ! clean up
       deallocate(band_lims_gpt,__STAT__)
-      deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,toa_flux,__STAT__)
+      deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,__STAT__)
       deallocate(dummy_wp,p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
       deallocate(flux_up_clrsky,flux_net_clrsky,__STAT__)
       deallocate(flux_up_allsky,flux_net_allsky,__STAT__)
       deallocate(bnd_flux_dn_allsky,bnd_flux_net_allsky,bnd_flux_dir_allsky,__STAT__)
-      deallocate(seeds,urand,cld_mask,__STAT__)
-      deallocate(forwliq,forwice,__STAT__)
+      deallocate(seeds,__STAT__)
       if (gen_mro) then
-        deallocate(adl,alpha,urand_aux,__STAT__)
+        deallocate(adl,__STAT__)
         if (cond_inhomo) then
-          deallocate(rdl,rcorr,urand_cond,urand_cond_aux,zcw,__STAT__)
+          deallocate(rdl,__STAT__)
         endif
       end if
-      if (include_aerosols) deallocate(ClearCounts,__STAT__)
       call cloud_optics%finalize()
       call cloud_props_gpt_liq%finalize()
       call cloud_props_gpt_ice%finalize()
@@ -6922,6 +6753,245 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_aer_optics
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Compute cloud optical properties and McICA sampling for one block.
+    ! All per-block temporaries (alpha, rcorr, zcw, urand*, cld_mask, rng,
+    ! seeds) are local -- thread-private in future !$OMP PARALLEL DO use.
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_cloud_optics_mcica( &
+        colS, colE, ncols_block, LM, ngpt, &
+        gen_mro, cond_inhomo, cloud_overlap_type, cwp_fac, IM_World, &
+        seeds_time_key, &
+        QQ3, RR3, dp_wp, dummy_wp, CL, dzmid, adl, rdl, Ig1D, Jg1D, &
+        cloud_optics, &
+        cloud_props_bnd_liq, cloud_props_bnd_ice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        cld_mask, &
+        MAPL, RC)
+
+      use mo_cloud_sampling,          only: draw_samples, &
+                                            sampled_mask_max_ran, &
+                                            sampled_urand_gen_max_ran
+      use mo_cloud_optics_rrtmgp,     only: ty_cloud_optics_rrtmgp
+      use mo_optical_props,           only: ty_optical_props_arry
+      use mo_rte_kind,                only: wp
+      use cloud_condensate_inhomogeneity, only: zcw_lookup
+#ifdef HAVE_MKL
+      use MKL_VSL_TYPE
+      use mo_rng_mklvsl_plus,         only: ty_rng_mklvsl_plus
+#else
+      use mo_rng_mt19937,             only: ty_rng_mt
+#endif
+
+      integer,                        intent(in)    :: colS, colE, ncols_block, LM, ngpt
+      logical,                        intent(in)    :: gen_mro, cond_inhomo
+      character(len=*),               intent(in)    :: cloud_overlap_type
+      real(wp),                       intent(in)    :: cwp_fac
+      integer,                        intent(in)    :: IM_World
+      integer,                        intent(in)    :: seeds_time_key
+      real,             dimension(:,:,:), intent(in) :: QQ3, RR3
+      real(wp),         dimension(:,:),   intent(in) :: dp_wp, dummy_wp
+      real,             dimension(:,:),   intent(in) :: CL
+      real(wp),         dimension(:,:),   intent(in) :: dzmid
+      real,             dimension(:),     intent(in) :: adl, rdl
+      real,             dimension(:),     intent(in) :: Ig1D, Jg1D
+      type(ty_cloud_optics_rrtmgp),   intent(inout) :: cloud_optics
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_bnd_liq, cloud_props_bnd_ice
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      logical, allocatable,           intent(out)   :: cld_mask(:,:,:)
+      type(MAPL_MetaComp),            intent(inout) :: MAPL
+      integer, optional,              intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      real(wp), allocatable :: alpha(:,:), rcorr(:,:)
+      real(wp), allocatable :: zcw(:,:,:)
+      real(wp), allocatable :: urand(:,:,:), urand_aux(:,:,:)
+      real(wp), allocatable :: urand_cond(:,:,:), urand_cond_aux(:,:,:)
+      integer,  allocatable :: seeds(:)
+#ifdef HAVE_MKL
+      type(ty_rng_mklvsl_plus) :: rng
+#else
+      type(ty_rng_mt) :: rng
+#endif
+      integer  :: isub, icol, ilay, igpt
+      real     :: cld_frac, sigma_qcw
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      ! allocate locals sized to this block
+      allocate(urand(ngpt,LM,ncols_block))
+      allocate(cld_mask(ncols_block,LM,ngpt))
+      if (gen_mro) then
+        allocate(urand_aux(ngpt,LM,ncols_block))
+        allocate(alpha(ncols_block,LM-1))
+        if (cond_inhomo) then
+          allocate(urand_cond    (ngpt,LM,ncols_block))
+          allocate(urand_cond_aux(ngpt,LM,ncols_block))
+          allocate(rcorr(ncols_block,LM-1))
+          allocate(zcw(ncols_block,LM,ngpt))
+        end if
+      end if
+      allocate(seeds(3))    ! 2-word key plus word1 of counter
+      seeds    = 0
+      seeds(2) = seeds_time_key   ! time part of key (computed once outside block loop)
+      ! for SW start at counter=65,536
+      seeds(3) = 65536
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+
+      ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
+      ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
+      ! Do phases separately to allow for different forward scattering, etc., per earlier note.
+      ! liquid ...
+      error_msg = cloud_optics%cloud_optics( &
+        real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+        dummy_wp(colS:colE,:), &
+        min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
+          cloud_optics%get_min_radius_liq()), &
+          cloud_optics%get_max_radius_liq()), &
+        dummy_wp(colS:colE,:), &
+        cloud_props_bnd_liq)
+      TEST_(error_msg)
+      ! ice ...
+      error_msg = cloud_optics%cloud_optics( &
+        dummy_wp(colS:colE,:), &
+        real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+        dummy_wp(colS:colE,:), &
+        min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
+          cloud_optics%get_min_radius_ice()), &
+          cloud_optics%get_max_radius_ice()), &
+        cloud_props_bnd_ice)
+      TEST_(error_msg)
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+
+!!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
+
+      ! exponential inter-layer correlations
+      ! [alpha|rcorr](k) is correlation between layers k and k+1
+      ! dzmid(k) is separation between midpoints of layers k and k+1
+      if (gen_mro) then
+        do ilay = 1,LM-1
+          ! cloud fraction correlation
+          alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
+        enddo
+        if (cond_inhomo) then
+          do ilay = 1,LM-1
+            ! condensate correlation
+            rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
+          enddo
+        endif
+      endif
+
+      ! generate McICA random numbers for block
+      do isub = 1, ncols_block
+        ! local 1d column index
+        icol = colS + isub - 1
+        ! initialize the Philox PRNG
+        ! set word1 of key based on GLOBAL location
+        ! 32-bits can hold all forseeable resolutions
+        seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
+#ifdef HAVE_MKL
+        ! instantiate a random number stream for the column
+        call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
+#else
+        call rng%init(seeds)
+#endif
+        ! draw the random numbers for the column
+        urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+        if (gen_mro) then
+          urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+          if (cond_inhomo) then
+            urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+            urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+          endif
+        end if
+        ! free the rng
+        call rng%end()
+      end do
+
+      ! cloud sampling to gpoints
+      select case (cloud_overlap_type)
+        case ("MAX_RAN_OVERLAP")
+          error_msg = sampled_mask_max_ran( &
+            urand, real(CL(colS:colE,:),kind=wp), cld_mask)
+          TEST_(error_msg)
+        case ("EXP_RAN_OVERLAP")
+          ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
+          ! to be provided ... it is not the same as alpha, which is a probability
+!         error_msg = sampled_mask_exp_ran( &
+!           urand, real(CL(colS:colE,:),kind=wp), corr_coeff, cld_mask)
+!         TEST_(error_msg)
+          TEST_('EXP_RAN_OVERLAP not implemented yet')
+        case ("GEN_MAX_RAN_OVERLAP")
+          ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
+          ! cloud presence and cloud condensate are separately generalized maximum-random:
+          error_msg = sampled_urand_gen_max_ran(alpha, urand, urand_aux)
+          TEST_(error_msg)
+          if (cond_inhomo) then
+            error_msg = sampled_urand_gen_max_ran(rcorr, urand_cond, urand_cond_aux)
+            TEST_(error_msg)
+          end if
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+            do ilay = 1,LM
+              cld_frac = CL(icol,ilay)
+
+              ! if grid-box clear, no subgrid variability
+              if (cld_frac <= 0.) then
+                cld_mask(isub,ilay,:) = .false.
+              else
+                ! subgrid-scale cloud mask
+                cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
+
+                ! subgrid-scale condensate
+                if (cond_inhomo) then
+                  ! level of condensate inhomogeneity based on cloud fraction.
+                  if (cld_frac > 0.99) then
+                    sigma_qcw = 0.5
+                  elseif (cld_frac > 0.9) then
+                    sigma_qcw = 0.71
+                  else
+                    sigma_qcw = 1.0
+                  endif
+                  do igpt = 1,ngpt
+                    if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
+                      zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
+                  end do
+                end if
+              end if
+
+            end do
+          end do
+
+        case default
+          TEST_('RRTMGP_SW: unknown cloud overlap')
+      end select
+
+      ! draw McICA optical property samples (band->gpt)
+      TEST_(draw_samples(cld_mask, cloud_props_bnd_liq, cloud_props_gpt_liq))
+      TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
+
+      ! Scaling to sub-gridscale water paths:
+      ! since tau for each phase is linear in the phase's water path
+      ! and since the scaling zcw applies equally to both phases, the
+      ! total g-point optical thickness tau will scale with zcw.
+      if (gen_mro) then
+        if (cond_inhomo) &
+          where (cld_mask) cloud_props_gpt_liq%tau = cloud_props_gpt_liq%tau * zcw
+          where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
+      end if
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_cloud_optics_mcica
 #undef TEST_
 
 
