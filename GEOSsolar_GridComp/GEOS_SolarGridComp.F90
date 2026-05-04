@@ -5288,15 +5288,9 @@ contains
           class is (ty_optical_props_nstr)
             TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
         end select
-        TEST_(gas_concs%get_subset(colS,ncols_block,gas_concs_block))
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
-        ! gas optics, including source functions
-        error_msg = k_dist%gas_optics( &
-          p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
-          gas_concs_block, optical_props, toa_flux)
-        TEST_(error_msg)
-        call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+        call compute_gas_optics(colS, colE, ncols_block, LM, &
+          gas_concs, k_dist, p_lay, p_lev, t_lay, &
+          optical_props, toa_flux, MAPL, __RC__)
 
         ! get block of aerosol optical props
         if (need_aer_optical_props) then
@@ -6852,7 +6846,53 @@ contains
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
       RETURN_(ESMF_SUCCESS)
+
     end subroutine SORADCORE
+
+    ! ---------------------------------------------------------------------------
+    ! Compute gas optical properties for one block of columns.
+    ! gas_concs_block and error_msg are local (thread-private in future OMP use).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_gas_optics(colS, colE, ncols_block, LM, &
+        gas_concs, k_dist, p_lay, p_lev, t_lay, &
+        optical_props, toa_flux, MAPL, RC)
+
+      use mo_gas_concentrations, only: ty_gas_concs
+      use mo_gas_optics_rrtmgp,  only: ty_gas_optics_rrtmgp
+      use mo_optical_props,      only: ty_optical_props_arry
+      use mo_rte_kind,           only: wp
+
+      integer,                           intent(in)    :: colS, colE, ncols_block, LM
+      type(ty_gas_concs),                intent(in)    :: gas_concs
+      type(ty_gas_optics_rrtmgp),        intent(in)    :: k_dist
+      real(wp),                          intent(in)    :: p_lay(:,:), p_lev(:,:), t_lay(:,:)
+      class(ty_optical_props_arry),      intent(inout) :: optical_props
+      real(wp),                          intent(out)   :: toa_flux(:,:)
+      type(MAPL_MetaComp),               intent(inout) :: MAPL
+      integer, optional,                 intent(out)   :: RC
+
+      ! locals -- will be thread-private under future !$OMP PARALLEL DO
+      type(ty_gas_concs)         :: gas_concs_block
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer                    :: STATUS
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+
+      TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
+
+      ! gas optics, including source functions
+      error_msg = k_dist%gas_optics( &
+        p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
+        gas_concs_block, optical_props, toa_flux)
+      TEST_(error_msg)
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_gas_optics
+#undef TEST_
 
 
     subroutine SHRTWAVE(PLhPa,TA,WA,OA,CO2,COSZ   , &
