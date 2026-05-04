@@ -5337,265 +5337,31 @@ contains
         ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
         ! ** Calculated from subcolumn ensemble, so stochastic **
         ! -------------------------------------------------------
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-        if (include_aerosols) then
-
-          ! in-cloud optical thicknesses in PAR super-band
-          ! (weighted across and within bands by TOA incident flux)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-
-            ! zero denom- and numerator accumulators
-            CDSDTP(icol) = 0.; CDSNTP(icol) = 0.
-            CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
-            CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
-            CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
-
-            CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.; CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
-            CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.; CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
-            CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.; CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
-            CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.; CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
-
-            SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
-            SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
-            SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
-            SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
-
-            ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
-            ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
-            ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
-            ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
-
-            FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
-            FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
-            FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
-            FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
-
-            ! can only be non-zero for potentially cloudy columns
-            if (any(CL(icol,:) > 0.)) then
-
-              ! accumulate over gpts/subcolumns
-              do ib = 1, nbnd
-                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
-
-                  ! band weights for photosynthetically active radiation (PAR)
-                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
-                  if (ib >= 11 .and. ib <= 12) then
-                    wgt = 1.0
-                  else if (ib == 10) then
-                    wgt = 0.5
-                  else
-                    ! no contribution to PAR
-                    cycle
-                  end if
-
-                  ! TOA flux weighting
-                  ! (note: neither the adjustment of toa_flux to our tsi
-                  ! or for zenith angle are needed yet since this weighting
-                  ! is over gpoint and is normalized for EACH icol)
-                  wgt = wgt * toa_flux(isub,igpt)
-
-                  ! low pressure layer
-                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
-                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
-                  staulp = sltaulp + sitaulp
-                  if (staulp > 0.) then
-                    CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
-                    CDSDLP(icol) = CDSDLP(icol) + wgt
-                  end if
-                  sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
-                  if (sltaulp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
-                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
-                      sltaussaflp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                                        forwliq(isub,LCLDLM:LM,igpt))
-                    end select
-                    CDSLDLP(icol) = CDSLDLP(icol) + wgt
-                    CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
-                    SDSLDLP(icol) = SDSLDLP(icol) + wgt * sltaulp
-                    SDSLNLP(icol) = SDSLNLP(icol) + wgt * sltaussalp
-                    ADSLDLP(icol) = ADSLDLP(icol) + wgt * sltaussalp
-                    ADSLNLP(icol) = ADSLNLP(icol) + wgt * sltaussaglp
-                    FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
-                    FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
-                  end if
-                  sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
-                  if (sitaulp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
-                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
-                      sitaussaflp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                                        forwice(isub,LCLDLM:LM,igpt))
-                    end select
-                    CDSIDLP(icol) = CDSIDLP(icol) + wgt
-                    CDSINLP(icol) = CDSINLP(icol) + wgt * sitaulp
-                    SDSIDLP(icol) = SDSIDLP(icol) + wgt * sitaulp
-                    SDSINLP(icol) = SDSINLP(icol) + wgt * sitaussalp
-                    ADSIDLP(icol) = ADSIDLP(icol) + wgt * sitaussalp
-                    ADSINLP(icol) = ADSINLP(icol) + wgt * sitaussaglp
-                    FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
-                    FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
-                  end if
-
-                  ! mid pressure layer
-                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  staump = sltaump + sitaump
-                  if (staump > 0.) then
-                    CDSNMP(icol) = CDSNMP(icol) + wgt * staump
-                    CDSDMP(icol) = CDSDMP(icol) + wgt
-                  end if
-                  sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
-                  if (sltaump > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussafmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                                        forwliq(isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    CDSLDMP(icol) = CDSLDMP(icol) + wgt
-                    CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
-                    SDSLDMP(icol) = SDSLDMP(icol) + wgt * sltaump
-                    SDSLNMP(icol) = SDSLNMP(icol) + wgt * sltaussamp
-                    ADSLDMP(icol) = ADSLDMP(icol) + wgt * sltaussamp
-                    ADSLNMP(icol) = ADSLNMP(icol) + wgt * sltaussagmp
-                    FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
-                    FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
-                  end if
-                  sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
-                  if (sitaump > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussafmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                                        forwice(isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    CDSIDMP(icol) = CDSIDMP(icol) + wgt
-                    CDSINMP(icol) = CDSINMP(icol) + wgt * sitaump
-                    SDSIDMP(icol) = SDSIDMP(icol) + wgt * sitaump
-                    SDSINMP(icol) = SDSINMP(icol) + wgt * sitaussamp
-                    ADSIDMP(icol) = ADSIDMP(icol) + wgt * sitaussamp
-                    ADSINMP(icol) = ADSINMP(icol) + wgt * sitaussagmp
-                    FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
-                    FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
-                  end if
-
-                  ! high pressure layer
-                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
-                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
-                  stauhp = sltauhp + sitauhp
-                  if (stauhp > 0.) then
-                    CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
-                    CDSDHP(icol) = CDSDHP(icol) + wgt
-                  end if
-                  sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
-                  if (sltauhp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
-                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
-                      sltaussafhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                                        forwliq(isub,1:LCLDMH-1,igpt))
-                    end select
-                    CDSLDHP(icol) = CDSLDHP(icol) + wgt
-                    CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
-                    SDSLDHP(icol) = SDSLDHP(icol) + wgt * sltauhp
-                    SDSLNHP(icol) = SDSLNHP(icol) + wgt * sltaussahp
-                    ADSLDHP(icol) = ADSLDHP(icol) + wgt * sltaussahp
-                    ADSLNHP(icol) = ADSLNHP(icol) + wgt * sltaussaghp
-                    FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
-                    FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
-                  end if
-                  sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
-                  if (sitauhp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
-                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
-                      sitaussafhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                                        forwice(isub,1:LCLDMH-1,igpt))
-                    end select
-                    CDSIDHP(icol) = CDSIDHP(icol) + wgt
-                    CDSINHP(icol) = CDSINHP(icol) + wgt * sitauhp
-                    SDSIDHP(icol) = SDSIDHP(icol) + wgt * sitauhp
-                    SDSINHP(icol) = SDSINHP(icol) + wgt * sitaussahp
-                    ADSIDHP(icol) = ADSIDHP(icol) + wgt * sitaussahp
-                    ADSINHP(icol) = ADSINHP(icol) + wgt * sitaussaghp
-                    FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
-                    FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
-                  end if
-
-                  ! whole subcolumn
-                  sltautp = sltaulp + sltaump + sltauhp
-                  sitautp = sitaulp + sitaump + sitauhp
-                  stautp = staulp + staump + stauhp
-                  if (stautp > 0.) then
-                    CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
-                    CDSDTP(icol) = CDSDTP(icol) + wgt
-                  end if
-                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
-                  if (sltautp > 0.) then
-                    CDSLDTP(icol) = CDSLDTP(icol) + wgt
-                    CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
-                    SDSLDTP(icol) = SDSLDTP(icol) + wgt * sltautp
-                    SDSLNTP(icol) = SDSLNTP(icol) + wgt * sltaussatp
-                    ADSLDTP(icol) = ADSLDTP(icol) + wgt * sltaussatp
-                    ADSLNTP(icol) = ADSLNTP(icol) + wgt * sltaussagtp
-                    FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
-                    FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
-                  end if
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
-                  sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
-                  if (sitautp > 0.) then
-                    CDSIDTP(icol) = CDSIDTP(icol) + wgt
-                    CDSINTP(icol) = CDSINTP(icol) + wgt * sitautp
-                    SDSIDTP(icol) = SDSIDTP(icol) + wgt * sitautp
-                    SDSINTP(icol) = SDSINTP(icol) + wgt * sitaussatp
-                    ADSIDTP(icol) = ADSIDTP(icol) + wgt * sitaussatp
-                    ADSINTP(icol) = ADSINTP(icol) + wgt * sitaussagtp
-                    FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
-                    FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
-                  end if
-
-                end do ! igpt
-              end do ! ib
-
-            end if  ! potentially cloudy column
-          end do  ! isub
-        end if  ! include_aerosols
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+        call compute_sprlyr_diags_postdelta( &
+          colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+          include_aerosols, &
+          CL, toa_flux, band_lims_gpt, &
+          forwliq, forwice, &
+          cloud_props_gpt_liq, cloud_props_gpt_ice, &
+          CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+          CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+          CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+          CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+          CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+          CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+          SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+          SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+          SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+          SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+          ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+          ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+          ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+          ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+          FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+          FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+          FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+          FORINTP, FORINHP, FORINMP, FORINLP, &
+          MAPL, __RC__)
 #endif
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
@@ -7157,6 +6923,349 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_delta_scale
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Super-layer cloud optical depth diagnostics AFTER delta-scaling.
+    ! Only compiled/called under #ifdef SOLAR_RADVAL.
+    ! forwliq and forwice (from compute_delta_scale) are intent(in) here.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_sprlyr_diags_postdelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        CL, toa_flux, band_lims_gpt, &
+        forwliq, forwice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+        CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+        CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+        CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+        SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+        SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+        SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+        SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+        ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+        ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+        ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+        ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+        FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+        FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+        FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+        FORINTP, FORINHP, FORINMP, FORINLP, &
+        MAPL, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_rte_kind,      only: wp
+
+      integer,                      intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      integer,                      intent(in)    :: LCLDLM, LCLDMH
+      logical,                      intent(in)    :: include_aerosols
+      real,             intent(in)  :: CL(:,:)
+      real(wp),         intent(in)  :: toa_flux(:,:)
+      integer,          intent(in)  :: band_lims_gpt(:,:)
+      real(wp),         intent(in)  :: forwliq(:,:,:), forwice(:,:,:)
+      class(ty_optical_props_arry), intent(in) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real,             intent(inout) :: CDSDTP(:), CDSDHP(:), CDSDMP(:), CDSDLP(:)
+      real,             intent(inout) :: CDSNTP(:), CDSNHP(:), CDSNMP(:), CDSNLP(:)
+      real,             intent(inout) :: CDSLDTP(:), CDSLDHP(:), CDSLDMP(:), CDSLDLP(:)
+      real,             intent(inout) :: CDSLNTP(:), CDSLNHP(:), CDSLNMP(:), CDSLNLP(:)
+      real,             intent(inout) :: CDSIDTP(:), CDSIDHP(:), CDSIDMP(:), CDSIDLP(:)
+      real,             intent(inout) :: CDSINTP(:), CDSINHP(:), CDSINMP(:), CDSINLP(:)
+      real,             intent(inout) :: SDSLDTP(:), SDSLDHP(:), SDSLDMP(:), SDSLDLP(:)
+      real,             intent(inout) :: SDSLNTP(:), SDSLNHP(:), SDSLNMP(:), SDSLNLP(:)
+      real,             intent(inout) :: SDSIDTP(:), SDSIDHP(:), SDSIDMP(:), SDSIDLP(:)
+      real,             intent(inout) :: SDSINTP(:), SDSINHP(:), SDSINMP(:), SDSINLP(:)
+      real,             intent(inout) :: ADSLDTP(:), ADSLDHP(:), ADSLDMP(:), ADSLDLP(:)
+      real,             intent(inout) :: ADSLNTP(:), ADSLNHP(:), ADSLNMP(:), ADSLNLP(:)
+      real,             intent(inout) :: ADSIDTP(:), ADSIDHP(:), ADSIDMP(:), ADSIDLP(:)
+      real,             intent(inout) :: ADSINTP(:), ADSINHP(:), ADSINMP(:), ADSINLP(:)
+      real,             intent(inout) :: FORLDTP(:), FORLDHP(:), FORLDMP(:), FORLDLP(:)
+      real,             intent(inout) :: FORLNTP(:), FORLNHP(:), FORLNMP(:), FORLNLP(:)
+      real,             intent(inout) :: FORIDTP(:), FORIDHP(:), FORIDMP(:), FORIDLP(:)
+      real,             intent(inout) :: FORINTP(:), FORINHP(:), FORINMP(:), FORINLP(:)
+      type(MAPL_MetaComp),          intent(inout) :: MAPL
+      integer, optional,            intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ib, igpt
+      real     :: wgt
+      real     :: stautp, stauhp, staump, staulp
+      real     :: sltautp, sltauhp, sltaump, sltaulp
+      real     :: sitautp, sitauhp, sitaump, sitaulp
+      real     :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
+      real     :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
+      real     :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
+      real     :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
+      real     :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
+      real     :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      if (include_aerosols) then
+
+        ! in-cloud optical thicknesses in PAR super-band
+        ! (weighted across and within bands by TOA incident flux)
+        do isub = 1,ncols_block
+          icol = colS + isub - 1
+
+          ! zero denom- and numerator accumulators
+          CDSDTP(icol) = 0.; CDSNTP(icol) = 0.
+          CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
+          CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
+          CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
+
+          CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.; CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
+          CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.; CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
+          CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.; CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
+          CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.; CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
+
+          SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
+          SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
+          SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
+          SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
+
+          ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
+          ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
+          ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
+          ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
+
+          FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
+          FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
+          FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
+          FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
+
+          ! can only be non-zero for potentially cloudy columns
+          if (any(CL(icol,:) > 0.)) then
+
+            ! accumulate over gpts/subcolumns
+            do ib = 1, nbnd
+              do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+
+                ! band weights for photosynthetically active radiation (PAR)
+                ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                if (ib >= 11 .and. ib <= 12) then
+                  wgt = 1.0
+                else if (ib == 10) then
+                  wgt = 0.5
+                else
+                  ! no contribution to PAR
+                  cycle
+                end if
+
+                wgt = wgt * toa_flux(isub,igpt)
+
+                ! low pressure layer
+                sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
+                sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                staulp = sltaulp + sitaulp
+                if (staulp > 0.) then
+                  CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
+                  CDSDLP(icol) = CDSDLP(icol) + wgt
+                end if
+                sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
+                if (sltaulp > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussalp  = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                    sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    sltaussaflp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                                      forwliq(isub,LCLDLM:LM,igpt))
+                  end select
+                  CDSLDLP(icol) = CDSLDLP(icol) + wgt
+                  CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
+                  SDSLDLP(icol) = SDSLDLP(icol) + wgt * sltaulp
+                  SDSLNLP(icol) = SDSLNLP(icol) + wgt * sltaussalp
+                  ADSLDLP(icol) = ADSLDLP(icol) + wgt * sltaussalp
+                  ADSLNLP(icol) = ADSLNLP(icol) + wgt * sltaussaglp
+                  FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
+                  FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
+                end if
+                sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
+                if (sitaulp > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussalp  = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                    sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    sitaussaflp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                                      forwice(isub,LCLDLM:LM,igpt))
+                  end select
+                  CDSIDLP(icol) = CDSIDLP(icol) + wgt
+                  CDSINLP(icol) = CDSINLP(icol) + wgt * sitaulp
+                  SDSIDLP(icol) = SDSIDLP(icol) + wgt * sitaulp
+                  SDSINLP(icol) = SDSINLP(icol) + wgt * sitaussalp
+                  ADSIDLP(icol) = ADSIDLP(icol) + wgt * sitaussalp
+                  ADSINLP(icol) = ADSINLP(icol) + wgt * sitaussaglp
+                  FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
+                  FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
+                end if
+
+                ! mid pressure layer
+                sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                staump = sltaump + sitaump
+                if (staump > 0.) then
+                  CDSNMP(icol) = CDSNMP(icol) + wgt * staump
+                  CDSDMP(icol) = CDSDMP(icol) + wgt
+                end if
+                sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
+                if (sltaump > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussamp  = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    sltaussafmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                      forwliq(isub,LCLDMH:LCLDLM-1,igpt))
+                  end select
+                  CDSLDMP(icol) = CDSLDMP(icol) + wgt
+                  CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
+                  SDSLDMP(icol) = SDSLDMP(icol) + wgt * sltaump
+                  SDSLNMP(icol) = SDSLNMP(icol) + wgt * sltaussamp
+                  ADSLDMP(icol) = ADSLDMP(icol) + wgt * sltaussamp
+                  ADSLNMP(icol) = ADSLNMP(icol) + wgt * sltaussagmp
+                  FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
+                  FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
+                end if
+                sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
+                if (sitaump > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussamp  = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    sitaussafmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                      forwice(isub,LCLDMH:LCLDLM-1,igpt))
+                  end select
+                  CDSIDMP(icol) = CDSIDMP(icol) + wgt
+                  CDSINMP(icol) = CDSINMP(icol) + wgt * sitaump
+                  SDSIDMP(icol) = SDSIDMP(icol) + wgt * sitaump
+                  SDSINMP(icol) = SDSINMP(icol) + wgt * sitaussamp
+                  ADSIDMP(icol) = ADSIDMP(icol) + wgt * sitaussamp
+                  ADSINMP(icol) = ADSINMP(icol) + wgt * sitaussagmp
+                  FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
+                  FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
+                end if
+
+                ! high pressure layer
+                sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
+                sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                stauhp = sltauhp + sitauhp
+                if (stauhp > 0.) then
+                  CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
+                  CDSDHP(icol) = CDSDHP(icol) + wgt
+                end if
+                sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
+                if (sltauhp > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussahp  = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                    sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    sltaussafhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                      forwliq(isub,1:LCLDMH-1,igpt))
+                  end select
+                  CDSLDHP(icol) = CDSLDHP(icol) + wgt
+                  CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
+                  SDSLDHP(icol) = SDSLDHP(icol) + wgt * sltauhp
+                  SDSLNHP(icol) = SDSLNHP(icol) + wgt * sltaussahp
+                  ADSLDHP(icol) = ADSLDHP(icol) + wgt * sltaussahp
+                  ADSLNHP(icol) = ADSLNHP(icol) + wgt * sltaussaghp
+                  FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
+                  FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
+                end if
+                sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
+                if (sitauhp > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussahp  = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                    sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    sitaussafhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                      forwice(isub,1:LCLDMH-1,igpt))
+                  end select
+                  CDSIDHP(icol) = CDSIDHP(icol) + wgt
+                  CDSINHP(icol) = CDSINHP(icol) + wgt * sitauhp
+                  SDSIDHP(icol) = SDSIDHP(icol) + wgt * sitauhp
+                  SDSINHP(icol) = SDSINHP(icol) + wgt * sitaussahp
+                  ADSIDHP(icol) = ADSIDHP(icol) + wgt * sitaussahp
+                  ADSINHP(icol) = ADSINHP(icol) + wgt * sitaussaghp
+                  FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
+                  FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
+                end if
+
+                ! whole subcolumn
+                sltautp = sltaulp + sltaump + sltauhp
+                sitautp = sitaulp + sitaump + sitauhp
+                stautp  = staulp  + staump  + stauhp
+                if (stautp > 0.) then
+                  CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
+                  CDSDTP(icol) = CDSDTP(icol) + wgt
+                end if
+                sltaussatp  = sltaussalp  + sltaussamp  + sltaussahp
+                sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
+                sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
+                if (sltautp > 0.) then
+                  CDSLDTP(icol) = CDSLDTP(icol) + wgt
+                  CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
+                  SDSLDTP(icol) = SDSLDTP(icol) + wgt * sltautp
+                  SDSLNTP(icol) = SDSLNTP(icol) + wgt * sltaussatp
+                  ADSLDTP(icol) = ADSLDTP(icol) + wgt * sltaussatp
+                  ADSLNTP(icol) = ADSLNTP(icol) + wgt * sltaussagtp
+                  FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
+                  FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
+                end if
+                sitaussatp  = sitaussalp  + sitaussamp  + sitaussahp
+                sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
+                if (sitautp > 0.) then
+                  CDSIDTP(icol) = CDSIDTP(icol) + wgt
+                  CDSINTP(icol) = CDSINTP(icol) + wgt * sitautp
+                  SDSIDTP(icol) = SDSIDTP(icol) + wgt * sitautp
+                  SDSINTP(icol) = SDSINTP(icol) + wgt * sitaussatp
+                  ADSIDTP(icol) = ADSIDTP(icol) + wgt * sitaussatp
+                  ADSINTP(icol) = ADSINTP(icol) + wgt * sitaussagtp
+                  FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
+                  FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
+                end if
+
+              end do ! igpt
+            end do ! ib
+
+          end if  ! potentially cloudy column
+        end do  ! isub
+      end if  ! include_aerosols
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_sprlyr_diags_postdelta
 #undef TEST_
 
 
