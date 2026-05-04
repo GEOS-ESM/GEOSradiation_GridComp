@@ -5293,47 +5293,8 @@ contains
           optical_props, toa_flux, MAPL, __RC__)
 
         ! get block of aerosol optical props
-        if (need_aer_optical_props) then
-          select type (aer_props)
-            class is (ty_optical_props_2str)
-
-              ! load un-normalized optical properties from aerosol system
-              aer_props%tau = real(TAUA(colS:colE,:,:),kind=wp)
-              aer_props%ssa = real(SSAA(colS:colE,:,:),kind=wp)
-              aer_props%g   = real(ASYA(colS:colE,:,:),kind=wp)
-
-              ! renormalize
-              where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
-                aer_props%g   = aer_props%g   / aer_props%ssa
-                aer_props%ssa = aer_props%ssa / aer_props%tau
-              elsewhere
-                aer_props%tau = 0._wp
-                aer_props%ssa = 0._wp
-                aer_props%g   = 0._wp
-              end where
-
-              ! Because RRTMGP is (currently) compiled at R8,
-              ! _wp is R8. Apparently with aggressive compiler
-              ! flags using Intel, it's possible for, say,
-              ! aer_props%ssa to become slightly greater than one
-              ! in the above renormalization. So, we add clamps
-              ! to the values based on the restrictions see in
-              ! RRTMGP/rte-frontend/mo_optical_props.F90
-              !
-              ! In testing, the values seen were like 1.00000011905028
-              ! so just slightly above one.
-
-              ! tau must be greater than 0.0
-              aer_props%tau = max(aer_props%tau, 0._wp)
-              ! ssa must be between 0.0 and 1.0
-              aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
-              ! g must be between -1.0 and 1.0
-              aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
-
-            class default
-              TEST_('aerosol optical properties hardwired 2-stream for now')
-          end select
-        end if
+        call compute_aer_optics(colS, colE, need_aer_optical_props, &
+          taua, ssaa, asya, aer_props, __RC__)
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
@@ -6892,6 +6853,75 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_gas_optics
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Load and normalize aerosol optical properties for one block of columns.
+    ! No thread-private locals beyond scalars; aer_props is intent(inout).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_aer_optics(colS, colE, need_aer_optical_props, &
+        taua, ssaa, asya, aer_props, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_rte_kind,      only: wp
+
+      integer,                        intent(in)    :: colS, colE
+      logical,                        intent(in)    :: need_aer_optical_props
+      real,             dimension(:,:,:), intent(in)    :: taua, ssaa, asya
+      class(ty_optical_props_arry),   intent(inout) :: aer_props
+      integer, optional,              intent(out)   :: RC
+
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer                    :: STATUS
+
+      if (.not. need_aer_optical_props) then
+        RETURN_(ESMF_SUCCESS)
+      end if
+
+      select type (aer_props)
+        class is (ty_optical_props_2str)
+
+          ! load un-normalized optical properties from aerosol system
+          aer_props%tau = real(taua(colS:colE,:,:),kind=wp)
+          aer_props%ssa = real(ssaa(colS:colE,:,:),kind=wp)
+          aer_props%g   = real(asya(colS:colE,:,:),kind=wp)
+
+          ! renormalize
+          where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
+            aer_props%g   = aer_props%g   / aer_props%ssa
+            aer_props%ssa = aer_props%ssa / aer_props%tau
+          elsewhere
+            aer_props%tau = 0._wp
+            aer_props%ssa = 0._wp
+            aer_props%g   = 0._wp
+          end where
+
+          ! Because RRTMGP is (currently) compiled at R8,
+          ! _wp is R8. Apparently with aggressive compiler
+          ! flags using Intel, it's possible for, say,
+          ! aer_props%ssa to become slightly greater than one
+          ! in the above renormalization. So, we add clamps
+          ! to the values based on the restrictions see in
+          ! RRTMGP/rte-frontend/mo_optical_props.F90
+          !
+          ! In testing, the values seen were like 1.00000011905028
+          ! so just slightly above one.
+
+          ! tau must be greater than 0.0
+          aer_props%tau = max(aer_props%tau, 0._wp)
+          ! ssa must be between 0.0 and 1.0
+          aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
+          ! g must be between -1.0 and 1.0
+          aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
+
+        class default
+          TEST_('aerosol optical properties hardwired 2-stream for now')
+      end select
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_aer_optics
 #undef TEST_
 
 
