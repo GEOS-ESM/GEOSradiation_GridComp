@@ -3694,12 +3694,12 @@ contains
       class(ty_optical_props_arry), allocatable :: optical_props
 
       ! RRTMGP locals
-      logical :: top_at_1, partial_block, need_aer_optical_props
+      logical :: top_at_1, need_aer_optical_props
       logical :: gen_mro, cond_inhomo
       logical :: rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice
       integer :: nbnd, ngpt, nmom, icergh
       integer :: ib, b, nBlocks, colS, colE, ncols_block, &
-                 partial_blockSize, icol, isub, ilay, igpt
+                 icol, isub, ilay, igpt
       real(wp), allocatable :: t_lev(:) ! (ncol)
       character(len=ESMF_MAXPATHLEN) :: k_dist_file, cloud_optics_file
       character(len=ESMF_MAXSTR)     :: error_msg
@@ -5220,41 +5220,44 @@ contains
         rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", DEFAULT=4, __RC__)
       _ASSERT(rrtmgp_blockSize >= 1, 'bad RRTMGP_SW_BLOCKSIZE')
 
-      ! for random numbers, for efficiency, reserve the maximum possible
-      ! subset of columns (rrtmgp_blockSize) since column index is last
-      allocate(urand(ngpt,LM,rrtmgp_blocksize),__STAT__)
-      if (gen_mro) then
-        allocate(urand_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        if (cond_inhomo) then
-          allocate(urand_cond    (ngpt,LM,rrtmgp_blocksize),__STAT__)
-          allocate(urand_cond_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        end if
-      end if
+      ! Total number of blocks, including any final partial block.
+      ! Each block has ncols_block = min(rrtmgp_blockSize, remaining columns),
+      ! computed at the top of each iteration below.
+      nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
-      ! number of FULL blocks by integer division
-      nBlocks = ncol/rrtmgp_blockSize
+      ! loop over all blocks
+      do b = 1,nBlocks
 
-      ! allocate intermediate arrays for FULL blocks
-      if (nBlocks > 0) then
+        ! compute block column range; the final block may be partial
+        ncols_block = min(rrtmgp_blockSize, ncol - (b-1)*rrtmgp_blockSize)
+        colS = (b-1) * rrtmgp_blockSize + 1
+        colE = colS + ncols_block - 1
 
-        ! block size UNTIL possible final partial block
-        ncols_block = rrtmgp_blockSize
-
-        allocate(toa_flux(ncols_block,ngpt),__STAT__)
-        allocate(cld_mask(ncols_block,LM,ngpt),__STAT__)
-        allocate(forwliq(ncols_block,LM,ngpt),__STAT__)
-        allocate(forwice(ncols_block,LM,ngpt),__STAT__)
+        ! allocate per-block arrays sized to this block's column count
+        allocate(urand(ngpt,LM,ncols_block),__STAT__)
         if (gen_mro) then
-          allocate(alpha(ncols_block,LM-1),__STAT__)
+          allocate(urand_aux(ngpt,LM,ncols_block),__STAT__)
           if (cond_inhomo) then
-            allocate(rcorr(ncols_block,LM-1),__STAT__)
-            allocate(zcw(ncols_block,LM,ngpt),__STAT__)
+            allocate(urand_cond    (ngpt,LM,ncols_block),__STAT__)
+            allocate(urand_cond_aux(ngpt,LM,ncols_block),__STAT__)
+          end if
+        end if
+
+        allocate(toa_flux(ncols_block,ngpt),    __STAT__)
+        allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
+        allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
+        allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
+        if (gen_mro) then
+          allocate(alpha(ncols_block,LM-1),     __STAT__)
+          if (cond_inhomo) then
+            allocate(rcorr(ncols_block,LM-1),   __STAT__)
+            allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
           endif
         endif
         if (include_aerosols) &
-          allocate(ClearCounts(4,ncols_block),__STAT__)
+          allocate(ClearCounts(4,ncols_block),  __STAT__)
 
-        ! in-cloud cloud optical props
+        ! ty_optical_props routines have an internal deallocation
         select type (cloud_props_bnd_liq)
           class is (ty_optical_props_2str)
             TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
@@ -5271,16 +5274,12 @@ contains
           class is (ty_optical_props_2str)
             TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
         end select
-
-        ! aerosol optical props
         if (need_aer_optical_props) then
           select type (aer_props)
             class is (ty_optical_props_2str)
               TEST_(aer_props%alloc_2str(ncols_block,LM))
           end select
         end if
-
-        ! gas+aer+cld optical properties
         select type (optical_props)
           class is (ty_optical_props_1scl)
             TEST_(optical_props%alloc_1scl(ncols_block,LM))
@@ -5289,90 +5288,6 @@ contains
           class is (ty_optical_props_nstr)
             TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
         end select
-
-      end if
-
-      ! add final partial block if necessary
-      partial_block = mod(ncol,rrtmgp_blockSize) /= 0
-      if (partial_block) then
-        partial_blockSize = ncol - nBlocks * rrtmgp_blockSize
-        nBlocks = nBlocks + 1
-      endif
-
-      ! loop over all blocks
-      do b = 1,nBlocks
-
-        ! only the FINAL block can be partial
-        if (b == nBlocks .and. partial_block) then
-          ncols_block = partial_blockSize
-
-          if (b > 1) then
-            ! one or more full blocks already processed
-            deallocate(toa_flux,      __STAT__)
-            deallocate(cld_mask,      __STAT__)
-            deallocate(forwliq,       __STAT__)
-            deallocate(forwice,       __STAT__)
-            if (gen_mro) then
-              deallocate(alpha,       __STAT__)
-              if (cond_inhomo) then
-                deallocate(rcorr,zcw, __STAT__)
-              endif
-            endif
-            if (include_aerosols) &
-              deallocate(ClearCounts, __STAT__)
-          endif
-
-          allocate(toa_flux(ncols_block,ngpt),    __STAT__)
-          allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
-          allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
-          allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
-          if (gen_mro) then
-            allocate(alpha(ncols_block,LM-1),     __STAT__)
-            if (cond_inhomo) then
-              allocate(rcorr(ncols_block,LM-1),   __STAT__)
-              allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
-            endif
-          endif
-          if (include_aerosols) &
-            allocate(ClearCounts(4,ncols_block),  __STAT__)
-
-          ! ty_optical_props routines have an internal deallocation
-          select type (cloud_props_bnd_liq)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_bnd_ice)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_gpt_liq)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
-          end select
-          if (need_aer_optical_props) then
-            select type (aer_props)
-              class is (ty_optical_props_2str)
-                TEST_(aer_props%alloc_2str(ncols_block,LM))
-            end select
-          end if
-          select type (optical_props)
-            class is (ty_optical_props_1scl)
-              TEST_(optical_props%alloc_1scl(ncols_block,LM))
-            class is (ty_optical_props_2str)
-              TEST_(optical_props%alloc_2str(ncols_block,LM))
-            class is (ty_optical_props_nstr)
-              TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
-          end select
-
-        endif  ! partial block
-
-        ! prepare block
-        colS = (b-1) * rrtmgp_blockSize + 1
-        colE = colS + ncols_block - 1
         TEST_(gas_concs%get_subset(colS,ncols_block,gas_concs_block))
 
         call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
@@ -5506,7 +5421,7 @@ contains
         select case (cloud_overlap_type)
           case ("MAX_RAN_OVERLAP")
             error_msg = sampled_mask_max_ran( &
-              urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), cld_mask)
+              urand, real(CL(colS:colE,:),kind=wp), cld_mask)
             TEST_(error_msg)
           case ("EXP_RAN_OVERLAP")
             ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
@@ -5519,11 +5434,11 @@ contains
             ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
             ! cloud presence and cloud condensate are separately generalized maximum-random:
             error_msg = sampled_urand_gen_max_ran(alpha, &
-              urand(:,:,1:ncols_block),urand_aux(:,:,1:ncols_block))
+              urand,urand_aux)
             TEST_(error_msg)
             if (cond_inhomo) then
               error_msg = sampled_urand_gen_max_ran(rcorr, &
-                urand_cond(:,:,1:ncols_block),urand_cond_aux(:,:,1:ncols_block))
+                urand_cond,urand_cond_aux)
               TEST_(error_msg)
             end if
             do isub = 1,ncols_block
@@ -6232,6 +6147,29 @@ contains
         TEST_(error_msg)
 
         call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+
+        ! deallocate per-block arrays
+        deallocate(urand,         __STAT__)
+        if (gen_mro) then
+          deallocate(urand_aux,   __STAT__)
+          if (cond_inhomo) then
+            deallocate(urand_cond,     __STAT__)
+            deallocate(urand_cond_aux, __STAT__)
+          end if
+        end if
+        deallocate(toa_flux,      __STAT__)
+        deallocate(cld_mask,      __STAT__)
+        deallocate(forwliq,       __STAT__)
+        deallocate(forwice,       __STAT__)
+        if (gen_mro) then
+          deallocate(alpha,       __STAT__)
+          if (cond_inhomo) then
+            deallocate(rcorr,     __STAT__)
+            deallocate(zcw,       __STAT__)
+          endif
+        endif
+        if (include_aerosols) &
+          deallocate(ClearCounts, __STAT__)
 
       end do ! loop over blocks
 
