@@ -5297,288 +5297,32 @@ contains
         ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
         ! ** Calculated from subcolumn ensemble, so stochastic **
         ! -------------------------------------------------------
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-        if (include_aerosols) then
-
-          ! super-layer cloud fractions
-          call clearCounts_threeBand( &
-            ncols_block, ncols_block, ngpt, LM, LCLDLM, LCLDMH, &
-            reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
-            ClearCounts)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-            CLDTS(icol) = 1. - ClearCounts(1,isub)/float(ngpt)
-            CLDHS(icol) = 1. - ClearCounts(2,isub)/float(ngpt)
-            CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
-            CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
-          end do
-
-          ! in-cloud optical thicknesses in PAR super-band
-          ! (weighted across and within bands by TOA incident flux)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-
+        call compute_sprlyr_diags_predelta( &
+          colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+          include_aerosols, &
+          cld_mask, ClearCounts, CL, toa_flux, band_lims_gpt, &
+          cloud_props_gpt_liq, cloud_props_gpt_ice, &
+          CLDTS, CLDHS, CLDMS, CLDLS, &
+          COTTP, COTHP, COTMP, COTLP, &
+          COTDTP, COTDHP, COTDMP, COTDLP, &
+          COTNTP, COTNHP, COTNMP, COTNLP, &
 #ifdef SOLAR_RADVAL
-            ! default (no cloud) for TAUx variant 
-            TAUTP(icol) = 0.
-            TAUHP(icol) = 0.
-            TAUMP(icol) = 0.
-            TAULP(icol) = 0.
+          TAUTP, TAUHP, TAUMP, TAULP, &
+          COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+          COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+          COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+          COTINTP, COTINHP, COTINMP, COTINLP, &
+          SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+          SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+          SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+          SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+          ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+          ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+          ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+          ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
 #endif
+          MAPL, __RC__)
 
-            ! default (no cloud) for COTx variant
-            COTTP(icol) = MAPL_UNDEF
-            COTHP(icol) = MAPL_UNDEF
-            COTMP(icol) = MAPL_UNDEF
-            COTLP(icol) = MAPL_UNDEF
-
-            ! zero denom- and numerator accumulators
-            COTDTP(icol) = 0.; COTNTP(icol) = 0.
-            COTDHP(icol) = 0.; COTNHP(icol) = 0.
-            COTDMP(icol) = 0.; COTNMP(icol) = 0.
-            COTDLP(icol) = 0.; COTNLP(icol) = 0.
-#ifdef SOLAR_RADVAL
-            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.; COTIDTP(icol) = 0.; COTINTP(icol) = 0.
-            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.; COTIDHP(icol) = 0.; COTINHP(icol) = 0.
-            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.; COTIDMP(icol) = 0.; COTINMP(icol) = 0.
-            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.; COTIDLP(icol) = 0.; COTINLP(icol) = 0.
-            SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
-            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
-            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
-            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
-            ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
-            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
-            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
-            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
-#endif
-
-            ! can only be non-zero for potentially cloudy columns
-            if (any(CL(icol,:) > 0.)) then
-
-              ! accumulate over gpts/subcolumns
-              do ib = 1, nbnd
-                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
-       
-                  ! band weights for photosynthetically active radiation (PAR)
-                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
-                  if (ib >= 11 .and. ib <= 12) then
-                    wgt = 1.0
-                  else if (ib == 10) then
-                    wgt = 0.5
-                  else
-                    ! no contribution to PAR
-                    cycle
-                  end if
-
-                  ! TOA flux weighting
-                  ! (note: neither the adjustment of toa_flux to our tsi
-                  ! or for zenith angle are needed yet since this weighting
-                  ! is over gpoint and is normalized for EACH icol)
-                  wgt = wgt * toa_flux(isub,igpt)
-
-                  ! low pressure layer
-                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
-                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
-                  staulp = sltaulp + sitaulp
-                  if (staulp > 0.) then
-                    COTDLP(icol) = COTDLP(icol) + wgt
-                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussalp = 0.; sltaussaglp = 0.
-                  if (sltaulp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
-                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
-                    end select
-                    COTLDLP(icol) = COTLDLP(icol) + wgt
-                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
-                    SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
-                    SSALNLP(icol) = SSALNLP(icol) + wgt * sltaussalp
-                    ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
-                    ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
-                  end if
-                  sitaussalp = 0.; sitaussaglp = 0.
-                  if (sitaulp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
-                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
-                    end select
-                    COTIDLP(icol) = COTIDLP(icol) + wgt
-                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
-                    SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
-                    SSAINLP(icol) = SSAINLP(icol) + wgt * sitaussalp
-                    ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
-                    ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
-                  end if
-#endif
-
-                  ! mid pressure layer
-                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  staump = sltaump + sitaump
-                  if (staump > 0.) then
-                    COTDMP(icol) = COTDMP(icol) + wgt
-                    COTNMP(icol) = COTNMP(icol) + wgt * staump
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussamp = 0.; sltaussagmp = 0.
-                  if (sltaump > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    COTLDMP(icol) = COTLDMP(icol) + wgt
-                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
-                    SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
-                    SSALNMP(icol) = SSALNMP(icol) + wgt * sltaussamp
-                    ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
-                    ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
-                  end if
-                  sitaussamp = 0.; sitaussagmp = 0.
-                  if (sitaump > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    COTIDMP(icol) = COTIDMP(icol) + wgt
-                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
-                    SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
-                    SSAINMP(icol) = SSAINMP(icol) + wgt * sitaussamp
-                    ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
-                    ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
-                  end if
-#endif
-
-                  ! high pressure layer
-                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
-                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
-                  stauhp = sltauhp + sitauhp
-                  if (stauhp > 0.) then
-                    COTDHP(icol) = COTDHP(icol) + wgt
-                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussahp = 0.; sltaussaghp = 0.
-                  if (sltauhp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
-                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
-                    end select
-                    COTLDHP(icol) = COTLDHP(icol) + wgt
-                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
-                    SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
-                    SSALNHP(icol) = SSALNHP(icol) + wgt * sltaussahp
-                    ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
-                    ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
-                  end if
-                  sitaussahp = 0.; sitaussaghp = 0.
-                  if (sitauhp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
-                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
-                    end select
-                    COTIDHP(icol) = COTIDHP(icol) + wgt
-                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
-                    SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
-                    SSAINHP(icol) = SSAINHP(icol) + wgt * sitaussahp
-                    ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
-                    ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
-                  end if
-#endif
-
-                  ! whole subcolumn
-                  sltautp = sltaulp + sltaump + sltauhp
-                  sitautp = sitaulp + sitaump + sitauhp
-                  stautp = staulp + staump + stauhp
-                  if (stautp > 0.) then
-                    COTDTP(icol) = COTDTP(icol) + wgt
-                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  if (sltautp > 0.) then
-                    COTLDTP(icol) = COTLDTP(icol) + wgt
-                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
-                    SSALDTP(icol) = SSALDTP(icol) + wgt * sltautp
-                    SSALNTP(icol) = SSALNTP(icol) + wgt * sltaussatp
-                    ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
-                    ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
-                  end if
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
-                  if (sitautp > 0.) then
-                    COTIDTP(icol) = COTIDTP(icol) + wgt
-                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
-                    SSAIDTP(icol) = SSAIDTP(icol) + wgt * sitautp
-                    SSAINTP(icol) = SSAINTP(icol) + wgt * sitaussatp
-                    ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
-                    ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
-                  end if
-#endif
-
-                end do ! igpt
-              end do ! ib
-
-              ! normalize
-              ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
-              if (COTDTP(icol) > 0. .and. COTNTP(icol) > 0.) then
-                COTTP(icol) = COTNTP(icol) / COTDTP(icol)
-#ifdef SOLAR_RADVAL
-                TAUTP(icol) = COTTP(icol)
-#endif
-              end if
-
-              if (COTDHP(icol) > 0. .and. COTNHP(icol) > 0.) then
-                COTHP(icol) = COTNHP(icol) / COTDHP(icol)
-#ifdef SOLAR_RADVAL
-                TAUHP(icol) = COTHP(icol)
-#endif
-              end if
-
-              if (COTDMP(icol) > 0. .and. COTNMP(icol) > 0.) then
-                COTMP(icol) = COTNMP(icol) / COTDMP(icol)
-#ifdef SOLAR_RADVAL
-                TAUMP(icol) = COTMP(icol)
-#endif
-              end if
-
-              if (COTDLP(icol) > 0. .and. COTNLP(icol) > 0.) then
-                COTLP(icol) = COTNLP(icol) / COTDLP(icol)
-#ifdef SOLAR_RADVAL
-                TAULP(icol) = COTLP(icol)
-#endif
-              end if
-
-            end if  ! potentially cloudy column 
-          end do  ! isub
-        end if  ! include_aerosols
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
         ! delta-scaling of cloud optical properties (accounts for forward scattering)
         call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
@@ -6652,7 +6396,7 @@ contains
 
       use mo_gas_concentrations, only: ty_gas_concs
       use mo_gas_optics_rrtmgp,  only: ty_gas_optics_rrtmgp
-      use mo_optical_props,      only: ty_optical_props_arry
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
       use mo_rte_kind,           only: wp
 
       integer,                           intent(in)    :: colS, colE, ncols_block, LM
@@ -6992,6 +6736,376 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_cloud_optics_mcica
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Super-layer cloud fraction and in-cloud optical depth diagnostics,
+    ! computed from the McICA subcolumn ensemble BEFORE delta-scaling.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_sprlyr_diags_predelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        cld_mask, ClearCounts, CL, toa_flux, band_lims_gpt, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CLDTS, CLDHS, CLDMS, CLDLS, &
+        COTTP, COTHP, COTMP, COTLP, &
+        COTDTP, COTDHP, COTDMP, COTDLP, &
+        COTNTP, COTNHP, COTNMP, COTNLP, &
+#ifdef SOLAR_RADVAL
+        TAUTP, TAUHP, TAUMP, TAULP, &
+        COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+        COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+        COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+        COTINTP, COTINHP, COTINMP, COTINLP, &
+        SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+        SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+        SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+        SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+        ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+        ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+        ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+        ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+#endif
+        MAPL, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry
+
+      integer,                      intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      integer,                      intent(in)    :: LCLDLM, LCLDMH
+      logical,                      intent(in)    :: include_aerosols
+      logical,          intent(in)  :: cld_mask(:,:,:)
+      integer,          intent(inout) :: ClearCounts(:,:)
+      real,             intent(in)  :: CL(:,:)
+      real(wp),         intent(in)  :: toa_flux(:,:)
+      integer,          intent(in)  :: band_lims_gpt(:,:)
+      class(ty_optical_props_arry), intent(in) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real,             intent(inout) :: CLDTS(:), CLDHS(:), CLDMS(:), CLDLS(:)
+      real,             intent(inout) :: COTTP(:), COTHP(:), COTMP(:), COTLP(:)
+      real,             intent(inout) :: COTDTP(:), COTDHP(:), COTDMP(:), COTDLP(:)
+      real,             intent(inout) :: COTNTP(:), COTNHP(:), COTNMP(:), COTNLP(:)
+#ifdef SOLAR_RADVAL
+      real,             intent(inout) :: TAUTP(:), TAUHP(:), TAUMP(:), TAULP(:)
+      real,             intent(inout) :: COTLDTP(:), COTLDHP(:), COTLDMP(:), COTLDLP(:)
+      real,             intent(inout) :: COTLNTP(:), COTLNHP(:), COTLNMP(:), COTLNLP(:)
+      real,             intent(inout) :: COTIDTP(:), COTIDHP(:), COTIDMP(:), COTIDLP(:)
+      real,             intent(inout) :: COTINTP(:), COTINHP(:), COTINMP(:), COTINLP(:)
+      real,             intent(inout) :: SSALDTP(:), SSALDHP(:), SSALDMP(:), SSALDLP(:)
+      real,             intent(inout) :: SSALNTP(:), SSALNHP(:), SSALNMP(:), SSALNLP(:)
+      real,             intent(inout) :: SSAIDTP(:), SSAIDHP(:), SSAIDMP(:), SSAIDLP(:)
+      real,             intent(inout) :: SSAINTP(:), SSAINHP(:), SSAINMP(:), SSAINLP(:)
+      real,             intent(inout) :: ASMLDTP(:), ASMLDHP(:), ASMLDMP(:), ASMLDLP(:)
+      real,             intent(inout) :: ASMLNTP(:), ASMLNHP(:), ASMLNMP(:), ASMLNLP(:)
+      real,             intent(inout) :: ASMIDTP(:), ASMIDHP(:), ASMIDMP(:), ASMIDLP(:)
+      real,             intent(inout) :: ASMINTP(:), ASMINHP(:), ASMINMP(:), ASMINLP(:)
+#endif
+      type(MAPL_MetaComp),          intent(inout) :: MAPL
+      integer, optional,            intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ib, igpt
+      real     :: wgt
+      real     :: stautp, stauhp, staump, staulp
+      real     :: sltautp, sltauhp, sltaump, sltaulp
+      real     :: sitautp, sitauhp, sitaump, sitaulp
+#ifdef SOLAR_RADVAL
+      real     :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
+      real     :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
+      real     :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
+      real     :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
+#endif
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      if (include_aerosols) then
+
+        ! super-layer cloud fractions
+        call clearCounts_threeBand( &
+          ncols_block, ncols_block, ngpt, LM, LCLDLM, LCLDMH, &
+          reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
+          ClearCounts)
+        do isub = 1,ncols_block
+          icol = colS + isub - 1
+          CLDTS(icol) = 1. - ClearCounts(1,isub)/float(ngpt)
+          CLDHS(icol) = 1. - ClearCounts(2,isub)/float(ngpt)
+          CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
+          CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
+        end do
+
+          ! in-cloud optical thicknesses in PAR super-band
+          ! (weighted across and within bands by TOA incident flux)
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+
+#ifdef SOLAR_RADVAL
+            ! default (no cloud) for TAUx variant
+            TAUTP(icol) = 0.
+            TAUHP(icol) = 0.
+            TAUMP(icol) = 0.
+            TAULP(icol) = 0.
+#endif
+
+            ! default (no cloud) for COTx variant
+            COTTP(icol) = MAPL_UNDEF
+            COTHP(icol) = MAPL_UNDEF
+            COTMP(icol) = MAPL_UNDEF
+            COTLP(icol) = MAPL_UNDEF
+
+            ! zero denom- and numerator accumulators
+            COTDTP(icol) = 0.; COTNTP(icol) = 0.
+            COTDHP(icol) = 0.; COTNHP(icol) = 0.
+            COTDMP(icol) = 0.; COTNMP(icol) = 0.
+            COTDLP(icol) = 0.; COTNLP(icol) = 0.
+#ifdef SOLAR_RADVAL
+            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.; COTIDTP(icol) = 0.; COTINTP(icol) = 0.
+            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.; COTIDHP(icol) = 0.; COTINHP(icol) = 0.
+            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.; COTIDMP(icol) = 0.; COTINMP(icol) = 0.
+            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.; COTIDLP(icol) = 0.; COTINLP(icol) = 0.
+            SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
+            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
+            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
+            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
+            ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
+            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
+            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
+            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
+#endif
+
+            ! can only be non-zero for potentially cloudy columns
+            if (any(CL(icol,:) > 0.)) then
+
+              ! accumulate over gpts/subcolumns
+              do ib = 1, nbnd
+                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+
+                  ! band weights for photosynthetically active radiation (PAR)
+                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                  if (ib >= 11 .and. ib <= 12) then
+                    wgt = 1.0
+                  else if (ib == 10) then
+                    wgt = 0.5
+                  else
+                    ! no contribution to PAR
+                    cycle
+                  end if
+
+                  ! TOA flux weighting
+                  ! (note: neither the adjustment of toa_flux to our tsi
+                  ! or for zenith angle are needed yet since this weighting
+                  ! is over gpoint and is normalized for EACH icol)
+                  wgt = wgt * toa_flux(isub,igpt)
+
+                  ! low pressure layer
+                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
+                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                  staulp = sltaulp + sitaulp
+                  if (staulp > 0.) then
+                    COTDLP(icol) = COTDLP(icol) + wgt
+                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussalp = 0.; sltaussaglp = 0.
+                  if (sltaulp > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    end select
+                    COTLDLP(icol) = COTLDLP(icol) + wgt
+                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
+                    SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
+                    SSALNLP(icol) = SSALNLP(icol) + wgt * sltaussalp
+                    ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
+                    ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
+                  end if
+                  sitaussalp = 0.; sitaussaglp = 0.
+                  if (sitaulp > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    end select
+                    COTIDLP(icol) = COTIDLP(icol) + wgt
+                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
+                    SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
+                    SSAINLP(icol) = SSAINLP(icol) + wgt * sitaussalp
+                    ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
+                    ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
+                  end if
+#endif
+
+                  ! mid pressure layer
+                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  staump = sltaump + sitaump
+                  if (staump > 0.) then
+                    COTDMP(icol) = COTDMP(icol) + wgt
+                    COTNMP(icol) = COTNMP(icol) + wgt * staump
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussamp = 0.; sltaussagmp = 0.
+                  if (sltaump > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
+                    COTLDMP(icol) = COTLDMP(icol) + wgt
+                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
+                    SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
+                    SSALNMP(icol) = SSALNMP(icol) + wgt * sltaussamp
+                    ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
+                    ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
+                  end if
+                  sitaussamp = 0.; sitaussagmp = 0.
+                  if (sitaump > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
+                    COTIDMP(icol) = COTIDMP(icol) + wgt
+                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
+                    SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
+                    SSAINMP(icol) = SSAINMP(icol) + wgt * sitaussamp
+                    ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
+                    ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
+                  end if
+#endif
+
+                  ! high pressure layer
+                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
+                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                  stauhp = sltauhp + sitauhp
+                  if (stauhp > 0.) then
+                    COTDHP(icol) = COTDHP(icol) + wgt
+                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussahp = 0.; sltaussaghp = 0.
+                  if (sltauhp > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    end select
+                    COTLDHP(icol) = COTLDHP(icol) + wgt
+                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
+                    SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
+                    SSALNHP(icol) = SSALNHP(icol) + wgt * sltaussahp
+                    ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
+                    ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
+                  end if
+                  sitaussahp = 0.; sitaussaghp = 0.
+                  if (sitauhp > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    end select
+                    COTIDHP(icol) = COTIDHP(icol) + wgt
+                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
+                    SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
+                    SSAINHP(icol) = SSAINHP(icol) + wgt * sitaussahp
+                    ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
+                    ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
+                  end if
+#endif
+
+                  ! whole subcolumn
+                  sltautp = sltaulp + sltaump + sltauhp
+                  sitautp = sitaulp + sitaump + sitauhp
+                  stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    COTDTP(icol) = COTDTP(icol) + wgt
+                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
+                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
+                  if (sltautp > 0.) then
+                    COTLDTP(icol) = COTLDTP(icol) + wgt
+                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
+                    SSALDTP(icol) = SSALDTP(icol) + wgt * sltautp
+                    SSALNTP(icol) = SSALNTP(icol) + wgt * sltaussatp
+                    ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
+                    ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
+                  end if
+                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
+                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                  if (sitautp > 0.) then
+                    COTIDTP(icol) = COTIDTP(icol) + wgt
+                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
+                    SSAIDTP(icol) = SSAIDTP(icol) + wgt * sitautp
+                    SSAINTP(icol) = SSAINTP(icol) + wgt * sitaussatp
+                    ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
+                    ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
+                  end if
+#endif
+
+                end do ! igpt
+              end do ! ib
+
+              ! normalize
+              ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
+              if (COTDTP(icol) > 0. .and. COTNTP(icol) > 0.) then
+                COTTP(icol) = COTNTP(icol) / COTDTP(icol)
+#ifdef SOLAR_RADVAL
+                TAUTP(icol) = COTTP(icol)
+#endif
+              end if
+
+              if (COTDHP(icol) > 0. .and. COTNHP(icol) > 0.) then
+                COTHP(icol) = COTNHP(icol) / COTDHP(icol)
+#ifdef SOLAR_RADVAL
+                TAUHP(icol) = COTHP(icol)
+#endif
+              end if
+
+              if (COTDMP(icol) > 0. .and. COTNMP(icol) > 0.) then
+                COTMP(icol) = COTNMP(icol) / COTDMP(icol)
+#ifdef SOLAR_RADVAL
+                TAUMP(icol) = COTMP(icol)
+#endif
+              end if
+
+              if (COTDLP(icol) > 0. .and. COTNLP(icol) > 0.) then
+                COTLP(icol) = COTNLP(icol) / COTDLP(icol)
+#ifdef SOLAR_RADVAL
+                TAULP(icol) = COTLP(icol)
+#endif
+              end if
+
+            end if  ! potentially cloudy column
+          end do  ! isub
+      end if  ! include_aerosols
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_sprlyr_diags_predelta
 #undef TEST_
 
 
