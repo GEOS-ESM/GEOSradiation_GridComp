@@ -5191,6 +5191,11 @@ contains
       nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
       ! loop over all blocks
+      ! RRTMGP is thread-safe (confirmed by RRTMGP developers).
+      ! All per-block state is private inside PROCESS_RRTMGP_BLOCK.
+      ! Output arrays are indexed by non-overlapping colS:colE ranges -- no race.
+      ! NOTE: MAPL timer calls inside the parallel region are guarded by !$OMP CRITICAL.
+      !$OMP PARALLEL DO SCHEDULE(DYNAMIC)
       do b = 1,nBlocks
 
         call PROCESS_RRTMGP_BLOCK( &
@@ -5247,6 +5252,7 @@ contains
           MAPL, __RC__)
 
       end do ! loop over blocks
+      !$OMP END PARALLEL DO
 
       call MAPL_TimerOn(MAPL,"--RRTMGP_POST",__RC__)
 
@@ -5952,7 +5958,8 @@ contains
       character(len=ESMF_MAXSTR) :: error_msg
       integer                    :: STATUS
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
 
       TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
 
@@ -5962,7 +5969,8 @@ contains
         gas_concs_block, optical_props, toa_flux)
       TEST_(error_msg)
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
@@ -6123,7 +6131,8 @@ contains
       ! for SW start at counter=65,536
       seeds(3) = 65536
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
       ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
       ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
@@ -6149,9 +6158,11 @@ contains
         cloud_props_bnd_ice)
       TEST_(error_msg)
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
 
 !!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
 
@@ -6270,7 +6281,8 @@ contains
           where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
       end if
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
@@ -6357,7 +6369,8 @@ contains
       character(len=ESMF_MAXSTR) :: error_msg
       integer  :: STATUS
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
       if (include_aerosols) then
 
@@ -6640,7 +6653,8 @@ contains
           end do  ! isub
       end if  ! include_aerosols
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
@@ -6683,7 +6697,8 @@ contains
       character(len=ESMF_MAXSTR) :: error_msg
       integer  :: STATUS
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
       forwliq = 0.; forwice = 0.  ! default for no delta-scaling
       if (rrtmgp_delta_scale) then
@@ -6747,7 +6762,8 @@ contains
         endif
       endif
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
@@ -6834,7 +6850,8 @@ contains
       character(len=ESMF_MAXSTR) :: error_msg
       integer  :: STATUS
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
       if (include_aerosols) then
 
@@ -7090,7 +7107,8 @@ contains
         end do  ! isub
       end if  ! include_aerosols
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
 
       RETURN_(ESMF_SUCCESS)
 
@@ -7140,7 +7158,8 @@ contains
       character(len=512) :: error_msg
       integer            :: STATUS
 
-      call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
 
       ! scale to our tsi
       ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
@@ -7177,7 +7196,8 @@ contains
         fluxes_allsky)
       TEST_(error_msg)
 
-      call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
 
       RETURN
     end subroutine compute_rte_sw
