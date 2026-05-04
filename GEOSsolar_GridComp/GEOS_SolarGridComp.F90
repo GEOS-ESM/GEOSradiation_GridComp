@@ -7424,8 +7424,10 @@ contains
         gas_concs, k_dist, p_lay, p_lev, t_lay, &
         optical_props, toa_flux, MAPL, __RC__)
 
-      call compute_aer_optics(colS, colE, need_aer_optical_props, &
-        taua, ssaa, asya, aer_props, __RC__)
+      if (need_aer_optical_props) then
+        call compute_aer_optics(colS, colE, need_aer_optical_props, &
+          taua, ssaa, asya, aer_props, __RC__)
+      end if
 
       call compute_cloud_optics_mcica( &
         colS, colE, ncols_block, LM, ngpt, &
