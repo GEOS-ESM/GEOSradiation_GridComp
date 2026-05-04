@@ -5364,44 +5364,15 @@ contains
           MAPL, __RC__)
 #endif
 
-        call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
-
-        ! scale to our tsi
-        ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
-        toa_flux = toa_flux * spread(tsi(colS:colE)/sum(toa_flux,dim=2), 2, ngpt)
-
-        ! add in aerosol optical properties if requested and available
-        if (need_aer_optical_props) then
-          TEST_(aer_props%increment(optical_props))
-        end if
-
-        ! clear-sky radiative transfer
-        fluxes_clrsky%flux_up  => flux_up_clrsky(colS:colE,:)
-        fluxes_clrsky%flux_net => flux_net_clrsky(colS:colE,:)
-        error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
-          sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
-          fluxes_clrsky)
-        TEST_(error_msg)
-
-        ! add in cloud optical properties
-        ! add ice first since its optical depths are usually smaller
-        TEST_(cloud_props_gpt_ice%increment(optical_props))
-        TEST_(cloud_props_gpt_liq%increment(optical_props))
-
-        ! all-sky radiative transfer
-        fluxes_allsky%flux_up         => flux_up_allsky(colS:colE,:)
-        fluxes_allsky%flux_net        => flux_net_allsky(colS:colE,:)
-        fluxes_allsky%bnd_flux_dn     => bnd_flux_dn_allsky(colS:colE,:,:)
-        fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky(colS:colE,:,:)
-        fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky(colS:colE,:,:)
-        error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
-          sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
-          fluxes_allsky)
-        TEST_(error_msg)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+        call compute_rte_sw( &
+          colS, colE, ngpt, &
+          tsi, toa_flux, need_aer_optical_props, aer_props, optical_props, &
+          top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+          fluxes_clrsky, flux_up_clrsky, flux_net_clrsky, &
+          fluxes_allsky, flux_up_allsky, flux_net_allsky, &
+          bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
+          cloud_props_gpt_liq, cloud_props_gpt_ice, &
+          MAPL, __RC__)
 
         ! deallocate per-block arrays
         ! Note: urand*, alpha, rcorr, zcw are now local to compute_cloud_optics_mcica.
@@ -7266,6 +7237,92 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_sprlyr_diags_postdelta
+#undef TEST_
+
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_rte_sw( &
+        colS, colE, ngpt, &
+        tsi, toa_flux, need_aer_optical_props, aer_props, optical_props, &
+        top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+        fluxes_clrsky, flux_up_clrsky, flux_net_clrsky, &
+        fluxes_allsky, flux_up_allsky, flux_net_allsky, &
+        bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        MAPL, RC)
+
+      use mo_optical_props,   only: ty_optical_props_arry
+      use mo_rte_kind,        only: wp
+      use mo_rte_sw,          only: rte_sw
+      use mo_fluxes_byband,   only: ty_fluxes_byband
+
+      integer,                              intent(in)    :: colS, colE, ngpt
+      real(wp),                             intent(in)    :: tsi(:)
+      real(wp),                             intent(inout) :: toa_flux(:,:)
+      logical,                              intent(in)    :: need_aer_optical_props
+      class(ty_optical_props_arry),         intent(inout) :: aer_props
+      class(ty_optical_props_arry),         intent(inout) :: optical_props
+      logical,                              intent(in)    :: top_at_1
+      real(wp),                             intent(in)    :: mu0(:)
+      real(wp),                             intent(in)    :: sfc_alb_dir(:,:)
+      real(wp),                             intent(in)    :: sfc_alb_dif(:,:)
+      type(ty_fluxes_byband),               intent(inout) :: fluxes_clrsky
+      real(wp),              target,        intent(inout) :: flux_up_clrsky(:,:)
+      real(wp),              target,        intent(inout) :: flux_net_clrsky(:,:)
+      type(ty_fluxes_byband),               intent(inout) :: fluxes_allsky
+      real(wp),              target,        intent(inout) :: flux_up_allsky(:,:)
+      real(wp),              target,        intent(inout) :: flux_net_allsky(:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_dn_allsky(:,:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_dir_allsky(:,:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_net_allsky(:,:,:)
+      class(ty_optical_props_arry),         intent(inout) :: cloud_props_gpt_liq
+      class(ty_optical_props_arry),         intent(inout) :: cloud_props_gpt_ice
+      type(MAPL_MetaComp),                  intent(inout) :: MAPL
+      integer,               optional,      intent(out)   :: RC
+
+      character(len=512) :: error_msg
+      integer            :: STATUS
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
+
+      ! scale to our tsi
+      ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
+      toa_flux = toa_flux * spread(tsi(colS:colE)/sum(toa_flux,dim=2), 2, ngpt)
+
+      ! add in aerosol optical properties if requested and available
+      if (need_aer_optical_props) then
+        TEST_(aer_props%increment(optical_props))
+      end if
+
+      ! clear-sky radiative transfer
+      fluxes_clrsky%flux_up  => flux_up_clrsky
+      fluxes_clrsky%flux_net => flux_net_clrsky
+      error_msg = rte_sw( &
+        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
+        fluxes_clrsky)
+      TEST_(error_msg)
+
+      ! add in cloud optical properties
+      ! add ice first since its optical depths are usually smaller
+      TEST_(cloud_props_gpt_ice%increment(optical_props))
+      TEST_(cloud_props_gpt_liq%increment(optical_props))
+
+      ! all-sky radiative transfer
+      fluxes_allsky%flux_up         => flux_up_allsky
+      fluxes_allsky%flux_net        => flux_net_allsky
+      fluxes_allsky%bnd_flux_dn     => bnd_flux_dn_allsky
+      fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky
+      fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky
+      error_msg = rte_sw( &
+        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
+        fluxes_allsky)
+      TEST_(error_msg)
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+
+      RETURN
+    end subroutine compute_rte_sw
 #undef TEST_
 
 
