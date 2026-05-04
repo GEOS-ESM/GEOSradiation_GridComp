@@ -5325,69 +5325,13 @@ contains
 
 
         ! delta-scaling of cloud optical properties (accounts for forward scattering)
-        call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
-        forwliq = 0.; forwice = 0.  ! default for no delta-scaling
-        if (rrtmgp_delta_scale) then
-
-          ! default delta-scaling for liquid
-          select type(cloud_props_gpt_liq)
-          class is (ty_optical_props_2str)
-            forwliq = cloud_props_gpt_liq%g ** 2
-          end select
-          TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
-
-          if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
-            ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
-            select type(cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              radice_lwr = cloud_optics%get_min_radius_ice()
-              radice_upr = cloud_optics%get_max_radius_ice()
-              do isub = 1,ncols_block
-                icol = colS + isub - 1
-                do ilay = 1,LM
-                  ! only if at least potentially cloudy ...
-                  if (CL(icol,ilay) > 0.) then
-  
-                    ! prepare for radice interpolation ...
-                    ! first get radice consistent with RRTMGP ice cloud optics
-                    radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
-                    ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
-                    radice = min(max(radice,5._wp),140._wp)
-                    ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
-                    ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
-                    radfac = (radice - 2._wp) / 3._wp
-                    radidx = min(max(int(radfac),1),45)
-                    rfint = radfac - real(radidx,kind=wp)
-  
-                    do ib = 1,nbnd
-                      ! interpolate fdelta in radice for band ib
-                      fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
-  
-                      ! forwice calc for each g-point
-                      do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
-                        if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
-                          forwice(isub,ilay,igpt) = min( &
-                             fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
-                             cloud_props_gpt_ice%g(isub,ilay,igpt))
-                        endif
-                      enddo  ! g-points
-                    enddo  ! bands
-  
-                  endif  ! potentially cloudy
-                enddo  ! layers
-              enddo  ! columns
-            end select
-            TEST_(cloud_props_gpt_ice%delta_scale(forwice))
-          else
-            ! default delta-scaling for ice
-            select type(cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              forwice = cloud_props_gpt_ice%g ** 2
-            end select
-            TEST_(cloud_props_gpt_ice%delta_scale(forwice))
-          endif
-        endif
-        call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+        call compute_delta_scale( &
+          colS, ncols_block, LM, ngpt, nbnd, &
+          rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+          CL, RR3, band_lims_gpt, &
+          cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
+          forwliq, forwice, &
+          MAPL, __RC__)
 
 #ifdef SOLAR_RADVAL
         ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
@@ -7106,6 +7050,113 @@ contains
       RETURN_(ESMF_SUCCESS)
 
     end subroutine compute_sprlyr_diags_predelta
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Delta-scale cloud optical properties (liquid and ice) for one block.
+    ! forwliq and forwice are computed here and returned for use in Step 2f.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_delta_scale( &
+        colS, ncols_block, LM, ngpt, nbnd, &
+        rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+        CL, RR3, band_lims_gpt, &
+        cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        forwliq, forwice, &
+        MAPL, RC)
+
+      use mo_optical_props,       only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
+      use mo_rte_kind,            only: wp
+
+      integer,                        intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      logical,                        intent(in)    :: rrtmgp_delta_scale
+      logical,                        intent(in)    :: rrtmgp_use_rrtmg_iceflg3_like_forwice
+      real,             dimension(:,:),   intent(in) :: CL
+      real,             dimension(:,:,:), intent(in) :: RR3
+      integer,          dimension(:,:),   intent(in) :: band_lims_gpt
+      type(ty_cloud_optics_rrtmgp),   intent(inout) :: cloud_optics
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real(wp),         dimension(:,:,:), intent(out) :: forwliq, forwice
+      type(MAPL_MetaComp),            intent(inout) :: MAPL
+      integer, optional,              intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ilay, ib, igpt, radidx
+      real(wp) :: radice_lwr, radice_upr, radice, radfac, rfint, fdelta
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+
+      forwliq = 0.; forwice = 0.  ! default for no delta-scaling
+      if (rrtmgp_delta_scale) then
+
+        ! default delta-scaling for liquid
+        select type(cloud_props_gpt_liq)
+        class is (ty_optical_props_2str)
+          forwliq = cloud_props_gpt_liq%g ** 2
+        end select
+        TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
+
+        if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
+          ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
+          select type(cloud_props_gpt_ice)
+          class is (ty_optical_props_2str)
+            radice_lwr = cloud_optics%get_min_radius_ice()
+            radice_upr = cloud_optics%get_max_radius_ice()
+            do isub = 1,ncols_block
+              icol = colS + isub - 1
+              do ilay = 1,LM
+                ! only if at least potentially cloudy ...
+                if (CL(icol,ilay) > 0.) then
+
+                  ! prepare for radice interpolation ...
+                  ! first get radice consistent with RRTMGP ice cloud optics
+                  radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
+                  ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
+                  radice = min(max(radice,5._wp),140._wp)
+                  ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
+                  ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
+                  radfac = (radice - 2._wp) / 3._wp
+                  radidx = min(max(int(radfac),1),45)
+                  rfint = radfac - real(radidx,kind=wp)
+
+                  do ib = 1,nbnd
+                    ! interpolate fdelta in radice for band ib
+                    fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
+
+                    ! forwice calc for each g-point
+                    do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
+                      if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
+                        forwice(isub,ilay,igpt) = min( &
+                           fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
+                           cloud_props_gpt_ice%g(isub,ilay,igpt))
+                      endif
+                    enddo  ! g-points
+                  enddo  ! bands
+
+                endif  ! potentially cloudy
+              enddo  ! layers
+            enddo  ! columns
+          end select
+          TEST_(cloud_props_gpt_ice%delta_scale(forwice))
+        else
+          ! default delta-scaling for ice
+          select type(cloud_props_gpt_ice)
+          class is (ty_optical_props_2str)
+            forwice = cloud_props_gpt_ice%g ** 2
+          end select
+          TEST_(cloud_props_gpt_ice%delta_scale(forwice))
+        endif
+      endif
+
+      call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_delta_scale
 #undef TEST_
 
 
