@@ -2692,34 +2692,35 @@ contains
       !-------------------------------------------------------!
       ! Loop over blocks of blockSize columns                 !
       !  - choose rrtmgp_blockSize for memory/time efficiency !
-      !  - one possible partial block is done at the end      !
+      !  - all blocks including the final partial block are   !
+      !    handled uniformly using ceiling division           !
       !-------------------------------------------------------!
 
       call MAPL_GetResource( MAPL, &
         rrtmgp_blockSize, "RRTMGP_LW_BLOCKSIZE:", DEFAULT=4, __RC__)
       _ASSERT(rrtmgp_blockSize >= 1,'invalid RRTMGP_LW_BLOCKSIZE')
 
-      ! for random numbers, for efficiency, reserve the maximum possible
-      !   subset of columns (rrtmgp_blockSize) since column index is last
-      allocate(urand(ngpt,LM,rrtmgp_blocksize),__STAT__)
-      if (gen_mro) then
-        allocate(urand_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        if (cond_inhomo) then
-          allocate(urand_cond    (ngpt,LM,rrtmgp_blocksize),__STAT__)
-          allocate(urand_cond_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        end if
-      end if
+      ! Total number of blocks including any final partial block
+      nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
-      ! number of FULL blocks by integer division
-      nBlocks = ncol/rrtmgp_blockSize
+      ! loop over all blocks
+      do b = 1, nBlocks
 
-      ! allocate intermediate arrays for FULL blocks
-      if (nBlocks > 0) then
+        ! compute column range for this block (final block may be partial)
+        ncols_block = min(rrtmgp_blockSize, ncol - (b-1)*rrtmgp_blockSize)
+        colS = (b-1) * rrtmgp_blockSize + 1
+        colE = colS + ncols_block - 1
 
-        ! block size UNTIL possible final partial block
-        ncols_block = rrtmgp_blockSize
-
+        ! allocate per-block scratch arrays
         if (need_cloud_optical_props) then
+          allocate(urand(ngpt,LM,ncols_block),__STAT__)
+          if (gen_mro) then
+            allocate(urand_aux(ngpt,LM,ncols_block),__STAT__)
+            if (cond_inhomo) then
+              allocate(urand_cond    (ngpt,LM,ncols_block),__STAT__)
+              allocate(urand_cond_aux(ngpt,LM,ncols_block),__STAT__)
+            end if
+          end if
           allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
           if (gen_mro) then
             allocate(alpha(ncols_block,LM-1),     __STAT__)
@@ -2728,7 +2729,8 @@ contains
               allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
             endif
           endif
-          ! in-cloud cloud optical props
+          ! in-cloud cloud optical props (ty_optical_props routines
+          ! internally deallocate before reallocating if needed)
           select type (cloud_props_bnd)
             class is (ty_optical_props_2str)
               TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
@@ -2764,83 +2766,6 @@ contains
             TEST_(clean_optical_props%alloc_nstr(nmom, ncols_block, LM))
         end select
         TEST_(sources%alloc(ncols_block, LM))
-
-      end if
-
-      ! add final partial block if necessary
-      partial_block = mod(ncol, rrtmgp_blockSize) /= 0
-      if (partial_block) then
-        partial_blockSize = ncol - nBlocks * rrtmgp_blockSize
-        nBlocks = nBlocks + 1
-      endif
-
-      ! loop over all blocks
-      do b = 1, nBlocks
-
-        ! only the FINAL block can be partial
-        if (b == nBlocks .and. partial_block) then
-          ncols_block = partial_blockSize
-
-          if (need_cloud_optical_props) then
-            if (b > 1) then
-              ! one or more full blocks already processed
-              deallocate(cld_mask,      __STAT__)
-              if (gen_mro) then
-                deallocate(alpha,       __STAT__)
-                if (cond_inhomo) then
-                  deallocate(rcorr,zcw, __STAT__)
-                endif
-              endif
-            endif
-            allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
-            if (gen_mro) then
-              allocate(alpha(ncols_block,LM-1),     __STAT__)
-              if (cond_inhomo) then
-                allocate(rcorr(ncols_block,LM-1),   __STAT__)
-                allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
-              endif
-            endif
-            ! ty_optical_props routines have an internal deallocation
-            select type (cloud_props_bnd)
-              class is (ty_optical_props_2str)
-                TEST_(cloud_props_bnd%alloc_2str(ncols_block,LM))
-            end select
-            select type (cloud_props_gpt)
-              class is (ty_optical_props_2str)
-                TEST_(cloud_props_gpt%alloc_2str(ncols_block,LM))
-            end select
-          endif
-
-          if (need_dirty_optical_props) then
-            select type (aer_props)
-              class is (ty_optical_props_2str)
-                TEST_(aer_props%alloc_2str(ncols_block,LM))
-            end select
-            select type (dirty_optical_props)
-              class is (ty_optical_props_1scl)
-                TEST_(dirty_optical_props%alloc_1scl(ncols_block,LM))
-              class is (ty_optical_props_2str)
-                TEST_(dirty_optical_props%alloc_2str(ncols_block,LM))
-              class is (ty_optical_props_nstr)
-                TEST_(dirty_optical_props%alloc_nstr(nmom,ncols_block,LM))
-            end select
-          end if
-
-          select type (clean_optical_props)
-            class is (ty_optical_props_1scl)
-              TEST_(clean_optical_props%alloc_1scl(      ncols_block, LM))
-            class is (ty_optical_props_2str)
-              TEST_(clean_optical_props%alloc_2str(      ncols_block, LM))
-            class is (ty_optical_props_nstr)
-              TEST_(clean_optical_props%alloc_nstr(nmom, ncols_block, LM))
-          end select
-          TEST_(sources%alloc(ncols_block, LM))
-
-        endif  ! partial block
-
-        ! prepare block
-        colS = (b-1) * rrtmgp_blockSize + 1
-        colE = colS + ncols_block - 1
         TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
 
         ! get block of aerosol optical properties
@@ -3183,6 +3108,25 @@ contains
 
         call MAPL_TimerOff(MAPL,"---RRTMGP_RT",__RC__)
 
+        ! deallocate/finalize per-block scratch arrays
+        call sources%finalize()
+        call clean_optical_props%finalize()
+        if (need_dirty_optical_props) then
+          call dirty_optical_props%finalize()
+          call aer_props%finalize()
+        end if
+        if (need_cloud_optical_props) then
+          call cloud_props_bnd%finalize()
+          call cloud_props_gpt%finalize()
+          deallocate(cld_mask,urand,__STAT__)
+          if (gen_mro) then
+            deallocate(alpha,urand_aux,__STAT__)
+            if (cond_inhomo) then
+              deallocate(rcorr,zcw,urand_cond,urand_cond_aux,__STAT__)
+            endif
+          endif
+        end if
+
       end do ! loop over blocks
 
       ! tidy up
@@ -3239,23 +3183,15 @@ contains
       ! clean up
       deallocate(t_sfc,emis_sfc,__STAT__)
       deallocate(p_lay,t_lay,p_lev,t_lev,dp_wp,cf_wp,dzmid,__STAT__)
-      call sources%finalize()
-      call clean_optical_props%finalize()
-      if (need_dirty_optical_props) then
-        call dirty_optical_props%finalize()
-        call aer_props%finalize()
-      end if
       if (need_cloud_optical_props) then
-        deallocate(seeds,urand,cld_mask,__STAT__)
+        deallocate(seeds,__STAT__)
         if (gen_mro) then
-          deallocate(adl,alpha,urand_aux,__STAT__)
+          deallocate(adl,__STAT__)
           if (cond_inhomo) then
-            deallocate(rdl,rcorr,urand_cond,urand_cond_aux,zcw,__STAT__)
+            deallocate(rdl,__STAT__)
           endif
         endif
         call cloud_optics%finalize()
-        call cloud_props_gpt%finalize()
-        call cloud_props_bnd%finalize()
       end if
       if (calc_clrnoa) then
         deallocate(flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, __STAT__)
