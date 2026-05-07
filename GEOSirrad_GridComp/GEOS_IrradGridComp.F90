@@ -1493,6 +1493,7 @@ contains
 
    character(len=ESMF_MAXSTR)        :: IAm
    integer                           :: STATUS
+   integer                           :: loop_status
 
 ! local variables
 
@@ -2651,11 +2652,13 @@ contains
       _ASSERT(rrtmgp_blockSize >= 1,'invalid RRTMGP_LW_BLOCKSIZE')
 
       ! Total number of blocks including any final partial block
-      nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
+       nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
        ! loop over all blocks
-       do b = 1, nBlocks
-         call PROCESS_RRTMGP_LW_BLOCK( &
+        loop_status = ESMF_SUCCESS
+        !$OMP PARALLEL DO SCHEDULE(DYNAMIC) DEFAULT(SHARED) PRIVATE(STATUS)
+        do b = 1, nBlocks
+          call PROCESS_RRTMGP_LW_BLOCK( &
            b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga, &
            IM, IM_World, iBeg, jBeg, &
            top_at_1, u2s, &
@@ -2687,9 +2690,14 @@ contains
            dfupdts_allsky=dfupdts_allsky, &
            bnd_flux_up_allsky=bnd_flux_up_allsky, &
            bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
-           MAPL=MAPL, RC=STATUS)
-         VERIFY_(STATUS)
-       end do ! loop over blocks
+            MAPL=MAPL, RC=STATUS)
+           if (STATUS /= ESMF_SUCCESS) then
+             !$OMP ATOMIC WRITE
+             loop_status = STATUS
+           end if
+        end do ! loop over blocks
+        !$OMP END PARALLEL DO
+        VERIFY_(loop_status)
 
 
       ! tidy up
