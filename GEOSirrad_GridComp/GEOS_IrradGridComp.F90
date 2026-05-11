@@ -61,6 +61,7 @@ module GEOS_IrradGridCompMod
 
   use ESMF
   use MAPL
+  use mapl3g_GridGet, only: grid_get_interior
   use GEOS_UtilsMod
   use gFTL_StringVector
 
@@ -2651,7 +2652,11 @@ contains
         ! but get required global indicies of local rectangular grid here
         call MAPL_GridGet(ESMFGRID, globalCellCountPerDim=Gdims, __RC__)
         IM_World = Gdims(1); JM_World = Gdims(2)
-        call MAPL_GridGetInterior (ESMFGRID,iBeg,iEnd,jBeg,jEnd)
+        block
+          integer, allocatable :: interior_(:)
+          call grid_get_interior(ESMFGRID, interior_)
+          iBeg=interior_(1); iEnd=interior_(2); jBeg=interior_(3); jEnd=interior_(4)
+        end block
 
         ! get time part (word2) of key
         call ESMF_ClockGet(CLOCK, currTIME=CurrentTime, __RC__)

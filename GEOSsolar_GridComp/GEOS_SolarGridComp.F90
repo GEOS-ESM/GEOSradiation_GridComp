@@ -167,6 +167,7 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
+  use mapl3g_GridGet, only: grid_get_interior
   use gFTL_StringVector
 
   ! for RRTMGP
@@ -3834,7 +3835,11 @@ contains
       ! get indicies of local rectangular grid
       call MAPL_GridGet(ESMFGRID, globalCellCountPerDim=Gdims, __RC__)
       IM_World = Gdims(1); JM_World = Gdims(2)
-      call MAPL_GridGetInterior (ESMFGRID,iBeg,iEnd,jBeg,jEnd)
+      block
+        integer, allocatable :: interior_(:)
+        call grid_get_interior(ESMFGRID, interior_)
+        iBeg=interior_(1); iEnd=interior_(2); jBeg=interior_(3); jEnd=interior_(4)
+      end block
       do J=1,JM
         do I=1,IM
           Ig(I,J) = iBeg + I - 1
