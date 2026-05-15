@@ -2884,7 +2884,7 @@ contains
 
     integer :: CalledLast
     integer :: LCLDMH, LCLDLM
-    integer :: YY, DOY, HH ! +++ awlee add HH
+    integer :: YY, DOY, HH, MM ! +++ awlee add HH and MM
     integer :: K
     real    :: MLRAD_P_BOTTOM_HPA ! +++ awlee
     real    :: CO2
@@ -2981,7 +2981,7 @@ contains
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
-    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, __RC__) ! +++ awlee add H=HH
+    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, M=MM__RC__) ! +++ awlee add H=HH
     if(CO2<0.0) then
        CO2 = GETCO2(YY,DOY)
        write(MSGSTRING,'(A,I4,A,I3,A,e12.5)') &
@@ -3205,7 +3205,7 @@ contains
           MLRAD_LONS_2D(:,:) = LONS(:,:)
           MLRAD_YY_2D(:,:)   = real(YY)
           MLRAD_DOY_2D(:,:)  = real(DOY)
-          MLRAD_HH_2D(:,:)   = real(HH)
+          MLRAD_HH_2D(:,:)   = real(HH) + real(MM)/60
           MLRAD_PBOT_2D(:,:) = MLRAD_P_BOTTOM_HPA
 
           if (.not. pybridge_initialized) then
