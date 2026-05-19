@@ -2961,7 +2961,9 @@ contains
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
-    call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=0.1, __RC__) ! +++ awlee
+    if (GEOS_MLT) then ! +++ awlee
+       call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=0.1, __RC__)
+    end if
 
     ! Should we load balance solar radiation?
     ! For the single-column model, we always use the DATMO DYCORE.
@@ -2981,7 +2983,7 @@ contains
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
-    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, M=MM__RC__) ! +++ awlee add H=HH
+    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, M=MM, __RC__) ! +++ awlee add H=HH
     if(CO2<0.0) then
        CO2 = GETCO2(YY,DOY)
        write(MSGSTRING,'(A,I4,A,I3,A,e12.5)') &
