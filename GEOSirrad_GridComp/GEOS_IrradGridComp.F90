@@ -212,6 +212,11 @@ contains
     character(len=ESMF_MAXSTR) :: gen_str !i.e. generic_string variable <<>> MSL
     character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
 
+! <<>> MSL
+    integer      :: i,n
+    character(len=ESMF_MAXSTR) :: gen_str !i.e. generic_string variable <<>> MSL
+    character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
+
 !=============================================================================
 
     ! Get my name and set-up traceback handle
@@ -2173,6 +2178,7 @@ contains
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
       TEST_(gas_concs%set_vmr('o2' , real(O2 ,kind=wp)))
+      if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
@@ -2185,6 +2191,7 @@ contains
       TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
       TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
       TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+      if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d  ,(/ncol,LM/)),kind=wp))) !<<>> MSL
 
       if (associated(  CO2_3d)) &
       deallocate( CO2_R,__STAT__)
@@ -2316,7 +2323,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr3d))
+         export_clrnoa = (export_clrnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2328,7 +2335,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr2d))
+         export_clrnoa = (export_clrnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2343,7 +2350,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr3d))
+         export_clrsky = (export_clrsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2357,7 +2364,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr2d))
+         export_clrsky = (export_clrsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2372,7 +2379,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr3d))
+         export_allnoa = (export_allnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2384,7 +2391,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr2d))
+         export_allnoa = (export_allnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2399,7 +2406,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr3d))
+         export_allsky = (export_allsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2412,7 +2419,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr2d))
+         export_allsky = (export_allsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -4568,5 +4575,59 @@ contains
 
 end subroutine RUN
 
+  ! Decide which radiation to use for thermodynamics state evolution.
+  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
+  ! Chou-Suarez is the default if nothing else asked for in Resource file.
+  !----------------------------------------------------------------------
+
+  subroutine choose_solar_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    real :: RFLAG
+    integer :: STATUS
+
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+
+    _RETURN(_SUCCESS)
+  end subroutine choose_solar_scheme
+
+  subroutine choose_irrad_scheme (MAPL, &
+    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
+    RC)
+
+    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+    integer, optional, intent(out) :: RC  ! return code
+
+    real :: RFLAG
+    integer :: STATUS
+
+    USE_RRTMGP = .false.
+    USE_RRTMG  = .false.
+    USE_CHOU   = .false.
+    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
+    USE_RRTMGP = RFLAG /= 0.
+    if (.not. USE_RRTMGP) then
+      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
+      USE_RRTMG = RFLAG /= 0.
+      USE_CHOU  = .not.USE_RRTMG
+    end if
+
+    _RETURN(_SUCCESS)
+  end subroutine choose_irrad_scheme
 end module GEOS_IrradGridCompMod
 
