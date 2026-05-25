@@ -212,11 +212,6 @@ contains
     character(len=ESMF_MAXSTR) :: gen_str !i.e. generic_string variable <<>> MSL
     character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
 
-! <<>> MSL
-    integer      :: i,n
-    character(len=ESMF_MAXSTR) :: gen_str !i.e. generic_string variable <<>> MSL
-    character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
-
 !=============================================================================
 
     ! Get my name and set-up traceback handle
@@ -4575,59 +4570,5 @@ contains
 
 end subroutine RUN
 
-  ! Decide which radiation to use for thermodynamics state evolution.
-  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
-  ! Chou-Suarez is the default if nothing else asked for in Resource file.
-  !----------------------------------------------------------------------
-
-  subroutine choose_solar_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_solar_scheme
-
-  subroutine choose_irrad_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_irrad_scheme
 end module GEOS_IrradGridCompMod
 
