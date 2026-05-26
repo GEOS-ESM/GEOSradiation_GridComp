@@ -2173,6 +2173,7 @@ contains
       ! "constant" gases
       TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
       TEST_(gas_concs%set_vmr('o2' , real(O2 ,kind=wp)))
+      if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
@@ -2185,6 +2186,7 @@ contains
       TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
       TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
       TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+      if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d  ,(/ncol,LM/)),kind=wp))) !<<>> MSL
 
       if (associated(  CO2_3d)) &
       deallocate( CO2_R,__STAT__)
@@ -2316,7 +2318,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr3d))
+         export_clrnoa = (export_clrnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2328,7 +2330,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_clrnoa = (export_clrnoa .or. associated(ptr2d))
+         export_clrnoa = (export_clrnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2343,7 +2345,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr3d))
+         export_clrsky = (export_clrsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2357,7 +2359,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_clrsky = (export_clrsky .or. associated(ptr2d))
+         export_clrsky = (export_clrsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2372,7 +2374,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr3d))
+         export_allnoa = (export_allnoa .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2384,7 +2386,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_allnoa = (export_allnoa .or. associated(ptr2d))
+         export_allnoa = (export_allnoa .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
@@ -2399,7 +2401,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr3d, string_pointer, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr3d))
+         export_allsky = (export_allsky .or. associated(ptr3d))
          call string_vec_iter%next()
       end do
 
@@ -2412,7 +2414,7 @@ contains
       do while ( string_vec_iter /= string_vec%end() )
          string_pointer => string_vec_iter%get()
          call MAPL_GetPointer( EXPORT, ptr2d, string_pointer, __RC__)
-        export_allsky = (export_allsky .or. associated(ptr2d))
+         export_allsky = (export_allsky .or. associated(ptr2d))
          call string_vec_iter%next()
       end do
 
