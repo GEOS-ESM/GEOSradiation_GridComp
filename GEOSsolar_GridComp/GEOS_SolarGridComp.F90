@@ -178,9 +178,13 @@ module GEOS_SolarGridCompMod
 
   use rrtmg_sw_rad, only: rrtmg_sw
   use rrtmg_sw_init, only: rrtmg_sw_ini
-  use parrrsw, only: ngptsw
+  use parrrsw, only: nbndsw, jpb1, jpb2, ngptsw
+  use rrsw_wvn, only: wavenum1, wavenum2
+  use rad_types, only: rptr1d_wrap
   use cloud_subcol_gen, only: &
      generate_stochastic_clouds, clearCounts_threeBand
+  use rad_utils, only: Tbr_from_band_flux, &
+    choose_solar_scheme, choose_irrad_scheme
 
   use mo_rte_kind, only: wp
 
@@ -202,6 +206,48 @@ module GEOS_SolarGridCompMod
 
 !EOP
 
+  ! ----------------------------------------------
+  ! Select which RRTMG[P] bands support OSR output
+  ! ----------------------------------------------
+  !    via OSRBbbRG, ISRBbbRG, and TBRBbbRG exports ...
+  ! (These exports require support space in the
+  ! internal state so we choose only the ones we want
+  ! to offer here at compile time. In the future, if
+  ! most of the bands are required, then we will change
+  ! strategy and reserve space for ALL of them in the
+  ! internal state. In that case we would only require
+  ! runtime band selection via the EXPORTS chosen.)
+
+  ! Which bands are supported?
+  !   (Currently RRTMG & RRTMGP only:
+  !    RRTMG & RRTMGP have the same number of bands but they are reordered.
+  !      Specifically RRTMG band 14, which was out of order, now becomes
+  !      RRTMGP band 1, now in wavenumber order, and all other RRTMG bands
+  !      are moved to the next higher RRTMGP band, i.e.,
+  !      RRTMG->RRTMGP: 1->2, 2->3, ..., 13->14, 14->1.
+  !    The band wavenumber limits change only SLIGHTLY, and only for the
+  !      upper limit of RRTMGP band 1 (which is also the lower limit of
+  !      RRTMGP band 2).
+  !   (actual calculation only if export is requested)
+  ! Supported?    Band  Requested by (and use)
+  logical, parameter :: band_output_supported (nbndsw) = [ &
+     .false. , &!  01
+     .false. , &!  02
+     .false. , &!  03
+     .false. , &!  04
+     .false. , &!  05
+     .false. , &!  06
+     .false. , &!  07
+     .true.  , &!  08   W. Putman (RRTMG: GOES-"Veggie")
+     .true.  , &!  09   W. Putman (RRTMG: GOES-Red)       (RRTMGP: GOES-"Veggie")
+     .true.  , &!  10   W. Putman (RRTMG: GOES-Blue)      (RRTMGP: GOES-Red)
+     .true.  , &!  11   W. Putman                         (RRTMGP: GOES-Blue)
+     .false. , &!  12
+     .false. , &!  13
+     .false. ]  !  14
+  ! PMN TODO: change to a more flexible runtime-selectable method? An in LW too.
+
+  ! -----------------------------------------------
   ! RRTMGP internal state:
   ! Will be attached to the Gridded Component.
   ! Used to provide efficient initialization
@@ -408,17 +454,11 @@ contains
 
 !=============================================================================
 
-! ErrLog Variables
-
     character(len=ESMF_MAXSTR) :: IAm
     character(len=ESMF_MAXSTR) :: COMP_NAME
     integer                    :: STATUS
 
-! Local derived type aliases
-
     type (MAPL_MetaComp), pointer :: MAPL
-
-! Locals
 
     integer :: RUN_DT
     integer :: MY_STEP
@@ -431,6 +471,10 @@ contains
 
     type (ty_RRTMGP_state), pointer :: rrtmgp_state
     type (ty_RRTMGP_wrap)           :: wrap
+
+    ! for OSRBbbRG, ISRBbbRG, and TBRBbbRG
+    integer :: ibnd 
+    character*2 :: bb
 
 !=============================================================================
 
@@ -578,6 +622,15 @@ contains
        REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
 
     call MAPL_AddImportSpec(GC,                                              &
+       LONG_NAME  = 'mass_fraction_of_graupel_in_air',                       &
+       UNITS      = 'kg kg-1',                                               &
+       SHORT_NAME = 'QG',                                                    &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                                    &
+       AVERAGING_INTERVAL = ACCUMINT,                                        &
+       REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
+
+    call MAPL_AddImportSpec(GC,                                              &
        LONG_NAME  = 'effective_radius_of_cloud_liquid_water_particles',      &
        UNITS      = 'm',                                                     &
        SHORT_NAME = 'RL',                                                    &
@@ -608,6 +661,15 @@ contains
        LONG_NAME  = 'effective_radius_of_snow_particles',                    &
        UNITS      = 'm',                                                     &
        SHORT_NAME = 'RS',                                                    &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                                    &
+       AVERAGING_INTERVAL = ACCUMINT,                                        &
+       REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
+
+    call MAPL_AddImportSpec(GC,                                              &
+       LONG_NAME  = 'effective_radius_of_graupel_particles',                 &
+       UNITS      = 'm',                                                     &
+       SHORT_NAME = 'RG',                                                    &
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationCenter,                                    &
        AVERAGING_INTERVAL = ACCUMINT,                                        &
@@ -718,6 +780,34 @@ contains
        SHORT_NAME ='FSCUN',                                                  &
        DIMS       = MAPL_DimsHorzVert,                                       &
        VLOCATION  = MAPL_VLocationEdge,                                __RC__)
+
+    if (USE_RRTMG .or. USE_RRTMGP) then
+
+       ! Stating the obvious ...
+       _ASSERT(NB_RRTMG == nbndsw, 'Number of RRTMG bands error!')
+       _ASSERT(NB_RRTMGP == NB_RRTMG, 'Broken assumption for OSRB diagnostics')
+
+       do ibnd = 1,nbndsw
+          if (band_output_supported(ibnd)) then
+             write(bb,'(I0.2)') ibnd
+    
+             call MAPL_AddInternalSpec(GC,                                                  &
+                SHORT_NAME = 'OSRB'//bb//'RGN',                                             &
+                LONG_NAME  = 'normalized_upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
+                UNITS      = '1',                                                           &
+                DIMS       = MAPL_DimsHorzOnly,                                             &
+                VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
+   
+             call MAPL_AddInternalSpec(GC,                                                  &
+                SHORT_NAME = 'ISRB'//bb//'RGN',                                             &
+                LONG_NAME  = 'normalized_downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = '1',                                                           &
+                DIMS       = MAPL_DimsHorzOnly,                                             &
+                VLOCATION  = MAPL_VLocationNone,                                     __RC__ )
+   
+          end if
+       end do
+    end if
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME      = 'normalized_net_surface_downward_shortwave_flux_per_band_in_air',&
@@ -2574,6 +2664,36 @@ contains
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
+    if (USE_RRTMG .or. USE_RRTMGP) then
+       do ibnd = 1,nbndsw
+          if (band_output_supported(ibnd)) then
+             write(bb,'(I0.2)') ibnd
+    
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'OSRB'//bb//'RG',                                   &
+                LONG_NAME  = 'upwelling_shortwave_flux_at_TOA_in_RR_band'//bb,   &
+                UNITS      = 'W m-2',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
+   
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'ISRB'//bb//'RG',                                   &
+                LONG_NAME  = 'downwelling_shortwave_flux_at_TOA_in_RR_band'//bb, &
+                UNITS      = 'W m-2',                                            &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
+   
+             call MAPL_AddExportSpec(GC,                                         &
+                SHORT_NAME = 'TBRB'//bb//'RG',                                   &
+                LONG_NAME  = 'brightness_temperature_in_RR_SW_band'//bb,         &
+                UNITS      = 'K',                                                &
+                DIMS       = MAPL_DimsHorzOnly,                                  &
+                VLOCATION  = MAPL_VLocationNone,                          __RC__ )
+    
+          end if
+       end do
+    end if
+
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'toa_net_downward_shortwave_flux',                       &
        UNITS      = 'W m-2',                                                 &
@@ -2837,6 +2957,15 @@ contains
     type(StringVectorIterator) :: string_vec_iter
     character(len=:), pointer :: string_pointer
 
+    ! which bands require OSR output?
+    ! (only RRTMG[P]; OSRBbbRG, ISRBbbRG, and TBRBbbRG)
+    logical :: band_output (nbndsw)
+    integer :: ibnd
+    character*2 :: bb  
+
+    real, parameter :: SSA_MAX = 0.999999
+    real, parameter :: ASY_MAX = 0.999
+
 !=============================================================================
 
     ! Get the target components name and set-up traceback handle.
@@ -2942,6 +3071,33 @@ contains
          write (*,*) "Please check that your optics tables and NUM_BANDS are correct."
       end if
       _FAIL('Total number of radiation bands is inconsistent!')
+   end if
+
+   ! select which bands require OSRB output ...                                  
+   ! ------------------------------------------
+   ! Only available for RRTMG[P]
+   ! Must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
+   if (USE_RRTMG .or. USE_RRTMGP) then
+      do ibnd = 1,nbndsw
+         band_output(ibnd) = .false.
+         if (.not. band_output_supported(ibnd)) cycle
+         write(bb,'(I0.2)') ibnd
+         call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
+         if (associated(ptr2d)) then 
+            band_output(ibnd) = .true.
+            cycle
+         end if 
+         call MAPL_GetPointer(EXPORT, ptr2d, 'ISRB'//bb//'RG', __RC__)
+         if (associated(ptr2d)) then 
+            band_output(ibnd) = .true.
+            cycle
+         end if 
+         call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__) 
+         if (associated(ptr2d)) then
+            band_output(ibnd) = .true.
+            cycle
+         end if
+      end do
    end if
 
    ! Decide if should make OBIO exports
@@ -3161,11 +3317,13 @@ contains
                  value=(BANDS_SOLAR_OFFSET+band),__RC__)
 
               ! execute the aero provider's optics method
+              call MAPL_TimerOn(MAPL,"---AEROSOL_OPTICS")
               call ESMF_MethodExecute(AERO, &
                  label="run_aerosol_optics", &
                  userRC=AS_STATUS, RC=STATUS)
               VERIFY_(AS_STATUS)
               VERIFY_(STATUS)
+              call MAPL_TimerOff(MAPL,"---AEROSOL_OPTICS")
 
               ! EXT from AERO_PROVIDER
               call ESMF_AttributeGet(AERO, &
@@ -3173,7 +3331,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
               end if
 
               ! SSA from AERO_PROVIDER (actually EXT * SSA)
@@ -3182,7 +3340,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
               end if
 
               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
@@ -3191,7 +3349,7 @@ contains
                  value=AS_FIELD_NAME,__RC__)
               if (AS_FIELD_NAME /= '') then
                  call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
-                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = AS_PTR_3D
+                 if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
               end if
 
            end do SOLAR_BANDS
@@ -3340,6 +3498,8 @@ contains
       !
       use MKL_VSL_TYPE
       use mo_rng_mklvsl_plus, only: ty_rng_mklvsl_plus
+#else
+      use mo_rng_mt19937, only: ty_rng_mt
 #endif
 
       ! for RRTMGP (use implicit inside RRTMG)
@@ -3378,7 +3538,7 @@ contains
 
       ! inputs
       real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, OX, CL, &
-                                        QL, QI, QR, QS, RL, RI, RR, RS
+                                        QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
       real, pointer, dimension(:)    :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
                                         Ig1D, Jg1D, ALAT, SLR1D, ZT
 
@@ -3389,6 +3549,9 @@ contains
 
       ! outputs used for OBIO
       real, pointer, dimension(:,:)  :: DRBAND, DFBAND
+
+      ! outputs for OSRBbbRGN & ISRBbbRGN internals
+      type(rptr1d_wrap), dimension(nbndsw) :: OSRBRGN, ISRBRGN
 
       ! REFRESH exports (via internals)
       real, pointer, dimension(:)    :: COSZSW
@@ -3449,7 +3612,7 @@ contains
       real,    allocatable, dimension(:,:)   :: TLEV, TLEV_R, PLE_R
       real,    allocatable, dimension(:,:)   :: FCLD_R, CLIQWP, CICEWP, RELIQ, REICE
       real,    allocatable, dimension(:,:,:) :: TAUAER, SSAAER, ASMAER
-      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R
+      real,    allocatable, dimension(:,:)   :: DPR, PL_R, ZL_R, T_R, Q_R, O2_R, O3_R, CO2_R, CH4_R, N2O_R
 
       integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
       real,    allocatable, dimension(:,:)   :: SWUFLX,  SWDFLX,  SWUFLXC,  SWDFLXC
@@ -3464,6 +3627,8 @@ contains
       integer :: DYOFYR
       integer :: NCOL
       integer :: RPART, IAER, NORMFLX
+
+      logical :: USE_PRECIP_IN_RADIATION
 
       integer                   :: ISOLVAR
       real, dimension(2)        :: INDSOLVAR
@@ -3529,12 +3694,12 @@ contains
       class(ty_optical_props_arry), allocatable :: optical_props
 
       ! RRTMGP locals
-      logical :: top_at_1, partial_block, need_aer_optical_props
+      logical :: top_at_1, need_aer_optical_props
       logical :: gen_mro, cond_inhomo
       logical :: rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice
       integer :: nbnd, ngpt, nmom, icergh
       integer :: ib, b, nBlocks, colS, colE, ncols_block, &
-                 partial_blockSize, icol, isub, ilay, igpt
+                 icol, isub, ilay, igpt
       real(wp), allocatable :: t_lev(:) ! (ncol)
       character(len=ESMF_MAXPATHLEN) :: k_dist_file, cloud_optics_file
       character(len=ESMF_MAXSTR)     :: error_msg
@@ -3564,9 +3729,17 @@ contains
       integer :: IM_World, JM_World, Gdims(3)
       integer, dimension(IM,JM) :: Ig, Jg
 
+      integer, parameter :: KICE     = 1
+      integer, parameter :: KLIQUID  = 2
+      integer, parameter :: KRAIN    = 3
+      integer, parameter :: KSNOW    = 4
+      integer, parameter :: KGRAUPEL = 5
+
       ! a column random number generator
 #ifdef HAVE_MKL
       type(ty_rng_mklvsl_plus) :: rng
+#else
+      type(ty_rng_mt) :: rng
 #endif
       integer, dimension(:), allocatable :: seeds
 
@@ -3593,6 +3766,7 @@ contains
       ! TEMP ... see below
       real(wp) :: press_ref_min, ptop
       real(wp) ::  temp_ref_min, tmin
+      real(wp) ::  temp_ref_max, tmax
       real(wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
       real(wp) :: tmin_increase_OK_Kelvin
 
@@ -3607,7 +3781,7 @@ contains
       real, allocatable, dimension(:,:,:) :: BUF_AEROSOL
 
       ! LoadBalance and general
-      integer :: I, J, K, L, i1, iN
+      integer :: I, J, K, L, LV, i1, iN
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
@@ -3625,6 +3799,9 @@ contains
       integer :: NumMax, HorzDims(2)
       integer :: ibinary
       real :: def
+
+      real :: xx
+      real, allocatable, dimension(:) :: ILWT
 
       IAm = trim(COMP_NAME)//"Soradcore"
       call MAPL_TimerOn(MAPL,"-MISC")
@@ -3928,6 +4105,8 @@ contains
                   QR    => ptr2(1:Num2do,:)
                case('QS')
                   QS    => ptr2(1:Num2do,:)
+               case('QG')               
+                  QG    => ptr2(1:Num2do,:)
                case('RL')
                   RL    => ptr2(1:Num2do,:)
                case('RI')
@@ -3936,6 +4115,8 @@ contains
                   RR    => ptr2(1:Num2do,:)
                case('RS')
                   RS    => ptr2(1:Num2do,:)
+               case('RG')
+                  RG    => ptr2(1:Num2do,:)
                case('ALBVR')
                   ALBVR => ptr2(1:Num2do,1)
                case('ALBVF')
@@ -4013,6 +4194,21 @@ contains
                SlicesInt(k) = 0
                cycle
             end if
+         end if
+
+         ! Don't calculate [IO]SRBbbRGN for .not. include_aerosols
+         if (.not. include_aerosols) then
+           if (USE_RRTMG .or. USE_RRTMGP) then
+             do ibnd = 1,nbndsw
+               if (band_output(ibnd)) then
+                 write(bb,'(I0.2)') ibnd
+                 if (short_name == 'OSRB'//bb//'RGN' .or. short_name == 'ISRB'//bb//'RGN') then
+                    SlicesInt(k) = 0
+                    cycle
+                 end if
+               end if
+             end do
+           endif
          end if
 
          if (associated(ugdims)) then
@@ -4159,6 +4355,65 @@ contains
                FSCUA     => ptr2(1:Num2do,:)
             case('FSWBANDNAN')
                FSWBANDA  => ptr2(1:Num2do,:)
+            ! ===============
+            case('OSRB01RGN')
+               OSRBRGN( 1) % p => ptr2(1:Num2do,1)
+            case('OSRB02RGN')
+               OSRBRGN( 2) % p => ptr2(1:Num2do,1)
+            case('OSRB03RGN')
+               OSRBRGN( 3) % p => ptr2(1:Num2do,1)
+            case('OSRB04RGN')
+               OSRBRGN( 4) % p => ptr2(1:Num2do,1)
+            case('OSRB05RGN')
+               OSRBRGN( 5) % p => ptr2(1:Num2do,1)
+            case('OSRB06RGN')
+               OSRBRGN( 6) % p => ptr2(1:Num2do,1)
+            case('OSRB07RGN')
+               OSRBRGN( 7) % p => ptr2(1:Num2do,1)
+            case('OSRB08RGN')
+               OSRBRGN( 8) % p => ptr2(1:Num2do,1)
+            case('OSRB09RGN')
+               OSRBRGN( 9) % p => ptr2(1:Num2do,1)
+            case('OSRB10RGN')
+               OSRBRGN(10) % p => ptr2(1:Num2do,1)
+            case('OSRB11RGN')
+               OSRBRGN(11) % p => ptr2(1:Num2do,1)
+            case('OSRB12RGN')
+               OSRBRGN(12) % p => ptr2(1:Num2do,1)
+            case('OSRB13RGN')
+               OSRBRGN(13) % p => ptr2(1:Num2do,1)
+            case('OSRB14RGN')
+               OSRBRGN(14) % p => ptr2(1:Num2do,1)
+            ! ===============
+            case('ISRB01RGN')
+               ISRBRGN( 1) % p => ptr2(1:Num2do,1)
+            case('ISRB02RGN')
+               ISRBRGN( 2) % p => ptr2(1:Num2do,1)
+            case('ISRB03RGN')
+               ISRBRGN( 3) % p => ptr2(1:Num2do,1)
+            case('ISRB04RGN')
+               ISRBRGN( 4) % p => ptr2(1:Num2do,1)
+            case('ISRB05RGN')
+               ISRBRGN( 5) % p => ptr2(1:Num2do,1)
+            case('ISRB06RGN')
+               ISRBRGN( 6) % p => ptr2(1:Num2do,1)
+            case('ISRB07RGN')
+               ISRBRGN( 7) % p => ptr2(1:Num2do,1)
+            case('ISRB08RGN')
+               ISRBRGN( 8) % p => ptr2(1:Num2do,1)
+            case('ISRB09RGN')
+               ISRBRGN( 9) % p => ptr2(1:Num2do,1)
+            case('ISRB10RGN')
+               ISRBRGN(10) % p => ptr2(1:Num2do,1)
+            case('ISRB11RGN')
+               ISRBRGN(11) % p => ptr2(1:Num2do,1)
+            case('ISRB12RGN')
+               ISRBRGN(12) % p => ptr2(1:Num2do,1)
+            case('ISRB13RGN')
+               ISRBRGN(13) % p => ptr2(1:Num2do,1)
+            case('ISRB14RGN')
+               ISRBRGN(14) % p => ptr2(1:Num2do,1)
+            ! ===============
             case('COSZSW')
                COSZSW    => ptr2(1:Num2do,1)
             case('CLDTTSW')
@@ -4457,6 +4712,9 @@ contains
       end if
       call MAPL_TimerOff(MAPL,"--DISTRIBUTE")
 
+      ! number of columns after load balancing
+      NCOL = size(Q,1)
+
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
 ! Do shortwave calculations on a list of soundings
@@ -4483,8 +4741,8 @@ contains
       ! Prepare auxilliary variables
       ! ----------------------------
 
-      allocate(RH(size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL(size(Q,1),size(Q,2)),__STAT__)
+      allocate(RH(NCOL,LM),__STAT__)
+      allocate(PL(NCOL,LM),__STAT__)
       allocate(PLhPa(size(PLE,1),size(PLE,2)),__STAT__)
 
       PL = 0.5*(PLE(:,:UBOUND(PLE,2)-1)+PLE(:,LBOUND(PLE,2)+1:))
@@ -4494,29 +4752,33 @@ contains
       ! Water amounts and effective radii are in arrays indexed by species
       !-------------------------------------------------------------------
 
-      allocate(QQ3 (size(Q,1),size(Q,2),4),__STAT__)
-      allocate(RR3 (size(Q,1),size(Q,2),4),__STAT__)
+      allocate(QQ3 (NCOL,LM,5),__STAT__)
+      allocate(RR3 (NCOL,LM,5),__STAT__)
+      allocate(ILWT(NCOL     ),__STAT__)
 
       ! In-cloud water contents
       QQ3(:,:,1) = QI
       QQ3(:,:,2) = QL
       QQ3(:,:,3) = QR
       QQ3(:,:,4) = QS
+      QQ3(:,:,5) = QG
 
       ! Effective radii [microns]
-      WHERE (RI == MAPL_UNDEF) RI = 36.e-6
-      WHERE (RL == MAPL_UNDEF) RL = 14.e-6
-      WHERE (RR == MAPL_UNDEF) RR = 50.e-6
-      WHERE (RS == MAPL_UNDEF) RS = 50.e-6
       RR3(:,:,1) = RI*1.e6
       RR3(:,:,2) = RL*1.e6
       RR3(:,:,3) = RR*1.e6
       RR3(:,:,4) = RS*1.e6
+      RR3(:,:,5) = RG*1.e6
+      WHERE (RI == MAPL_UNDEF) RR3(:,:,1) = 36.
+      WHERE (RL == MAPL_UNDEF) RR3(:,:,2) = 14.
+      WHERE (RR == MAPL_UNDEF) RR3(:,:,3) = 50.
+      WHERE (RS == MAPL_UNDEF) RR3(:,:,4) = 50.
+      WHERE (RG == MAPL_UNDEF) RR3(:,:,5) = 50.
 
       ! Convert odd oxygen, which is the model prognostic, to ozone
       !------------------------------------------------------------
 
-      allocate(O3 (size(Q,1),size(Q,2)),__STAT__)
+      allocate(O3 (NCOL,LM),__STAT__)
 
       O3 = OX
       WHERE(PL < 100.)
@@ -4533,9 +4795,9 @@ contains
       ! Begin aerosol code
       ! ------------------
 
-      allocate(TAUA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(SSAA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
-      allocate(ASYA(size(Q,1),size(Q,2),NUM_BANDS_SOLAR),__STAT__)
+      allocate(TAUA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(SSAA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
+      allocate(ASYA(NCOL,LM,NUM_BANDS_SOLAR),__STAT__)
 
       ! Zero out aerosol arrays.
       ! If num_aero_vars == 0, these zeroes are used inside code.
@@ -4579,13 +4841,26 @@ contains
 
       call MAPL_TimerOn(MAPL,"-RRTMGP",__RC__)
 
-      ! number of columns after load balancing
-      ncol = size(Q,1)
-
       ! absorbing gas names
       error_msg = gas_concs%init([character(3) :: &
         'h2o','co2','o3','n2o','co','ch4','o2','n2'])
       TEST_(error_msg)
+
+      allocate(  Q_R(NCOL,LM),__STAT__)
+      allocate( O3_R(NCOL,LM),__STAT__)
+      allocate(N2O_R(NCOL,LM),__STAT__)
+      allocate(CH4_R(NCOL,LM),__STAT__)
+
+        Q_R = Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW)
+       O3_R = O3      *(MAPL_AIRMW/MAPL_O3MW )
+      N2O_R = N2O
+      CH4_R = CH4
+
+     !! Clean up negatives (should never get to this point negative)
+     !WHERE (   Q_R < 0.)   Q_R = 0.
+     !WHERE (  O3_R < 0.)  O3_R = 0.
+     !WHERE ( N2O_R < 0.) N2O_R = 0.
+     !WHERE ( CH4_R < 0.) CH4_R = 0.
 
       ! load gas concentrations (volume mixing ratios)
       ! "constant" gases
@@ -4595,10 +4870,15 @@ contains
       TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
       ! variable gases
       ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
-      TEST_(gas_concs%set_vmr('ch4', real(CH4                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('n2o', real(N2O                             ,kind=wp)))
-      TEST_(gas_concs%set_vmr('o3' , real(O3      *(MAPL_AIRMW/MAPL_O3MW ),kind=wp)))
-      TEST_(gas_concs%set_vmr('h2o', real(Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),kind=wp)))
+      TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
+      TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
+
+      deallocate(   Q_R,__STAT__)
+      deallocate(  O3_R,__STAT__)
+      deallocate( N2O_R,__STAT__)
+      deallocate( CH4_R,__STAT__)
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
@@ -4643,8 +4923,8 @@ contains
       ! write(*,*) 'band_lims_wvn(2,nbnd):', k_dist%get_band_lims_wavenumber() ! reordered below
       !               820., 2680., 3250., 4000., 4650., 5150., 6150., 7700.,  8050., 12850., 16000., 22650., 29000., 38000.
       !              2680., 3250., 4000., 4650., 5150., 6150., 7700., 8050., 12850., 16000., 22650., 29000., 38000., 50000.
-      ! clearly there are some differences ... so aerosol tables were redone
-      !   mainly band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
+      ! clearly there are some differences ... so aerosol tables were redone:
+      !   specifically, band 14 becomes band 1, plus small change in wavenumber upper limit of that band only
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
       ! gpoint limits for each band
@@ -4716,42 +4996,19 @@ contains
       press_ref_min = k_dist%get_press_min()
       ptop = minval(p_lev(:,1))
       if (press_ref_min > ptop) then
-        ! allow a small increase of ptop
-        if (press_ref_min - ptop <= ptop * ptop_increase_OK_fraction) then
           where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
           ! make sure no pressure ordering issues were created
           _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
-        else
-          write(*,*) ' A ', ptop_increase_OK_fraction, &
-                       ' fractional increase of ptop was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 top (Pa)', press_ref_min, ptop
-          TEST_('Model top too high for RRTMGP')
-        endif
       endif
 
       ! pmn: temperature KLUGE
-      ! Currently k_dist%temp_ref_min = 160K but GEOS-5 has a global minimum
-      ! temperature below this occasionally (< 1% of time). (The lowest temp
-      ! seen so far is above 145K). Consequently we will limit min(t_lay) to
-      ! 160K.
       ! Find better solution, perhaps getting AER to produce a table with a
-      ! lower minimum temperature.
+      ! larger temperature range.
+      temp_ref_min = k_dist%get_temp_min() + 0.01_wp
+      where (t_lay < temp_ref_min) t_lay = temp_ref_min
+      temp_ref_max = k_dist%get_temp_max() - 0.01_wp
+      where (t_lay > temp_ref_max) t_lay = temp_ref_max
       temp_ref_min = k_dist%get_temp_min()
-      tmin = minval(t_lay)
-      if (temp_ref_min > tmin) then
-        ! allow a small increase of tmin
-        call MAPL_GetResource (MAPL, &
-           tmin_increase_OK_Kelvin, 'RRTMGP_SW_TMIN_INC_OK_K:', &
-           DEFAULT = 15._wp, __RC__)
-        if (temp_ref_min - tmin <= tmin_increase_OK_Kelvin) then
-          where (t_lay < temp_ref_min) t_lay = temp_ref_min
-        else
-          write(*,*) ' A ', tmin_increase_OK_Kelvin, &
-                       'K increase of tmin was insufficient'
-          write(*,*) ' RRTMGP, GEOS-5 t_min (K)', temp_ref_min, tmin
-          TEST_('Found excessively cold model temperature for RRTMGP')
-        endif
-      endif
 
       ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, +ve here).
       ! dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1 is centered
@@ -4786,13 +5043,9 @@ contains
       ! For nstr, must also specify the number of phase function moments (nmom) below.
       ! =====================================================================================
 
-      ! instantiate optical_props with desired streams
-      allocate(ty_optical_props_2str::optical_props,__STAT__)  ! <-- choose 2-stream SW
-
-      ! initialize spectral discretiz'n and gpt mapping of optical_props
-      TEST_(optical_props%init(k_dist))
-
-      ! Used only if nstr (and then must be >= 2)
+      ! instantiate and initialize optical_props, cloud_props_bnd/gpt, and aer_props
+      ! inside PROCESS_RRTMGP_BLOCK so each OpenMP thread gets private copies.
+      ! nmom is only used if nstr (and then must be >= 2)
       nmom = 2
 
       ! get cloud optical properties (band-only)
@@ -4833,31 +5086,6 @@ contains
         MAPL, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
         LABEL='RRTMGP_USE_RRTMG_ICEFLG3_LIKE_FORWICE:', &
         DEFAULT=.TRUE., __RC__)
-
-      ! cloud optics file is currently two-stream
-      ! increment() will handle appropriate stream conversions
-      allocate(ty_optical_props_2str::cloud_props_bnd_liq,__STAT__)
-      allocate(ty_optical_props_2str::cloud_props_bnd_ice,__STAT__)
-
-      ! band-only initialization for pre-mcICA cloud optical properties
-      TEST_(cloud_props_bnd_liq%init(k_dist%get_band_lims_wavenumber()))
-      TEST_(cloud_props_bnd_ice%init(k_dist%get_band_lims_wavenumber()))
-
-      ! g-point version for McICA sampled cloud optical properties
-      select type (cloud_props_bnd_liq)
-        class is (ty_optical_props_2str)
-          allocate(ty_optical_props_2str::cloud_props_gpt_liq,__STAT__)
-        class default
-          TEST_('cloud optical properties (liq) hardwired 2-stream for now')
-      end select
-      select type (cloud_props_bnd_ice)
-        class is (ty_optical_props_2str)
-          allocate(ty_optical_props_2str::cloud_props_gpt_ice,__STAT__)
-        class default
-          TEST_('cloud optical properties (ice) hardwired 2-stream for now')
-      end select
-      TEST_(cloud_props_gpt_liq%init(k_dist))
-      TEST_(cloud_props_gpt_ice%init(k_dist))
 
       ! read desired cloud overlap type
       call MAPL_GetResource( &
@@ -4945,13 +5173,7 @@ contains
 
       ! set up aerosol optical properties
       need_aer_optical_props = (include_aerosols .and. implements_aerosol_optics)
-      if (need_aer_optical_props) then
-        ! aerosol optics system is currently two-stream
-        ! increment() will handle appropriate stream conversions
-        allocate(ty_optical_props_2str::aer_props,__STAT__)
-        ! band-only initialization
-        TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
-      end if
+      ! aer_props is allocated and initialized inside PROCESS_RRTMGP_BLOCK
 
       !-------------------------------------------------------!
       ! Loop over blocks of blockSize columns                 !
@@ -4963,1000 +5185,74 @@ contains
         rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", DEFAULT=4, __RC__)
       _ASSERT(rrtmgp_blockSize >= 1, 'bad RRTMGP_SW_BLOCKSIZE')
 
-      ! for random numbers, for efficiency, reserve the maximum possible
-      ! subset of columns (rrtmgp_blockSize) since column index is last
-      allocate(urand(ngpt,LM,rrtmgp_blocksize),__STAT__)
-      if (gen_mro) then
-        allocate(urand_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        if (cond_inhomo) then
-          allocate(urand_cond    (ngpt,LM,rrtmgp_blocksize),__STAT__)
-          allocate(urand_cond_aux(ngpt,LM,rrtmgp_blocksize),__STAT__)
-        end if
-      end if
-
-      ! number of FULL blocks by integer division
-      nBlocks = ncol/rrtmgp_blockSize
-
-      ! allocate intermediate arrays for FULL blocks
-      if (nBlocks > 0) then
-
-        ! block size UNTIL possible final partial block
-        ncols_block = rrtmgp_blockSize
-
-        allocate(toa_flux(ncols_block,ngpt),__STAT__)
-        allocate(cld_mask(ncols_block,LM,ngpt),__STAT__)
-        allocate(forwliq(ncols_block,LM,ngpt),__STAT__)
-        allocate(forwice(ncols_block,LM,ngpt),__STAT__)
-        if (gen_mro) then
-          allocate(alpha(ncols_block,LM-1),__STAT__)
-          if (cond_inhomo) then
-            allocate(rcorr(ncols_block,LM-1),__STAT__)
-            allocate(zcw(ncols_block,LM,ngpt),__STAT__)
-          endif
-        endif
-        if (include_aerosols) &
-          allocate(ClearCounts(4,ncols_block),__STAT__)
-
-        ! in-cloud cloud optical props
-        select type (cloud_props_bnd_liq)
-          class is (ty_optical_props_2str)
-            TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
-        end select
-        select type (cloud_props_bnd_ice)
-          class is (ty_optical_props_2str)
-            TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
-        end select
-        select type (cloud_props_gpt_liq)
-          class is (ty_optical_props_2str)
-            TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
-        end select
-        select type (cloud_props_gpt_ice)
-          class is (ty_optical_props_2str)
-            TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
-        end select
-
-        ! aerosol optical props
-        if (need_aer_optical_props) then
-          select type (aer_props)
-            class is (ty_optical_props_2str)
-              TEST_(aer_props%alloc_2str(ncols_block,LM))
-          end select
-        end if
-
-        ! gas+aer+cld optical properties
-        select type (optical_props)
-          class is (ty_optical_props_1scl)
-            TEST_(optical_props%alloc_1scl(ncols_block,LM))
-          class is (ty_optical_props_2str)
-            TEST_(optical_props%alloc_2str(ncols_block,LM))
-          class is (ty_optical_props_nstr)
-            TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
-        end select
-
-      end if
-
-      ! add final partial block if necessary
-      partial_block = mod(ncol,rrtmgp_blockSize) /= 0
-      if (partial_block) then
-        partial_blockSize = ncol - nBlocks * rrtmgp_blockSize
-        nBlocks = nBlocks + 1
-      endif
+      ! Total number of blocks, including any final partial block.
+      ! Each block has ncols_block = min(rrtmgp_blockSize, remaining columns),
+      ! computed at the top of each iteration below.
+      nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
       ! loop over all blocks
+      ! RRTMGP is thread-safe (confirmed by RRTMGP developers).
+      ! All per-block state is private inside PROCESS_RRTMGP_BLOCK.
+      ! Output arrays are indexed by non-overlapping colS:colE ranges -- no race.
+      ! NOTE: MAPL timer calls inside the parallel region are guarded by !$OMP CRITICAL.
+      !$OMP PARALLEL DO SCHEDULE(DYNAMIC)
       do b = 1,nBlocks
 
-        ! only the FINAL block can be partial
-        if (b == nBlocks .and. partial_block) then
-          ncols_block = partial_blockSize
-
-          if (b > 1) then
-            ! one or more full blocks already processed
-            deallocate(toa_flux,      __STAT__)
-            deallocate(cld_mask,      __STAT__)
-            deallocate(forwliq,       __STAT__)
-            deallocate(forwice,       __STAT__)
-            if (gen_mro) then
-              deallocate(alpha,       __STAT__)
-              if (cond_inhomo) then
-                deallocate(rcorr,zcw, __STAT__)
-              endif
-            endif
-            if (include_aerosols) &
-              deallocate(ClearCounts, __STAT__)
-          endif
-
-          allocate(toa_flux(ncols_block,ngpt),    __STAT__)
-          allocate(cld_mask(ncols_block,LM,ngpt), __STAT__)
-          allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
-          allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
-          if (gen_mro) then
-            allocate(alpha(ncols_block,LM-1),     __STAT__)
-            if (cond_inhomo) then
-              allocate(rcorr(ncols_block,LM-1),   __STAT__)
-              allocate(zcw(ncols_block,LM,ngpt),  __STAT__)
-            endif
-          endif
-          if (include_aerosols) &
-            allocate(ClearCounts(4,ncols_block),  __STAT__)
-
-          ! ty_optical_props routines have an internal deallocation
-          select type (cloud_props_bnd_liq)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_bnd_ice)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_gpt_liq)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
-          end select
-          select type (cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
-          end select
-          if (need_aer_optical_props) then
-            select type (aer_props)
-              class is (ty_optical_props_2str)
-                TEST_(aer_props%alloc_2str(ncols_block,LM))
-            end select
-          end if
-          select type (optical_props)
-            class is (ty_optical_props_1scl)
-              TEST_(optical_props%alloc_1scl(ncols_block,LM))
-            class is (ty_optical_props_2str)
-              TEST_(optical_props%alloc_2str(ncols_block,LM))
-            class is (ty_optical_props_nstr)
-              TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
-          end select
-
-        endif  ! partial block
-
-        ! prepare block
-        colS = (b-1) * rrtmgp_blockSize + 1
-        colE = colS + ncols_block - 1
-        TEST_(gas_concs%get_subset(colS,ncols_block,gas_concs_block))
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
-        ! gas optics, including source functions
-        error_msg = k_dist%gas_optics( &
-          p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
-          gas_concs_block, optical_props, toa_flux)
-        TEST_(error_msg)
-        call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
-
-        ! get block of aerosol optical props
-        if (need_aer_optical_props) then
-          select type (aer_props)
-            class is (ty_optical_props_2str)
-
-              ! load un-normalized optical properties from aerosol system
-              aer_props%tau = real(TAUA(colS:colE,:,:),kind=wp)
-              aer_props%ssa = real(SSAA(colS:colE,:,:),kind=wp)
-              aer_props%g   = real(ASYA(colS:colE,:,:),kind=wp)
-
-              ! renormalize
-              where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
-                aer_props%g   = aer_props%g   / aer_props%ssa
-                aer_props%ssa = aer_props%ssa / aer_props%tau
-              elsewhere
-                aer_props%tau = 0._wp
-                aer_props%ssa = 0._wp
-                aer_props%g   = 0._wp
-              end where
-
-            class default
-              TEST_('aerosol optical properties hardwired 2-stream for now')
-          end select
-        end if
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-        ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
-        ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
-        ! Do phases separately to allow for different forward scattering, etc., per earlier note.
-        ! liquid ...
-        error_msg = cloud_optics%cloud_optics( &
-          real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          dummy_wp(colS:colE,:), & 
-          min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
-            cloud_optics%get_min_radius_liq()), &
-            cloud_optics%get_max_radius_liq()), &
-          dummy_wp(colS:colE,:), &
-          cloud_props_bnd_liq)
-        TEST_(error_msg)
-        ! ice ...
-        error_msg = cloud_optics%cloud_optics( &
-          dummy_wp(colS:colE,:), &
-          real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
-          dummy_wp(colS:colE,:), &
-          min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
-            cloud_optics%get_min_radius_ice()), &
-            cloud_optics%get_max_radius_ice()), &
-          cloud_props_bnd_ice)
-        TEST_(error_msg)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
-
-!!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
-
-        ! exponential inter-layer correlations
-        ! [alpha|rcorr](k) is correlation between layers k and k+1
-        ! dzmid(k) is separation between midpoints of layers k and k+1
-        if (gen_mro) then
-          do ilay = 1,LM-1
-            ! cloud fraction correlation
-            alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
-          enddo
-          if (cond_inhomo) then
-            do ilay = 1,LM-1
-              ! condensate correlation
-              rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
-            enddo
-          endif
-        endif
-
-        ! generate McICA random numbers for block
-        ! Perhaps later this can be parallelized?
-#ifdef HAVE_MKL
-        do isub = 1, ncols_block
-          ! local 1d column index
-          icol = colS + isub - 1
-          ! initialize the Philox PRNG
-          ! set word1 of key based on GLOBAL location
-          ! 32-bits can hold all forseeable resolutions
-          seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
-          ! instantiate a random number stream for the column
-          call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
-          ! draw the random numbers for the column
-          urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-          if (gen_mro) then
-            urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            if (cond_inhomo) then
-              urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-              urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            endif
-          end if
-          ! free the rng
-          call rng%end()
-        end do
-#endif
-
-        ! cloud sampling to gpoints
-        select case (cloud_overlap_type)
-          case ("MAX_RAN_OVERLAP")
-            error_msg = sampled_mask_max_ran( &
-              urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), cld_mask)
-            TEST_(error_msg)
-          case ("EXP_RAN_OVERLAP")
-            ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
-            ! to be provided ... it is not the same as alpha, which is a probability
-!           error_msg = sampled_mask_exp_ran( &
-!             urand(:,:,1:ncols_block), real(CL(colS:colE,:),kind=wp), corr_coeff, cld_mask)
-!           TEST_(error_msg)
-            TEST_('EXP_RAN_OVERLAP not implemented yet')
-          case ("GEN_MAX_RAN_OVERLAP")
-            ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
-            ! cloud presence and cloud condensate are separately generalized maximum-random:
-            error_msg = sampled_urand_gen_max_ran(alpha, &
-              urand(:,:,1:ncols_block),urand_aux(:,:,1:ncols_block))
-            TEST_(error_msg)
-            if (cond_inhomo) then
-              error_msg = sampled_urand_gen_max_ran(rcorr, &
-                urand_cond(:,:,1:ncols_block),urand_cond_aux(:,:,1:ncols_block))
-              TEST_(error_msg)
-            end if
-            do isub = 1,ncols_block
-              icol = colS + isub - 1
-              do ilay = 1,LM
-                cld_frac = CL(icol,ilay)
-
-                ! if grid-box clear, no subgrid variability
-                if (cld_frac <= 0.) then
-                  cld_mask(isub,ilay,:) = .false.
-                else
-                  ! subgrid-scale cloud mask
-                  cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
-
-                  ! subgrid-scale condensate
-                  if (cond_inhomo) then
-                    ! level of condensate inhomogeneity based on cloud fraction.
-                    if (cld_frac > 0.99) then
-                      sigma_qcw = 0.5
-                    elseif (cld_frac > 0.9) then
-                      sigma_qcw = 0.71
-                    else
-                      sigma_qcw = 1.0
-                    endif
-                    do igpt = 1,ngpt
-                      if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
-                        zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
-                    end do
-                  end if
-                end if
-
-              end do
-            end do
-
-          case default
-            TEST_('RRTMGP_SW: unknown cloud overlap')
-        end select
-
-        ! draw McICA optical property samples (band->gpt)
-        TEST_(draw_samples(cld_mask, cloud_props_bnd_liq, cloud_props_gpt_liq))
-        TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
-
-        ! Scaling to sub-gridscale water paths:
-        ! since tau for each phase is linear in the phase's water path
-        ! and since the scaling zcw applies equally to both phases, the
-        ! total g-point optical thickness tau will scale with zcw.
-        if (gen_mro) then
-          if (cond_inhomo) &
-            where (cld_mask) cloud_props_gpt_liq%tau = cloud_props_gpt_liq%tau * zcw
-            where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
-        end if
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
-
-        ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
-        ! ** Calculated from subcolumn ensemble, so stochastic **
-        ! -------------------------------------------------------
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-        if (include_aerosols) then
-
-          ! super-layer cloud fractions
-          call clearCounts_threeBand( &
-            ncols_block, ncols_block, ngpt, LM, LCLDLM, LCLDMH, &
-            reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
-            ClearCounts)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-            CLDTS(icol) = 1. - ClearCounts(1,isub)/float(ngpt)
-            CLDHS(icol) = 1. - ClearCounts(2,isub)/float(ngpt)
-            CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
-            CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
-          end do
-
-          ! in-cloud optical thicknesses in PAR super-band
-          ! (weighted across and within bands by TOA incident flux)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-
+        call PROCESS_RRTMGP_BLOCK( &
+          b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
+          LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
+          cloud_overlap_type, IM_World, seeds(2), &
+          need_aer_optical_props, top_at_1, &
+          rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+          cwp_fac, &
+          gas_concs, k_dist, cloud_optics, &
+          p_lay, p_lev, t_lay, QQ3, RR3, dp_wp, dummy_wp, &
+          CL, dzmid, adl, rdl, Ig1D, Jg1D, band_lims_gpt, &
+          tsi, mu0, sfc_alb_dir, sfc_alb_dif, taua, ssaa, asya, &
+          flux_up_clrsky, flux_net_clrsky, &
+          flux_up_allsky, flux_net_allsky, &
+          bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
+          CLDTS, CLDHS, CLDMS, CLDLS, &
+          COTTP, COTHP, COTMP, COTLP, &
+          COTDTP, COTDHP, COTDMP, COTDLP, &
+          COTNTP, COTNHP, COTNMP, COTNLP, &
 #ifdef SOLAR_RADVAL
-            ! default (no cloud) for TAUx variant 
-            TAUTP(icol) = 0.
-            TAUHP(icol) = 0.
-            TAUMP(icol) = 0.
-            TAULP(icol) = 0.
+          TAUTP, TAUHP, TAUMP, TAULP, &
+          COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+          COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+          COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+          COTINTP, COTINHP, COTINMP, COTINLP, &
+          SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+          SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+          SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+          SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+          ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+          ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+          ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+          ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+          CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+          CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+          CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+          CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+          CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+          CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+          SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+          SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+          SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+          SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+          ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+          ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+          ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+          ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+          FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+          FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+          FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+          FORINTP, FORINHP, FORINMP, FORINLP, &
 #endif
-
-            ! default (no cloud) for COTx variant
-            COTTP(icol) = MAPL_UNDEF
-            COTHP(icol) = MAPL_UNDEF
-            COTMP(icol) = MAPL_UNDEF
-            COTLP(icol) = MAPL_UNDEF
-
-            ! zero denom- and numerator accumulators
-            COTDTP(icol) = 0.; COTNTP(icol) = 0.
-            COTDHP(icol) = 0.; COTNHP(icol) = 0.
-            COTDMP(icol) = 0.; COTNMP(icol) = 0.
-            COTDLP(icol) = 0.; COTNLP(icol) = 0.
-#ifdef SOLAR_RADVAL
-            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.; COTIDTP(icol) = 0.; COTINTP(icol) = 0.
-            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.; COTIDHP(icol) = 0.; COTINHP(icol) = 0.
-            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.; COTIDMP(icol) = 0.; COTINMP(icol) = 0.
-            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.; COTIDLP(icol) = 0.; COTINLP(icol) = 0.
-            SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
-            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
-            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
-            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
-            ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
-            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
-            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
-            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
-#endif
-
-            ! can only be non-zero for potentially cloudy columns
-            if (any(CL(icol,:) > 0.)) then
-
-              ! accumulate over gpts/subcolumns
-              do ib = 1, nbnd
-                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
-       
-                  ! band weights for photosynthetically active radiation (PAR)
-                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
-                  if (ib >= 11 .and. ib <= 12) then
-                    wgt = 1.0
-                  else if (ib == 10) then
-                    wgt = 0.5
-                  else
-                    ! no contribution to PAR
-                    cycle
-                  end if
-
-                  ! TOA flux weighting
-                  ! (note: neither the adjustment of toa_flux to our tsi
-                  ! or for zenith angle are needed yet since this weighting
-                  ! is over gpoint and is normalized for EACH icol)
-                  wgt = wgt * toa_flux(isub,igpt)
-
-                  ! low pressure layer
-                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
-                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
-                  staulp = sltaulp + sitaulp
-                  if (staulp > 0.) then
-                    COTDLP(icol) = COTDLP(icol) + wgt
-                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussalp = 0.; sltaussaglp = 0.
-                  if (sltaulp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
-                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
-                    end select
-                    COTLDLP(icol) = COTLDLP(icol) + wgt
-                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
-                    SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
-                    SSALNLP(icol) = SSALNLP(icol) + wgt * sltaussalp
-                    ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
-                    ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
-                  end if
-                  sitaussalp = 0.; sitaussaglp = 0.
-                  if (sitaulp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
-                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
-                    end select
-                    COTIDLP(icol) = COTIDLP(icol) + wgt
-                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
-                    SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
-                    SSAINLP(icol) = SSAINLP(icol) + wgt * sitaussalp
-                    ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
-                    ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
-                  end if
-#endif
-
-                  ! mid pressure layer
-                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  staump = sltaump + sitaump
-                  if (staump > 0.) then
-                    COTDMP(icol) = COTDMP(icol) + wgt
-                    COTNMP(icol) = COTNMP(icol) + wgt * staump
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussamp = 0.; sltaussagmp = 0.
-                  if (sltaump > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    COTLDMP(icol) = COTLDMP(icol) + wgt
-                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
-                    SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
-                    SSALNMP(icol) = SSALNMP(icol) + wgt * sltaussamp
-                    ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
-                    ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
-                  end if
-                  sitaussamp = 0.; sitaussagmp = 0.
-                  if (sitaump > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    COTIDMP(icol) = COTIDMP(icol) + wgt
-                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
-                    SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
-                    SSAINMP(icol) = SSAINMP(icol) + wgt * sitaussamp
-                    ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
-                    ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
-                  end if
-#endif
-
-                  ! high pressure layer
-                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
-                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
-                  stauhp = sltauhp + sitauhp
-                  if (stauhp > 0.) then
-                    COTDHP(icol) = COTDHP(icol) + wgt
-                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussahp = 0.; sltaussaghp = 0.
-                  if (sltauhp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
-                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
-                    end select
-                    COTLDHP(icol) = COTLDHP(icol) + wgt
-                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
-                    SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
-                    SSALNHP(icol) = SSALNHP(icol) + wgt * sltaussahp
-                    ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
-                    ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
-                  end if
-                  sitaussahp = 0.; sitaussaghp = 0.
-                  if (sitauhp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
-                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
-                    end select
-                    COTIDHP(icol) = COTIDHP(icol) + wgt
-                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
-                    SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
-                    SSAINHP(icol) = SSAINHP(icol) + wgt * sitaussahp
-                    ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
-                    ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
-                  end if
-#endif
-
-                  ! whole subcolumn
-                  sltautp = sltaulp + sltaump + sltauhp
-                  sitautp = sitaulp + sitaump + sitauhp
-                  stautp = staulp + staump + stauhp
-                  if (stautp > 0.) then
-                    COTDTP(icol) = COTDTP(icol) + wgt
-                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
-                  end if
-#ifdef SOLAR_RADVAL
-                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  if (sltautp > 0.) then
-                    COTLDTP(icol) = COTLDTP(icol) + wgt
-                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
-                    SSALDTP(icol) = SSALDTP(icol) + wgt * sltautp
-                    SSALNTP(icol) = SSALNTP(icol) + wgt * sltaussatp
-                    ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
-                    ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
-                  end if
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
-                  if (sitautp > 0.) then
-                    COTIDTP(icol) = COTIDTP(icol) + wgt
-                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
-                    SSAIDTP(icol) = SSAIDTP(icol) + wgt * sitautp
-                    SSAINTP(icol) = SSAINTP(icol) + wgt * sitaussatp
-                    ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
-                    ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
-                  end if
-#endif
-
-                end do ! igpt
-              end do ! ib
-
-              ! normalize
-              ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
-              if (COTDTP(icol) > 0. .and. COTNTP(icol) > 0.) then
-                COTTP(icol) = COTNTP(icol) / COTDTP(icol)
-#ifdef SOLAR_RADVAL
-                TAUTP(icol) = COTTP(icol)
-#endif
-              end if
-
-              if (COTDHP(icol) > 0. .and. COTNHP(icol) > 0.) then
-                COTHP(icol) = COTNHP(icol) / COTDHP(icol)
-#ifdef SOLAR_RADVAL
-                TAUHP(icol) = COTHP(icol)
-#endif
-              end if
-
-              if (COTDMP(icol) > 0. .and. COTNMP(icol) > 0.) then
-                COTMP(icol) = COTNMP(icol) / COTDMP(icol)
-#ifdef SOLAR_RADVAL
-                TAUMP(icol) = COTMP(icol)
-#endif
-              end if
-
-              if (COTDLP(icol) > 0. .and. COTNLP(icol) > 0.) then
-                COTLP(icol) = COTNLP(icol) / COTDLP(icol)
-#ifdef SOLAR_RADVAL
-                TAULP(icol) = COTLP(icol)
-#endif
-              end if
-
-            end if  ! potentially cloudy column 
-          end do  ! isub
-        end if  ! include_aerosols
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-
-        ! delta-scaling of cloud optical properties (accounts for forward scattering)
-        call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
-        forwliq = 0.; forwice = 0.  ! default for no delta-scaling
-        if (rrtmgp_delta_scale) then
-
-          ! default delta-scaling for liquid
-          select type(cloud_props_gpt_liq)
-          class is (ty_optical_props_2str)
-            forwliq = cloud_props_gpt_liq%g ** 2
-          end select
-          TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
-
-          if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
-            ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
-            select type(cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              radice_lwr = cloud_optics%get_min_radius_ice()
-              radice_upr = cloud_optics%get_max_radius_ice()
-              do isub = 1,ncols_block
-                icol = colS + isub - 1
-                do ilay = 1,LM
-                  ! only if at least potentially cloudy ...
-                  if (CL(icol,ilay) > 0.) then
-  
-                    ! prepare for radice interpolation ...
-                    ! first get radice consistent with RRTMGP ice cloud optics
-                    radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
-                    ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
-                    radice = min(max(radice,5._wp),140._wp)
-                    ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
-                    ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
-                    radfac = (radice - 2._wp) / 3._wp
-                    radidx = min(max(int(radfac),1),45)
-                    rfint = radfac - real(radidx,kind=wp)
-  
-                    do ib = 1,nbnd
-                      ! interpolate fdelta in radice for band ib
-                      fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
-  
-                      ! forwice calc for each g-point
-                      do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
-                        if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
-                          forwice(isub,ilay,igpt) = min( &
-                             fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
-                             cloud_props_gpt_ice%g(isub,ilay,igpt))
-                        endif
-                      enddo  ! g-points
-                    enddo  ! bands
-  
-                  endif  ! potentially cloudy
-                enddo  ! layers
-              enddo  ! columns
-            end select
-            TEST_(cloud_props_gpt_ice%delta_scale(forwice))
-          else
-            ! default delta-scaling for ice
-            select type(cloud_props_gpt_ice)
-            class is (ty_optical_props_2str)
-              forwice = cloud_props_gpt_ice%g ** 2
-            end select
-            TEST_(cloud_props_gpt_ice%delta_scale(forwice))
-          endif
-        endif
-        call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
-
-#ifdef SOLAR_RADVAL
-        ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
-        ! ** Calculated from subcolumn ensemble, so stochastic **
-        ! -------------------------------------------------------
-        call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-        if (include_aerosols) then
-
-          ! in-cloud optical thicknesses in PAR super-band
-          ! (weighted across and within bands by TOA incident flux)
-          do isub = 1,ncols_block
-            icol = colS + isub - 1
-
-            ! zero denom- and numerator accumulators
-            CDSDTP(icol) = 0.; CDSNTP(icol) = 0.
-            CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
-            CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
-            CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
-
-            CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.; CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
-            CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.; CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
-            CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.; CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
-            CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.; CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
-
-            SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
-            SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
-            SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
-            SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
-
-            ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
-            ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
-            ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
-            ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
-
-            FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
-            FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
-            FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
-            FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
-
-            ! can only be non-zero for potentially cloudy columns
-            if (any(CL(icol,:) > 0.)) then
-
-              ! accumulate over gpts/subcolumns
-              do ib = 1, nbnd
-                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
-
-                  ! band weights for photosynthetically active radiation (PAR)
-                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
-                  if (ib >= 11 .and. ib <= 12) then
-                    wgt = 1.0
-                  else if (ib == 10) then
-                    wgt = 0.5
-                  else
-                    ! no contribution to PAR
-                    cycle
-                  end if
-
-                  ! TOA flux weighting
-                  ! (note: neither the adjustment of toa_flux to our tsi
-                  ! or for zenith angle are needed yet since this weighting
-                  ! is over gpoint and is normalized for EACH icol)
-                  wgt = wgt * toa_flux(isub,igpt)
-
-                  ! low pressure layer
-                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
-                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
-                  staulp = sltaulp + sitaulp
-                  if (staulp > 0.) then
-                    CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
-                    CDSDLP(icol) = CDSDLP(icol) + wgt
-                  end if
-                  sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
-                  if (sltaulp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
-                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
-                      sltaussaflp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
-                                                        forwliq(isub,LCLDLM:LM,igpt))
-                    end select
-                    CDSLDLP(icol) = CDSLDLP(icol) + wgt
-                    CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
-                    SDSLDLP(icol) = SDSLDLP(icol) + wgt * sltaulp
-                    SDSLNLP(icol) = SDSLNLP(icol) + wgt * sltaussalp
-                    ADSLDLP(icol) = ADSLDLP(icol) + wgt * sltaussalp
-                    ADSLNLP(icol) = ADSLNLP(icol) + wgt * sltaussaglp
-                    FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
-                    FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
-                  end if
-                  sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
-                  if (sitaulp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
-                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
-                      sitaussaflp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
-                                                        forwice(isub,LCLDLM:LM,igpt))
-                    end select
-                    CDSIDLP(icol) = CDSIDLP(icol) + wgt
-                    CDSINLP(icol) = CDSINLP(icol) + wgt * sitaulp
-                    SDSIDLP(icol) = SDSIDLP(icol) + wgt * sitaulp
-                    SDSINLP(icol) = SDSINLP(icol) + wgt * sitaussalp
-                    ADSIDLP(icol) = ADSIDLP(icol) + wgt * sitaussalp
-                    ADSINLP(icol) = ADSINLP(icol) + wgt * sitaussaglp
-                    FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
-                    FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
-                  end if
-
-                  ! mid pressure layer
-                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
-                  staump = sltaump + sitaump
-                  if (staump > 0.) then
-                    CDSNMP(icol) = CDSNMP(icol) + wgt * staump
-                    CDSDMP(icol) = CDSDMP(icol) + wgt
-                  end if
-                  sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
-                  if (sltaump > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                      sltaussafmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                                        forwliq(isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    CDSLDMP(icol) = CDSLDMP(icol) + wgt
-                    CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
-                    SDSLDMP(icol) = SDSLDMP(icol) + wgt * sltaump
-                    SDSLNMP(icol) = SDSLNMP(icol) + wgt * sltaussamp
-                    ADSLDMP(icol) = ADSLDMP(icol) + wgt * sltaussamp
-                    ADSLNMP(icol) = ADSLNMP(icol) + wgt * sltaussagmp
-                    FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
-                    FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
-                  end if
-                  sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
-                  if (sitaump > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
-                      sitaussafmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
-                                                        forwice(isub,LCLDMH:LCLDLM-1,igpt))
-                    end select
-                    CDSIDMP(icol) = CDSIDMP(icol) + wgt
-                    CDSINMP(icol) = CDSINMP(icol) + wgt * sitaump
-                    SDSIDMP(icol) = SDSIDMP(icol) + wgt * sitaump
-                    SDSINMP(icol) = SDSINMP(icol) + wgt * sitaussamp
-                    ADSIDMP(icol) = ADSIDMP(icol) + wgt * sitaussamp
-                    ADSINMP(icol) = ADSINMP(icol) + wgt * sitaussagmp
-                    FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
-                    FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
-                  end if
-
-                  ! high pressure layer
-                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
-                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
-                  stauhp = sltauhp + sitauhp
-                  if (stauhp > 0.) then
-                    CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
-                    CDSDHP(icol) = CDSDHP(icol) + wgt
-                  end if
-                  sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
-                  if (sltauhp > 0.) then
-                    select type(cloud_props_gpt_liq)
-                    class is (ty_optical_props_2str)
-                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
-                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
-                      sltaussafhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
-                                                        forwliq(isub,1:LCLDMH-1,igpt))
-                    end select
-                    CDSLDHP(icol) = CDSLDHP(icol) + wgt
-                    CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
-                    SDSLDHP(icol) = SDSLDHP(icol) + wgt * sltauhp
-                    SDSLNHP(icol) = SDSLNHP(icol) + wgt * sltaussahp
-                    ADSLDHP(icol) = ADSLDHP(icol) + wgt * sltaussahp
-                    ADSLNHP(icol) = ADSLNHP(icol) + wgt * sltaussaghp
-                    FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
-                    FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
-                  end if
-                  sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
-                  if (sitauhp > 0.) then
-                    select type(cloud_props_gpt_ice)
-                    class is (ty_optical_props_2str)
-                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
-                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
-                      sitaussafhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
-                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
-                                                        forwice(isub,1:LCLDMH-1,igpt))
-                    end select
-                    CDSIDHP(icol) = CDSIDHP(icol) + wgt
-                    CDSINHP(icol) = CDSINHP(icol) + wgt * sitauhp
-                    SDSIDHP(icol) = SDSIDHP(icol) + wgt * sitauhp
-                    SDSINHP(icol) = SDSINHP(icol) + wgt * sitaussahp
-                    ADSIDHP(icol) = ADSIDHP(icol) + wgt * sitaussahp
-                    ADSINHP(icol) = ADSINHP(icol) + wgt * sitaussaghp
-                    FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
-                    FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
-                  end if
-
-                  ! whole subcolumn
-                  sltautp = sltaulp + sltaump + sltauhp
-                  sitautp = sitaulp + sitaump + sitauhp
-                  stautp = staulp + staump + stauhp
-                  if (stautp > 0.) then
-                    CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
-                    CDSDTP(icol) = CDSDTP(icol) + wgt
-                  end if
-                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
-                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
-                  sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
-                  if (sltautp > 0.) then
-                    CDSLDTP(icol) = CDSLDTP(icol) + wgt
-                    CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
-                    SDSLDTP(icol) = SDSLDTP(icol) + wgt * sltautp
-                    SDSLNTP(icol) = SDSLNTP(icol) + wgt * sltaussatp
-                    ADSLDTP(icol) = ADSLDTP(icol) + wgt * sltaussatp
-                    ADSLNTP(icol) = ADSLNTP(icol) + wgt * sltaussagtp
-                    FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
-                    FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
-                  end if
-                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
-                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
-                  sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
-                  if (sitautp > 0.) then
-                    CDSIDTP(icol) = CDSIDTP(icol) + wgt
-                    CDSINTP(icol) = CDSINTP(icol) + wgt * sitautp
-                    SDSIDTP(icol) = SDSIDTP(icol) + wgt * sitautp
-                    SDSINTP(icol) = SDSINTP(icol) + wgt * sitaussatp
-                    ADSIDTP(icol) = ADSIDTP(icol) + wgt * sitaussatp
-                    ADSINTP(icol) = ADSINTP(icol) + wgt * sitaussagtp
-                    FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
-                    FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
-                  end if
-
-                end do ! igpt
-              end do ! ib
-
-            end if  ! potentially cloudy column
-          end do  ! isub
-        end if  ! include_aerosols
-        call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
-#endif
-
-        call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
-
-        ! scale to our tsi
-        ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
-        toa_flux = toa_flux * spread(tsi(colS:colE)/sum(toa_flux,dim=2), 2, ngpt)
-
-        ! add in aerosol optical properties if requested and available
-        if (need_aer_optical_props) then
-          TEST_(aer_props%increment(optical_props))
-        end if
-
-        ! clear-sky radiative transfer
-        fluxes_clrsky%flux_up  => flux_up_clrsky(colS:colE,:)
-        fluxes_clrsky%flux_net => flux_net_clrsky(colS:colE,:)
-        error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
-          sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
-          fluxes_clrsky)
-        TEST_(error_msg)
-
-        ! add in cloud optical properties
-        ! add ice first since its optical depths are usually smaller
-        TEST_(cloud_props_gpt_ice%increment(optical_props))
-        TEST_(cloud_props_gpt_liq%increment(optical_props))
-
-        ! all-sky radiative transfer
-        fluxes_allsky%flux_up         => flux_up_allsky(colS:colE,:)
-        fluxes_allsky%flux_net        => flux_net_allsky(colS:colE,:)
-        fluxes_allsky%bnd_flux_dn     => bnd_flux_dn_allsky(colS:colE,:,:)
-        fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky(colS:colE,:,:)
-        fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky(colS:colE,:,:)
-        error_msg = rte_sw( &
-          optical_props, top_at_1, mu0(colS:colE), toa_flux, &
-          sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
-          fluxes_allsky)
-        TEST_(error_msg)
-
-        call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+          MAPL, __RC__)
 
       end do ! loop over blocks
+      !$OMP END PARALLEL DO
 
       call MAPL_TimerOn(MAPL,"--RRTMGP_POST",__RC__)
 
@@ -5998,6 +5294,17 @@ contains
             DFBAND(:,ib) = real(bnd_flux_dn_allsky (:,LM+1,ib) - bnd_flux_dir_allsky(:,LM+1,ib))
          end do
       endif
+      ! TOA band fluxes
+      if (include_aerosols) then          
+        if (USE_RRTMG .or. USE_RRTMGP) then
+          do ib = 1, nbnd
+            if (band_output(ib)) then 
+              ISRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib))
+              OSRBRGN(ib) % p = real(bnd_flux_dn_allsky(:,1,ib) - bnd_flux_net_allsky(:,1,ib))
+            end if
+          end do
+        end if
+      end if
 
       ! surface direct and diffuse downward in super-bands
       ! for *diffuse* downward must subtract direct (downward) from total downward
@@ -6030,27 +5337,21 @@ contains
 
       ! clean up
       deallocate(band_lims_gpt,__STAT__)
-      deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,toa_flux,__STAT__)
+      deallocate(tsi,mu0,sfc_alb_dir,sfc_alb_dif,__STAT__)
       deallocate(dummy_wp,p_lay,t_lay,p_lev,dp_wp,dzmid,__STAT__)
       deallocate(flux_up_clrsky,flux_net_clrsky,__STAT__)
       deallocate(flux_up_allsky,flux_net_allsky,__STAT__)
       deallocate(bnd_flux_dn_allsky,bnd_flux_net_allsky,bnd_flux_dir_allsky,__STAT__)
-      deallocate(seeds,urand,cld_mask,__STAT__)
-      deallocate(forwliq,forwice,__STAT__)
+      deallocate(seeds,__STAT__)
       if (gen_mro) then
-        deallocate(adl,alpha,urand_aux,__STAT__)
+        deallocate(adl,__STAT__)
         if (cond_inhomo) then
-          deallocate(rdl,rcorr,urand_cond,urand_cond_aux,zcw,__STAT__)
+          deallocate(rdl,__STAT__)
         endif
       end if
-      if (include_aerosols) deallocate(ClearCounts,__STAT__)
       call cloud_optics%finalize()
-      call cloud_props_gpt_liq%finalize()
-      call cloud_props_gpt_ice%finalize()
-      call cloud_props_bnd_liq%finalize()
-      call cloud_props_bnd_ice%finalize()
-      if (need_aer_optical_props) call aer_props%finalize()
-      call optical_props%finalize()
+      ! cloud_props_gpt/bnd, aer_props, optical_props are local to PROCESS_RRTMGP_BLOCK
+      ! and are finalized automatically when that subroutine returns.
 
       call MAPL_TimerOff(MAPL,"--RRTMGP_POST",__RC__)
 
@@ -6063,52 +5364,58 @@ contains
       ! regular RRTMG
       call MAPL_TimerOn(MAPL,"-RRTMG")
 
-      NCOL = size(Q,1)
-
       ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
       ! -------------------------------------------------------------------
 
       ! interface (between layer) variables
-      allocate(TLEV  (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(TLEV_R(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(PLE_R (size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(TLEV  (NCOL,LM+1),__STAT__)
+      allocate(TLEV_R(NCOL,LM+1),__STAT__)
+      allocate(PLE_R (NCOL,LM+1),__STAT__)
       ! cloud physical properties
-      allocate(FCLD_R(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CLIQWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(CICEWP(size(Q,1),size(Q,2)),__STAT__)
-      allocate(RELIQ (size(Q,1),size(Q,2)),__STAT__)
-      allocate(REICE (size(Q,1),size(Q,2)),__STAT__)
+      allocate(FCLD_R(NCOL,LM),__STAT__)
+      allocate(CLIQWP(NCOL,LM),__STAT__)
+      allocate(CICEWP(NCOL,LM),__STAT__)
+      allocate(RELIQ (NCOL,LM),__STAT__)
+      allocate(REICE (NCOL,LM),__STAT__)
       ! aerosol optical properties
-      allocate(TAUAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(SSAAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
-      allocate(ASMAER(size(Q,1),size(Q,2),NB_RRTMG),__STAT__)
+      allocate(TAUAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(SSAAER(NCOL,LM,NB_RRTMG),__STAT__)
+      allocate(ASMAER(NCOL,LM,NB_RRTMG),__STAT__)
       ! layer variables
-      allocate(DPR   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(PL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(ZL_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(T_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(Q_R   (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O2_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(O3_R  (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CO2_R (size(Q,1),size(Q,2)),__STAT__)
-      allocate(CH4_R (size(Q,1),size(Q,2)),__STAT__)
+      allocate(DPR   (NCOL,LM),__STAT__)
+      allocate(PL_R  (NCOL,LM),__STAT__)
+      allocate(ZL_R  (NCOL,LM),__STAT__)
+      allocate(T_R   (NCOL,LM),__STAT__)
+      allocate(Q_R   (NCOL,LM),__STAT__)
+      allocate(O2_R  (NCOL,LM),__STAT__)
+      allocate(O3_R  (NCOL,LM),__STAT__)
+      allocate(CO2_R (NCOL,LM),__STAT__)
+      allocate(CH4_R (NCOL,LM),__STAT__)
       ! super-layer cloud fractions
-      allocate(CLEARCOUNTS (size(Q,1),4),__STAT__)
+      allocate(CLEARCOUNTS (NCOL,4),__STAT__)
       ! output fluxes
-      allocate(SWUFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLX (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXC(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXC(size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(SWUFLX (NCOL,LM+1),__STAT__)
+      allocate(SWDFLX (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXC(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXC(NCOL,LM+1),__STAT__)
       ! un-flipped outputs
-      allocate(SWUFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXR (size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWUFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
-      allocate(SWDFLXCR(size(Q,1),size(Q,2)+1),__STAT__)
+      allocate(SWUFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWDFLXR (NCOL,LM+1),__STAT__)
+      allocate(SWUFLXCR(NCOL,LM+1),__STAT__)
+      allocate(SWDFLXCR(NCOL,LM+1),__STAT__)
 
       ! Set flags related to cloud properties (see RRTMG_SW)
       ! ----------------------------------------------------
       call MAPL_GetResource(MAPL,ICEFLGSW,'RRTMG_ICEFLG:',DEFAULT=3,__RC__)
       call MAPL_GetResource(MAPL,LIQFLGSW,'RRTMG_LIQFLG:',DEFAULT=1,__RC__)
+
+      if (LM > 72) then    
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
+        VERIFY_(STATUS)    
+      else
+        call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
+        VERIFY_(STATUS)
+      endif
 
       ! Normalize aerosol inputs
       ! ------------------------
@@ -6133,12 +5440,39 @@ contains
       DPR(:,1:LM) = (PLE(:,2:LM+1)-PLE(:,1:LM))
 
       ! cloud water paths converted from g/g to g/m^2
-      CICEWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,1)
-      CLIQWP(:,1:LM) = (1.02*100*DPR(:,LM:1:-1))*QQ3(:,LM:1:-1,2)
+         !  Flip in vertical
+         do K = 1,LM
+            LV = LM-K+1  ! LM --> 1
 
-      ! cloud effective radii with limits imposed as assumed by RRTMG
-      REICE (:,1:LM) = RR3(:,LM:1:-1,1)
-      RELIQ (:,1:LM) = RR3(:,LM:1:-1,2)
+            ! Convert content [kg/kg] to path [g/m2]
+            ! using hydrostatic eqn dp/g ~ rho*dz,
+            ! so conversion factor is 1000*dp/g ~ 1.02*100*dp.
+            ! pmn: why not use MAPL_GRAV explicitly?
+            if (USE_PRECIP_IN_RADIATION) then
+              ILWT = QQ3(:,LV,KLIQUID)+QQ3(:,LV,KRAIN)
+              CLIQWP(:,K) = 1.02*100*DPR(:,LV)*ILWT
+              where (ILWT > 0.0)
+                RELIQ (:,K) = ( RR3(:,LV,KLIQUID)*QQ3(:,LV,KLIQUID) + &
+                                RR3(:,LV,KRAIN  )*QQ3(:,LV,KRAIN  ) ) / ILWT
+              elsewhere
+                RELIQ (:,K) = 14.0
+              end where
+              ILWT = QQ3(:,LV,KICE)+QQ3(:,LV,KSNOW)+QQ3(:,LV,KGRAUPEL)
+              CICEWP(:,K) = 1.02*100*DPR(:,LV)*ILWT
+              WHERE (ILWT > 0.0)
+                REICE (:,K) = ( RR3(:,LV,KICE    )*QQ3(:,LV,KICE    ) + &
+                                RR3(:,LV,KSNOW   )*QQ3(:,LV,KSNOW   ) + &
+                                RR3(:,LV,KGRAUPEL)*QQ3(:,LV,KGRAUPEL) ) / ILWT
+              elsewhere
+                REICE (:,K) = 36.0
+              end where
+            else
+              CLIQWP(:,K) = 1.02*100*DPR(:,LV)*QQ3(:,LV,KLIQUID)
+              CICEWP(:,K) = 1.02*100*DPR(:,LV)*QQ3(:,LV,KICE)
+              RELIQ (:,K) =                    RR3(:,LV,KLIQUID)
+              REICE (:,K) =                    RR3(:,LV,KICE   )
+            endif
+         enddo
 
       IF      (ICEFLGSW == 0) THEN
          WHERE (REICE < 10.)  REICE = 10.
@@ -6383,6 +5717,7 @@ contains
 #endif
 
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
+         BAND_OUTPUT .and. include_aerosols, ISRBRGN, OSRBRGN, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
 
@@ -6502,6 +5837,7 @@ contains
 
       deallocate (PL, RH, PLhPa)
       deallocate (QQ3, RR3)
+      deallocate (ILWT)
       deallocate (O3)
       deallocate (TAUA, SSAA, ASYA)
 
@@ -6591,7 +5927,1618 @@ contains
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
       RETURN_(ESMF_SUCCESS)
+
     end subroutine SORADCORE
+
+    ! ---------------------------------------------------------------------------
+    ! Compute gas optical properties for one block of columns.
+    ! gas_concs_block and error_msg are local (thread-private in future OMP use).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_gas_optics(colS, colE, ncols_block, LM, &
+        gas_concs, k_dist, p_lay, p_lev, t_lay, &
+        optical_props, toa_flux, MAPL, RC)
+
+      use mo_gas_concentrations, only: ty_gas_concs
+      use mo_gas_optics_rrtmgp,  only: ty_gas_optics_rrtmgp
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_rte_kind,           only: wp
+
+      integer,                           intent(in)    :: colS, colE, ncols_block, LM
+      type(ty_gas_concs),                intent(in)    :: gas_concs
+      type(ty_gas_optics_rrtmgp),        intent(in)    :: k_dist
+      real(wp),                          intent(in)    :: p_lay(:,:), p_lev(:,:), t_lay(:,:)
+      class(ty_optical_props_arry),      intent(inout) :: optical_props
+      real(wp),                          intent(out)   :: toa_flux(:,:)
+      type(MAPL_MetaComp),               intent(inout) :: MAPL
+      integer, optional,                 intent(out)   :: RC
+
+      ! locals -- will be thread-private under future !$OMP PARALLEL DO
+      type(ty_gas_concs)         :: gas_concs_block
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer                    :: STATUS
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+
+      TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
+
+      ! gas optics, including source functions
+      error_msg = k_dist%gas_optics( &
+        p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
+        gas_concs_block, optical_props, toa_flux)
+      TEST_(error_msg)
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_gas_optics
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Load and normalize aerosol optical properties for one block of columns.
+    ! No thread-private locals beyond scalars; aer_props is intent(inout).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_aer_optics(colS, colE, need_aer_optical_props, &
+        taua, ssaa, asya, aer_props, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_rte_kind,      only: wp
+
+      integer,                        intent(in)    :: colS, colE
+      logical,                        intent(in)    :: need_aer_optical_props
+      real,             dimension(:,:,:), intent(in)    :: taua, ssaa, asya
+      class(ty_optical_props_arry),   intent(inout) :: aer_props
+      integer, optional,              intent(out)   :: RC
+
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer                    :: STATUS
+
+      if (.not. need_aer_optical_props) then
+        RETURN_(ESMF_SUCCESS)
+      end if
+
+      select type (aer_props)
+        class is (ty_optical_props_2str)
+
+          ! load un-normalized optical properties from aerosol system
+          aer_props%tau = real(taua(colS:colE,:,:),kind=wp)
+          aer_props%ssa = real(ssaa(colS:colE,:,:),kind=wp)
+          aer_props%g   = real(asya(colS:colE,:,:),kind=wp)
+
+          ! renormalize
+          where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
+            aer_props%g   = aer_props%g   / aer_props%ssa
+            aer_props%ssa = aer_props%ssa / aer_props%tau
+          elsewhere
+            aer_props%tau = 0._wp
+            aer_props%ssa = 0._wp
+            aer_props%g   = 0._wp
+          end where
+
+          ! Because RRTMGP is (currently) compiled at R8,
+          ! _wp is R8. Apparently with aggressive compiler
+          ! flags using Intel, it's possible for, say,
+          ! aer_props%ssa to become slightly greater than one
+          ! in the above renormalization. So, we add clamps
+          ! to the values based on the restrictions see in
+          ! RRTMGP/rte-frontend/mo_optical_props.F90
+          !
+          ! In testing, the values seen were like 1.00000011905028
+          ! so just slightly above one.
+
+          ! tau must be greater than 0.0
+          aer_props%tau = max(aer_props%tau, 0._wp)
+          ! ssa must be between 0.0 and 1.0
+          aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
+          ! g must be between -1.0 and 1.0
+          aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
+
+        class default
+          TEST_('aerosol optical properties hardwired 2-stream for now')
+      end select
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_aer_optics
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Compute cloud optical properties and McICA sampling for one block.
+    ! All per-block temporaries (alpha, rcorr, zcw, urand*, cld_mask, rng,
+    ! seeds) are local -- thread-private in future !$OMP PARALLEL DO use.
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_cloud_optics_mcica( &
+        colS, colE, ncols_block, LM, ngpt, &
+        gen_mro, cond_inhomo, cloud_overlap_type, cwp_fac, IM_World, &
+        seeds_time_key, &
+        QQ3, RR3, dp_wp, dummy_wp, CL, dzmid, adl, rdl, Ig1D, Jg1D, &
+        cloud_optics, &
+        cloud_props_bnd_liq, cloud_props_bnd_ice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        cld_mask, &
+        MAPL, RC)
+
+      use mo_cloud_sampling,          only: draw_samples, &
+                                            sampled_mask_max_ran, &
+                                            sampled_urand_gen_max_ran
+      use mo_cloud_optics_rrtmgp,     only: ty_cloud_optics_rrtmgp
+      use mo_optical_props,           only: ty_optical_props_arry
+      use mo_rte_kind,                only: wp
+      use cloud_condensate_inhomogeneity, only: zcw_lookup
+#ifdef HAVE_MKL
+      use MKL_VSL_TYPE
+      use mo_rng_mklvsl_plus,         only: ty_rng_mklvsl_plus
+#else
+      use mo_rng_mt19937,             only: ty_rng_mt
+#endif
+
+      integer,                        intent(in)    :: colS, colE, ncols_block, LM, ngpt
+      logical,                        intent(in)    :: gen_mro, cond_inhomo
+      character(len=*),               intent(in)    :: cloud_overlap_type
+      real(wp),                       intent(in)    :: cwp_fac
+      integer,                        intent(in)    :: IM_World
+      integer,                        intent(in)    :: seeds_time_key
+      real,             dimension(:,:,:), intent(in) :: QQ3, RR3
+      real(wp),         dimension(:,:),   intent(in) :: dp_wp, dummy_wp
+      real,             dimension(:,:),   intent(in) :: CL
+      real(wp),         dimension(:,:),   intent(in) :: dzmid
+      real,             dimension(:),     intent(in) :: adl, rdl
+      real,             dimension(:),     intent(in) :: Ig1D, Jg1D
+      type(ty_cloud_optics_rrtmgp),   intent(inout) :: cloud_optics
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_bnd_liq, cloud_props_bnd_ice
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      logical, allocatable,           intent(out)   :: cld_mask(:,:,:)
+      type(MAPL_MetaComp),            intent(inout) :: MAPL
+      integer, optional,              intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      real(wp), allocatable :: alpha(:,:), rcorr(:,:)
+      real(wp), allocatable :: zcw(:,:,:)
+      real(wp), allocatable :: urand(:,:,:), urand_aux(:,:,:)
+      real(wp), allocatable :: urand_cond(:,:,:), urand_cond_aux(:,:,:)
+      integer,  allocatable :: seeds(:)
+#ifdef HAVE_MKL
+      type(ty_rng_mklvsl_plus) :: rng
+#else
+      type(ty_rng_mt) :: rng
+#endif
+      integer  :: isub, icol, ilay, igpt
+      real     :: cld_frac, sigma_qcw
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      ! allocate locals sized to this block
+      allocate(urand(ngpt,LM,ncols_block))
+      allocate(cld_mask(ncols_block,LM,ngpt))
+      if (gen_mro) then
+        allocate(urand_aux(ngpt,LM,ncols_block))
+        allocate(alpha(ncols_block,LM-1))
+        if (cond_inhomo) then
+          allocate(urand_cond    (ngpt,LM,ncols_block))
+          allocate(urand_cond_aux(ngpt,LM,ncols_block))
+          allocate(rcorr(ncols_block,LM-1))
+          allocate(zcw(ncols_block,LM,ngpt))
+        end if
+      end if
+      allocate(seeds(3))    ! 2-word key plus word1 of counter
+      seeds    = 0
+      seeds(2) = seeds_time_key   ! time part of key (computed once outside block loop)
+      ! for SW start at counter=65,536
+      seeds(3) = 65536
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+
+      ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
+      ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
+      ! Do phases separately to allow for different forward scattering, etc., per earlier note.
+      ! liquid ...
+      error_msg = cloud_optics%cloud_optics( &
+        real(QQ3(colS:colE,:,2),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+        dummy_wp(colS:colE,:), &
+        min( max( real(RR3(colS:colE,:,2),kind=wp), &  ! [microns]
+          cloud_optics%get_min_radius_liq()), &
+          cloud_optics%get_max_radius_liq()), &
+        dummy_wp(colS:colE,:), &
+        cloud_props_bnd_liq)
+      TEST_(error_msg)
+      ! ice ...
+      error_msg = cloud_optics%cloud_optics( &
+        dummy_wp(colS:colE,:), &
+        real(QQ3(colS:colE,:,1),kind=wp) * dp_wp(colS:colE,:) * cwp_fac, &  ! [g/m2]
+        dummy_wp(colS:colE,:), &
+        min( max( real(RR3(colS:colE,:,1),kind=wp), &  ! [microns]
+          cloud_optics%get_min_radius_ice()), &
+          cloud_optics%get_max_radius_ice()), &
+        cloud_props_bnd_ice)
+      TEST_(error_msg)
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+
+!!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
+
+      ! exponential inter-layer correlations
+      ! [alpha|rcorr](k) is correlation between layers k and k+1
+      ! dzmid(k) is separation between midpoints of layers k and k+1
+      if (gen_mro) then
+        do ilay = 1,LM-1
+          ! cloud fraction correlation
+          alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
+        enddo
+        if (cond_inhomo) then
+          do ilay = 1,LM-1
+            ! condensate correlation
+            rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
+          enddo
+        endif
+      endif
+
+      ! generate McICA random numbers for block
+      do isub = 1, ncols_block
+        ! local 1d column index
+        icol = colS + isub - 1
+        ! initialize the Philox PRNG
+        ! set word1 of key based on GLOBAL location
+        ! 32-bits can hold all forseeable resolutions
+        seeds(1) = nint(Jg1D(icol)) * IM_World + nint(Ig1D(icol))
+#ifdef HAVE_MKL
+        ! instantiate a random number stream for the column
+        call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
+#else
+        call rng%init(seeds)
+#endif
+        ! draw the random numbers for the column
+        urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+        if (gen_mro) then
+          urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+          if (cond_inhomo) then
+            urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+            urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+          endif
+        end if
+        ! free the rng
+        call rng%end()
+      end do
+
+      ! cloud sampling to gpoints
+      select case (cloud_overlap_type)
+        case ("MAX_RAN_OVERLAP")
+          error_msg = sampled_mask_max_ran( &
+            urand, real(CL(colS:colE,:),kind=wp), cld_mask)
+          TEST_(error_msg)
+        case ("EXP_RAN_OVERLAP")
+          ! corr_coeff(ncols_block,LM-1) is an inter-layer correlation coefficient
+          ! to be provided ... it is not the same as alpha, which is a probability
+!         error_msg = sampled_mask_exp_ran( &
+!           urand, real(CL(colS:colE,:),kind=wp), corr_coeff, cld_mask)
+!         TEST_(error_msg)
+          TEST_('EXP_RAN_OVERLAP not implemented yet')
+        case ("GEN_MAX_RAN_OVERLAP")
+          ! a scheme like Oreopoulos et al. 2012 (doi:10.5194/acp-12-9097-2012) in which both
+          ! cloud presence and cloud condensate are separately generalized maximum-random:
+          error_msg = sampled_urand_gen_max_ran(alpha, urand, urand_aux)
+          TEST_(error_msg)
+          if (cond_inhomo) then
+            error_msg = sampled_urand_gen_max_ran(rcorr, urand_cond, urand_cond_aux)
+            TEST_(error_msg)
+          end if
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+            do ilay = 1,LM
+              cld_frac = CL(icol,ilay)
+
+              ! if grid-box clear, no subgrid variability
+              if (cld_frac <= 0.) then
+                cld_mask(isub,ilay,:) = .false.
+              else
+                ! subgrid-scale cloud mask
+                cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
+
+                ! subgrid-scale condensate
+                if (cond_inhomo) then
+                  ! level of condensate inhomogeneity based on cloud fraction.
+                  if (cld_frac > 0.99) then
+                    sigma_qcw = 0.5
+                  elseif (cld_frac > 0.9) then
+                    sigma_qcw = 0.71
+                  else
+                    sigma_qcw = 1.0
+                  endif
+                  do igpt = 1,ngpt
+                    if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
+                      zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
+                  end do
+                end if
+              end if
+
+            end do
+          end do
+
+        case default
+          TEST_('RRTMGP_SW: unknown cloud overlap')
+      end select
+
+      ! draw McICA optical property samples (band->gpt)
+      TEST_(draw_samples(cld_mask, cloud_props_bnd_liq, cloud_props_gpt_liq))
+      TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
+
+      ! Scaling to sub-gridscale water paths:
+      ! since tau for each phase is linear in the phase's water path
+      ! and since the scaling zcw applies equally to both phases, the
+      ! total g-point optical thickness tau will scale with zcw.
+      if (gen_mro) then
+        if (cond_inhomo) &
+          where (cld_mask) cloud_props_gpt_liq%tau = cloud_props_gpt_liq%tau * zcw
+          where (cld_mask) cloud_props_gpt_ice%tau = cloud_props_gpt_ice%tau * zcw
+      end if
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_cloud_optics_mcica
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Super-layer cloud fraction and in-cloud optical depth diagnostics,
+    ! computed from the McICA subcolumn ensemble BEFORE delta-scaling.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_sprlyr_diags_predelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        cld_mask, ClearCounts, CL, toa_flux, band_lims_gpt, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CLDTS, CLDHS, CLDMS, CLDLS, &
+        COTTP, COTHP, COTMP, COTLP, &
+        COTDTP, COTDHP, COTDMP, COTDLP, &
+        COTNTP, COTNHP, COTNMP, COTNLP, &
+#ifdef SOLAR_RADVAL
+        TAUTP, TAUHP, TAUMP, TAULP, &
+        COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+        COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+        COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+        COTINTP, COTINHP, COTINMP, COTINLP, &
+        SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+        SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+        SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+        SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+        ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+        ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+        ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+        ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+#endif
+        MAPL, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry
+
+      integer,                      intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      integer,                      intent(in)    :: LCLDLM, LCLDMH
+      logical,                      intent(in)    :: include_aerosols
+      logical,          intent(in)  :: cld_mask(:,:,:)
+      integer,          intent(inout) :: ClearCounts(:,:)
+      real,             intent(in)  :: CL(:,:)
+      real(wp),         intent(in)  :: toa_flux(:,:)
+      integer,          intent(in)  :: band_lims_gpt(:,:)
+      class(ty_optical_props_arry), intent(in) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real,             intent(inout) :: CLDTS(:), CLDHS(:), CLDMS(:), CLDLS(:)
+      real,             intent(inout) :: COTTP(:), COTHP(:), COTMP(:), COTLP(:)
+      real,             intent(inout) :: COTDTP(:), COTDHP(:), COTDMP(:), COTDLP(:)
+      real,             intent(inout) :: COTNTP(:), COTNHP(:), COTNMP(:), COTNLP(:)
+#ifdef SOLAR_RADVAL
+      real,             intent(inout) :: TAUTP(:), TAUHP(:), TAUMP(:), TAULP(:)
+      real,             intent(inout) :: COTLDTP(:), COTLDHP(:), COTLDMP(:), COTLDLP(:)
+      real,             intent(inout) :: COTLNTP(:), COTLNHP(:), COTLNMP(:), COTLNLP(:)
+      real,             intent(inout) :: COTIDTP(:), COTIDHP(:), COTIDMP(:), COTIDLP(:)
+      real,             intent(inout) :: COTINTP(:), COTINHP(:), COTINMP(:), COTINLP(:)
+      real,             intent(inout) :: SSALDTP(:), SSALDHP(:), SSALDMP(:), SSALDLP(:)
+      real,             intent(inout) :: SSALNTP(:), SSALNHP(:), SSALNMP(:), SSALNLP(:)
+      real,             intent(inout) :: SSAIDTP(:), SSAIDHP(:), SSAIDMP(:), SSAIDLP(:)
+      real,             intent(inout) :: SSAINTP(:), SSAINHP(:), SSAINMP(:), SSAINLP(:)
+      real,             intent(inout) :: ASMLDTP(:), ASMLDHP(:), ASMLDMP(:), ASMLDLP(:)
+      real,             intent(inout) :: ASMLNTP(:), ASMLNHP(:), ASMLNMP(:), ASMLNLP(:)
+      real,             intent(inout) :: ASMIDTP(:), ASMIDHP(:), ASMIDMP(:), ASMIDLP(:)
+      real,             intent(inout) :: ASMINTP(:), ASMINHP(:), ASMINMP(:), ASMINLP(:)
+#endif
+      type(MAPL_MetaComp),          intent(inout) :: MAPL
+      integer, optional,            intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ib, igpt
+      real     :: wgt
+      real     :: stautp, stauhp, staump, staulp
+      real     :: sltautp, sltauhp, sltaump, sltaulp
+      real     :: sitautp, sitauhp, sitaump, sitaulp
+#ifdef SOLAR_RADVAL
+      real     :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
+      real     :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
+      real     :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
+      real     :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
+#endif
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      if (include_aerosols) then
+
+        ! super-layer cloud fractions
+        call clearCounts_threeBand( &
+          ncols_block, ncols_block, ngpt, LM, LCLDLM, LCLDMH, &
+          reshape(cld_mask,[LM,ngpt,ncols_block],order=[3,1,2]), &
+          ClearCounts)
+        do isub = 1,ncols_block
+          icol = colS + isub - 1
+          CLDTS(icol) = 1. - ClearCounts(1,isub)/float(ngpt)
+          CLDHS(icol) = 1. - ClearCounts(2,isub)/float(ngpt)
+          CLDMS(icol) = 1. - ClearCounts(3,isub)/float(ngpt)
+          CLDLS(icol) = 1. - ClearCounts(4,isub)/float(ngpt)
+        end do
+
+          ! in-cloud optical thicknesses in PAR super-band
+          ! (weighted across and within bands by TOA incident flux)
+          do isub = 1,ncols_block
+            icol = colS + isub - 1
+
+#ifdef SOLAR_RADVAL
+            ! default (no cloud) for TAUx variant
+            TAUTP(icol) = 0.
+            TAUHP(icol) = 0.
+            TAUMP(icol) = 0.
+            TAULP(icol) = 0.
+#endif
+
+            ! default (no cloud) for COTx variant
+            COTTP(icol) = MAPL_UNDEF
+            COTHP(icol) = MAPL_UNDEF
+            COTMP(icol) = MAPL_UNDEF
+            COTLP(icol) = MAPL_UNDEF
+
+            ! zero denom- and numerator accumulators
+            COTDTP(icol) = 0.; COTNTP(icol) = 0.
+            COTDHP(icol) = 0.; COTNHP(icol) = 0.
+            COTDMP(icol) = 0.; COTNMP(icol) = 0.
+            COTDLP(icol) = 0.; COTNLP(icol) = 0.
+#ifdef SOLAR_RADVAL
+            COTLDTP(icol) = 0.; COTLNTP(icol) = 0.; COTIDTP(icol) = 0.; COTINTP(icol) = 0.
+            COTLDHP(icol) = 0.; COTLNHP(icol) = 0.; COTIDHP(icol) = 0.; COTINHP(icol) = 0.
+            COTLDMP(icol) = 0.; COTLNMP(icol) = 0.; COTIDMP(icol) = 0.; COTINMP(icol) = 0.
+            COTLDLP(icol) = 0.; COTLNLP(icol) = 0.; COTIDLP(icol) = 0.; COTINLP(icol) = 0.
+            SSALDTP(icol) = 0.; SSALNTP(icol) = 0.; SSAIDTP(icol) = 0.; SSAINTP(icol) = 0.
+            SSALDHP(icol) = 0.; SSALNHP(icol) = 0.; SSAIDHP(icol) = 0.; SSAINHP(icol) = 0.
+            SSALDMP(icol) = 0.; SSALNMP(icol) = 0.; SSAIDMP(icol) = 0.; SSAINMP(icol) = 0.
+            SSALDLP(icol) = 0.; SSALNLP(icol) = 0.; SSAIDLP(icol) = 0.; SSAINLP(icol) = 0.
+            ASMLDTP(icol) = 0.; ASMLNTP(icol) = 0.; ASMIDTP(icol) = 0.; ASMINTP(icol) = 0.
+            ASMLDHP(icol) = 0.; ASMLNHP(icol) = 0.; ASMIDHP(icol) = 0.; ASMINHP(icol) = 0.
+            ASMLDMP(icol) = 0.; ASMLNMP(icol) = 0.; ASMIDMP(icol) = 0.; ASMINMP(icol) = 0.
+            ASMLDLP(icol) = 0.; ASMLNLP(icol) = 0.; ASMIDLP(icol) = 0.; ASMINLP(icol) = 0.
+#endif
+
+            ! can only be non-zero for potentially cloudy columns
+            if (any(CL(icol,:) > 0.)) then
+
+              ! accumulate over gpts/subcolumns
+              do ib = 1, nbnd
+                do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+
+                  ! band weights for photosynthetically active radiation (PAR)
+                  ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                  if (ib >= 11 .and. ib <= 12) then
+                    wgt = 1.0
+                  else if (ib == 10) then
+                    wgt = 0.5
+                  else
+                    ! no contribution to PAR
+                    cycle
+                  end if
+
+                  ! TOA flux weighting
+                  ! (note: neither the adjustment of toa_flux to our tsi
+                  ! or for zenith angle are needed yet since this weighting
+                  ! is over gpoint and is normalized for EACH icol)
+                  wgt = wgt * toa_flux(isub,igpt)
+
+                  ! low pressure layer
+                  sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
+                  sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                  staulp = sltaulp + sitaulp
+                  if (staulp > 0.) then
+                    COTDLP(icol) = COTDLP(icol) + wgt
+                    COTNLP(icol) = COTNLP(icol) + wgt * staulp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussalp = 0.; sltaussaglp = 0.
+                  if (sltaulp > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussalp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                      sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    end select
+                    COTLDLP(icol) = COTLDLP(icol) + wgt
+                    COTLNLP(icol) = COTLNLP(icol) + wgt * sltaulp
+                    SSALDLP(icol) = SSALDLP(icol) + wgt * sltaulp
+                    SSALNLP(icol) = SSALNLP(icol) + wgt * sltaussalp
+                    ASMLDLP(icol) = ASMLDLP(icol) + wgt * sltaussalp
+                    ASMLNLP(icol) = ASMLNLP(icol) + wgt * sltaussaglp
+                  end if
+                  sitaussalp = 0.; sitaussaglp = 0.
+                  if (sitaulp > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussalp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                      sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    end select
+                    COTIDLP(icol) = COTIDLP(icol) + wgt
+                    COTINLP(icol) = COTINLP(icol) + wgt * sitaulp
+                    SSAIDLP(icol) = SSAIDLP(icol) + wgt * sitaulp
+                    SSAINLP(icol) = SSAINLP(icol) + wgt * sitaussalp
+                    ASMIDLP(icol) = ASMIDLP(icol) + wgt * sitaussalp
+                    ASMINLP(icol) = ASMINLP(icol) + wgt * sitaussaglp
+                  end if
+#endif
+
+                  ! mid pressure layer
+                  sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                  staump = sltaump + sitaump
+                  if (staump > 0.) then
+                    COTDMP(icol) = COTDMP(icol) + wgt
+                    COTNMP(icol) = COTNMP(icol) + wgt * staump
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussamp = 0.; sltaussagmp = 0.
+                  if (sltaump > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussamp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
+                    COTLDMP(icol) = COTLDMP(icol) + wgt
+                    COTLNMP(icol) = COTLNMP(icol) + wgt * sltaump
+                    SSALDMP(icol) = SSALDMP(icol) + wgt * sltaump
+                    SSALNMP(icol) = SSALNMP(icol) + wgt * sltaussamp
+                    ASMLDMP(icol) = ASMLDMP(icol) + wgt * sltaussamp
+                    ASMLNMP(icol) = ASMLNMP(icol) + wgt * sltaussagmp
+                  end if
+                  sitaussamp = 0.; sitaussagmp = 0.
+                  if (sitaump > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussamp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                      sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    end select
+                    COTIDMP(icol) = COTIDMP(icol) + wgt
+                    COTINMP(icol) = COTINMP(icol) + wgt * sitaump
+                    SSAIDMP(icol) = SSAIDMP(icol) + wgt * sitaump
+                    SSAINMP(icol) = SSAINMP(icol) + wgt * sitaussamp
+                    ASMIDMP(icol) = ASMIDMP(icol) + wgt * sitaussamp
+                    ASMINMP(icol) = ASMINMP(icol) + wgt * sitaussagmp
+                  end if
+#endif
+
+                  ! high pressure layer
+                  sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
+                  sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                  stauhp = sltauhp + sitauhp
+                  if (stauhp > 0.) then
+                    COTDHP(icol) = COTDHP(icol) + wgt
+                    COTNHP(icol) = COTNHP(icol) + wgt * stauhp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussahp = 0.; sltaussaghp = 0.
+                  if (sltauhp > 0.) then
+                    select type(cloud_props_gpt_liq)
+                    class is (ty_optical_props_2str)
+                      sltaussahp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                      sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    end select
+                    COTLDHP(icol) = COTLDHP(icol) + wgt
+                    COTLNHP(icol) = COTLNHP(icol) + wgt * sltauhp
+                    SSALDHP(icol) = SSALDHP(icol) + wgt * sltauhp
+                    SSALNHP(icol) = SSALNHP(icol) + wgt * sltaussahp
+                    ASMLDHP(icol) = ASMLDHP(icol) + wgt * sltaussahp
+                    ASMLNHP(icol) = ASMLNHP(icol) + wgt * sltaussaghp
+                  end if
+                  sitaussahp = 0.; sitaussaghp = 0.
+                  if (sitauhp > 0.) then
+                    select type(cloud_props_gpt_ice)
+                    class is (ty_optical_props_2str)
+                      sitaussahp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                       cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                      sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                        cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    end select
+                    COTIDHP(icol) = COTIDHP(icol) + wgt
+                    COTINHP(icol) = COTINHP(icol) + wgt * sitauhp
+                    SSAIDHP(icol) = SSAIDHP(icol) + wgt * sitauhp
+                    SSAINHP(icol) = SSAINHP(icol) + wgt * sitaussahp
+                    ASMIDHP(icol) = ASMIDHP(icol) + wgt * sitaussahp
+                    ASMINHP(icol) = ASMINHP(icol) + wgt * sitaussaghp
+                  end if
+#endif
+
+                  ! whole subcolumn
+                  sltautp = sltaulp + sltaump + sltauhp
+                  sitautp = sitaulp + sitaump + sitauhp
+                  stautp = staulp + staump + stauhp
+                  if (stautp > 0.) then
+                    COTDTP(icol) = COTDTP(icol) + wgt
+                    COTNTP(icol) = COTNTP(icol) + wgt * stautp
+                  end if
+#ifdef SOLAR_RADVAL
+                  sltaussatp = sltaussalp + sltaussamp + sltaussahp
+                  sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
+                  if (sltautp > 0.) then
+                    COTLDTP(icol) = COTLDTP(icol) + wgt
+                    COTLNTP(icol) = COTLNTP(icol) + wgt * sltautp
+                    SSALDTP(icol) = SSALDTP(icol) + wgt * sltautp
+                    SSALNTP(icol) = SSALNTP(icol) + wgt * sltaussatp
+                    ASMLDTP(icol) = ASMLDTP(icol) + wgt * sltaussatp
+                    ASMLNTP(icol) = ASMLNTP(icol) + wgt * sltaussagtp
+                  end if
+                  sitaussatp = sitaussalp + sitaussamp + sitaussahp
+                  sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                  if (sitautp > 0.) then
+                    COTIDTP(icol) = COTIDTP(icol) + wgt
+                    COTINTP(icol) = COTINTP(icol) + wgt * sitautp
+                    SSAIDTP(icol) = SSAIDTP(icol) + wgt * sitautp
+                    SSAINTP(icol) = SSAINTP(icol) + wgt * sitaussatp
+                    ASMIDTP(icol) = ASMIDTP(icol) + wgt * sitaussatp
+                    ASMINTP(icol) = ASMINTP(icol) + wgt * sitaussagtp
+                  end if
+#endif
+
+                end do ! igpt
+              end do ! ib
+
+              ! normalize
+              ! Note: TAUx defaults zero, COTx defaults MAPL_UNDEF
+              if (COTDTP(icol) > 0. .and. COTNTP(icol) > 0.) then
+                COTTP(icol) = COTNTP(icol) / COTDTP(icol)
+#ifdef SOLAR_RADVAL
+                TAUTP(icol) = COTTP(icol)
+#endif
+              end if
+
+              if (COTDHP(icol) > 0. .and. COTNHP(icol) > 0.) then
+                COTHP(icol) = COTNHP(icol) / COTDHP(icol)
+#ifdef SOLAR_RADVAL
+                TAUHP(icol) = COTHP(icol)
+#endif
+              end if
+
+              if (COTDMP(icol) > 0. .and. COTNMP(icol) > 0.) then
+                COTMP(icol) = COTNMP(icol) / COTDMP(icol)
+#ifdef SOLAR_RADVAL
+                TAUMP(icol) = COTMP(icol)
+#endif
+              end if
+
+              if (COTDLP(icol) > 0. .and. COTNLP(icol) > 0.) then
+                COTLP(icol) = COTNLP(icol) / COTDLP(icol)
+#ifdef SOLAR_RADVAL
+                TAULP(icol) = COTLP(icol)
+#endif
+              end if
+
+            end if  ! potentially cloudy column
+          end do  ! isub
+      end if  ! include_aerosols
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_sprlyr_diags_predelta
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Delta-scale cloud optical properties (liquid and ice) for one block.
+    ! forwliq and forwice are computed here and returned for use in Step 2f.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_delta_scale( &
+        colS, ncols_block, LM, ngpt, nbnd, &
+        rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+        CL, RR3, band_lims_gpt, &
+        cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        forwliq, forwice, &
+        MAPL, RC)
+
+      use mo_optical_props,       only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
+      use mo_rte_kind,            only: wp
+
+      integer,                        intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      logical,                        intent(in)    :: rrtmgp_delta_scale
+      logical,                        intent(in)    :: rrtmgp_use_rrtmg_iceflg3_like_forwice
+      real,             dimension(:,:),   intent(in) :: CL
+      real,             dimension(:,:,:), intent(in) :: RR3
+      integer,          dimension(:,:),   intent(in) :: band_lims_gpt
+      type(ty_cloud_optics_rrtmgp),   intent(inout) :: cloud_optics
+      class(ty_optical_props_arry),   intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real(wp),         dimension(:,:,:), intent(out) :: forwliq, forwice
+      type(MAPL_MetaComp),            intent(inout) :: MAPL
+      integer, optional,              intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ilay, ib, igpt, radidx
+      real(wp) :: radice_lwr, radice_upr, radice, radfac, rfint, fdelta
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+
+      forwliq = 0.; forwice = 0.  ! default for no delta-scaling
+      if (rrtmgp_delta_scale) then
+
+        ! default delta-scaling for liquid
+        select type(cloud_props_gpt_liq)
+        class is (ty_optical_props_2str)
+          forwliq = cloud_props_gpt_liq%g ** 2
+        end select
+        TEST_(cloud_props_gpt_liq%delta_scale(forwliq))
+
+        if (rrtmgp_use_rrtmg_iceflg3_like_forwice) then
+          ! non-default delta-scaling for ice (as in RRTMG iceflag==3)
+          select type(cloud_props_gpt_ice)
+          class is (ty_optical_props_2str)
+            radice_lwr = cloud_optics%get_min_radius_ice()
+            radice_upr = cloud_optics%get_max_radius_ice()
+            do isub = 1,ncols_block
+              icol = colS + isub - 1
+              do ilay = 1,LM
+                ! only if at least potentially cloudy ...
+                if (CL(icol,ilay) > 0.) then
+
+                  ! prepare for radice interpolation ...
+                  ! first get radice consistent with RRTMGP ice cloud optics
+                  radice = min(max(real(RR3(icol,ilay,1),kind=wp),radice_lwr),radice_upr)
+                  ! now force into RRTMG's iceflag==3 reice binning range [5,140]um.
+                  radice = min(max(radice,5._wp),140._wp)
+                  ! RRTMG has 46 reice bins with 5um->radidx==1, 140um->radidx==46,
+                  ! but radidx is forced to [1,45] so LIN2_ARG1 interpolation works.
+                  radfac = (radice - 2._wp) / 3._wp
+                  radidx = min(max(int(radfac),1),45)
+                  rfint = radfac - real(radidx,kind=wp)
+
+                  do ib = 1,nbnd
+                    ! interpolate fdelta in radice for band ib
+                    fdelta = LIN2_ARG1(fdlice3_rrtmgp,radidx,ib,rfint)
+
+                    ! forwice calc for each g-point
+                    do igpt = band_lims_gpt(1,ib),band_lims_gpt(2,ib)
+                      if (cloud_props_gpt_ice%tau(isub,ilay,igpt) > 0.) then
+                        forwice(isub,ilay,igpt) = min( &
+                           fdelta + 0.5_wp / cloud_props_gpt_ice%ssa(isub,ilay,igpt), &
+                           cloud_props_gpt_ice%g(isub,ilay,igpt))
+                      endif
+                    enddo  ! g-points
+                  enddo  ! bands
+
+                endif  ! potentially cloudy
+              enddo  ! layers
+            enddo  ! columns
+          end select
+          TEST_(cloud_props_gpt_ice%delta_scale(forwice))
+        else
+          ! default delta-scaling for ice
+          select type(cloud_props_gpt_ice)
+          class is (ty_optical_props_2str)
+            forwice = cloud_props_gpt_ice%g ** 2
+          end select
+          TEST_(cloud_props_gpt_ice%delta_scale(forwice))
+        endif
+      endif
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_delta_scale
+#undef TEST_
+
+    ! ---------------------------------------------------------------------------
+    ! Super-layer cloud optical depth diagnostics AFTER delta-scaling.
+    ! Only compiled/called under #ifdef SOLAR_RADVAL.
+    ! forwliq and forwice (from compute_delta_scale) are intent(in) here.
+    ! All scalar temporaries are local (thread-private under future OMP).
+    ! ---------------------------------------------------------------------------
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_sprlyr_diags_postdelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        CL, toa_flux, band_lims_gpt, &
+        forwliq, forwice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+        CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+        CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+        CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+        SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+        SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+        SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+        SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+        ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+        ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+        ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+        ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+        FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+        FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+        FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+        FORINTP, FORINHP, FORINMP, FORINLP, &
+        MAPL, RC)
+
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_rte_kind,      only: wp
+
+      integer,                      intent(in)    :: colS, ncols_block, LM, ngpt, nbnd
+      integer,                      intent(in)    :: LCLDLM, LCLDMH
+      logical,                      intent(in)    :: include_aerosols
+      real,             intent(in)  :: CL(:,:)
+      real(wp),         intent(in)  :: toa_flux(:,:)
+      integer,          intent(in)  :: band_lims_gpt(:,:)
+      real(wp),         intent(in)  :: forwliq(:,:,:), forwice(:,:,:)
+      class(ty_optical_props_arry), intent(in) :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      real,             intent(inout) :: CDSDTP(:), CDSDHP(:), CDSDMP(:), CDSDLP(:)
+      real,             intent(inout) :: CDSNTP(:), CDSNHP(:), CDSNMP(:), CDSNLP(:)
+      real,             intent(inout) :: CDSLDTP(:), CDSLDHP(:), CDSLDMP(:), CDSLDLP(:)
+      real,             intent(inout) :: CDSLNTP(:), CDSLNHP(:), CDSLNMP(:), CDSLNLP(:)
+      real,             intent(inout) :: CDSIDTP(:), CDSIDHP(:), CDSIDMP(:), CDSIDLP(:)
+      real,             intent(inout) :: CDSINTP(:), CDSINHP(:), CDSINMP(:), CDSINLP(:)
+      real,             intent(inout) :: SDSLDTP(:), SDSLDHP(:), SDSLDMP(:), SDSLDLP(:)
+      real,             intent(inout) :: SDSLNTP(:), SDSLNHP(:), SDSLNMP(:), SDSLNLP(:)
+      real,             intent(inout) :: SDSIDTP(:), SDSIDHP(:), SDSIDMP(:), SDSIDLP(:)
+      real,             intent(inout) :: SDSINTP(:), SDSINHP(:), SDSINMP(:), SDSINLP(:)
+      real,             intent(inout) :: ADSLDTP(:), ADSLDHP(:), ADSLDMP(:), ADSLDLP(:)
+      real,             intent(inout) :: ADSLNTP(:), ADSLNHP(:), ADSLNMP(:), ADSLNLP(:)
+      real,             intent(inout) :: ADSIDTP(:), ADSIDHP(:), ADSIDMP(:), ADSIDLP(:)
+      real,             intent(inout) :: ADSINTP(:), ADSINHP(:), ADSINMP(:), ADSINLP(:)
+      real,             intent(inout) :: FORLDTP(:), FORLDHP(:), FORLDMP(:), FORLDLP(:)
+      real,             intent(inout) :: FORLNTP(:), FORLNHP(:), FORLNMP(:), FORLNLP(:)
+      real,             intent(inout) :: FORIDTP(:), FORIDHP(:), FORIDMP(:), FORIDLP(:)
+      real,             intent(inout) :: FORINTP(:), FORINHP(:), FORINMP(:), FORINLP(:)
+      type(MAPL_MetaComp),          intent(inout) :: MAPL
+      integer, optional,            intent(out)   :: RC
+
+      ! locals -- all thread-private under future !$OMP PARALLEL DO
+      integer  :: isub, icol, ib, igpt
+      real     :: wgt
+      real     :: stautp, stauhp, staump, staulp
+      real     :: sltautp, sltauhp, sltaump, sltaulp
+      real     :: sitautp, sitauhp, sitaump, sitaulp
+      real     :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
+      real     :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
+      real     :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
+      real     :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
+      real     :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
+      real     :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
+      character(len=ESMF_MAXSTR) :: error_msg
+      integer  :: STATUS
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      if (include_aerosols) then
+
+        ! in-cloud optical thicknesses in PAR super-band
+        ! (weighted across and within bands by TOA incident flux)
+        do isub = 1,ncols_block
+          icol = colS + isub - 1
+
+          ! zero denom- and numerator accumulators
+          CDSDTP(icol) = 0.; CDSNTP(icol) = 0.
+          CDSDHP(icol) = 0.; CDSNHP(icol) = 0.
+          CDSDMP(icol) = 0.; CDSNMP(icol) = 0.
+          CDSDLP(icol) = 0.; CDSNLP(icol) = 0.
+
+          CDSLDTP(icol) = 0.; CDSLNTP(icol) = 0.; CDSIDTP(icol) = 0.; CDSINTP(icol) = 0.
+          CDSLDHP(icol) = 0.; CDSLNHP(icol) = 0.; CDSIDHP(icol) = 0.; CDSINHP(icol) = 0.
+          CDSLDMP(icol) = 0.; CDSLNMP(icol) = 0.; CDSIDMP(icol) = 0.; CDSINMP(icol) = 0.
+          CDSLDLP(icol) = 0.; CDSLNLP(icol) = 0.; CDSIDLP(icol) = 0.; CDSINLP(icol) = 0.
+
+          SDSLDTP(icol) = 0.; SDSLNTP(icol) = 0.; SDSIDTP(icol) = 0.; SDSINTP(icol) = 0.
+          SDSLDHP(icol) = 0.; SDSLNHP(icol) = 0.; SDSIDHP(icol) = 0.; SDSINHP(icol) = 0.
+          SDSLDMP(icol) = 0.; SDSLNMP(icol) = 0.; SDSIDMP(icol) = 0.; SDSINMP(icol) = 0.
+          SDSLDLP(icol) = 0.; SDSLNLP(icol) = 0.; SDSIDLP(icol) = 0.; SDSINLP(icol) = 0.
+
+          ADSLDTP(icol) = 0.; ADSLNTP(icol) = 0.; ADSIDTP(icol) = 0.; ADSINTP(icol) = 0.
+          ADSLDHP(icol) = 0.; ADSLNHP(icol) = 0.; ADSIDHP(icol) = 0.; ADSINHP(icol) = 0.
+          ADSLDMP(icol) = 0.; ADSLNMP(icol) = 0.; ADSIDMP(icol) = 0.; ADSINMP(icol) = 0.
+          ADSLDLP(icol) = 0.; ADSLNLP(icol) = 0.; ADSIDLP(icol) = 0.; ADSINLP(icol) = 0.
+
+          FORLDTP(icol) = 0.; FORLNTP(icol) = 0.; FORIDTP(icol) = 0.; FORINTP(icol) = 0.
+          FORLDHP(icol) = 0.; FORLNHP(icol) = 0.; FORIDHP(icol) = 0.; FORINHP(icol) = 0.
+          FORLDMP(icol) = 0.; FORLNMP(icol) = 0.; FORIDMP(icol) = 0.; FORINMP(icol) = 0.
+          FORLDLP(icol) = 0.; FORLNLP(icol) = 0.; FORIDLP(icol) = 0.; FORINLP(icol) = 0.
+
+          ! can only be non-zero for potentially cloudy columns
+          if (any(CL(icol,:) > 0.)) then
+
+            ! accumulate over gpts/subcolumns
+            do ib = 1, nbnd
+              do igpt = band_lims_gpt(1,ib), band_lims_gpt(2,ib)
+
+                ! band weights for photosynthetically active radiation (PAR)
+                ! Bands 11-12 (0.345-0.625 um) plus half transition band 10 (0.625-0.778 um)
+                if (ib >= 11 .and. ib <= 12) then
+                  wgt = 1.0
+                else if (ib == 10) then
+                  wgt = 0.5
+                else
+                  ! no contribution to PAR
+                  cycle
+                end if
+
+                wgt = wgt * toa_flux(isub,igpt)
+
+                ! low pressure layer
+                sltaulp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt))
+                sitaulp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt))
+                staulp = sltaulp + sitaulp
+                if (staulp > 0.) then
+                  CDSNLP(icol) = CDSNLP(icol) + wgt * staulp
+                  CDSDLP(icol) = CDSDLP(icol) + wgt
+                end if
+                sltaussalp = 0.; sltaussaglp = 0.; sltaussaflp = 0.
+                if (sltaulp > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussalp  = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt))
+                    sltaussaglp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDLM:LM,igpt))
+                    sltaussaflp = sum(cloud_props_gpt_liq%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDLM:LM,igpt) * &
+                                                      forwliq(isub,LCLDLM:LM,igpt))
+                  end select
+                  CDSLDLP(icol) = CDSLDLP(icol) + wgt
+                  CDSLNLP(icol) = CDSLNLP(icol) + wgt * sltaulp
+                  SDSLDLP(icol) = SDSLDLP(icol) + wgt * sltaulp
+                  SDSLNLP(icol) = SDSLNLP(icol) + wgt * sltaussalp
+                  ADSLDLP(icol) = ADSLDLP(icol) + wgt * sltaussalp
+                  ADSLNLP(icol) = ADSLNLP(icol) + wgt * sltaussaglp
+                  FORLDLP(icol) = FORLDLP(icol) + wgt * sltaussalp
+                  FORLNLP(icol) = FORLNLP(icol) + wgt * sltaussaflp
+                end if
+                sitaussalp = 0.; sitaussaglp = 0.; sitaussaflp = 0.
+                if (sitaulp > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussalp  = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt))
+                    sitaussaglp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDLM:LM,igpt))
+                    sitaussaflp = sum(cloud_props_gpt_ice%tau(isub,LCLDLM:LM,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDLM:LM,igpt) * &
+                                                      forwice(isub,LCLDLM:LM,igpt))
+                  end select
+                  CDSIDLP(icol) = CDSIDLP(icol) + wgt
+                  CDSINLP(icol) = CDSINLP(icol) + wgt * sitaulp
+                  SDSIDLP(icol) = SDSIDLP(icol) + wgt * sitaulp
+                  SDSINLP(icol) = SDSINLP(icol) + wgt * sitaussalp
+                  ADSIDLP(icol) = ADSIDLP(icol) + wgt * sitaussalp
+                  ADSINLP(icol) = ADSINLP(icol) + wgt * sitaussaglp
+                  FORIDLP(icol) = FORIDLP(icol) + wgt * sitaussalp
+                  FORINLP(icol) = FORINLP(icol) + wgt * sitaussaflp
+                end if
+
+                ! mid pressure layer
+                sltaump = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                sitaump = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt))
+                staump = sltaump + sitaump
+                if (staump > 0.) then
+                  CDSNMP(icol) = CDSNMP(icol) + wgt * staump
+                  CDSDMP(icol) = CDSDMP(icol) + wgt
+                end if
+                sltaussamp = 0.; sltaussagmp = 0.; sltaussafmp = 0.
+                if (sltaump > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussamp  = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sltaussagmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    sltaussafmp = sum(cloud_props_gpt_liq%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                      forwliq(isub,LCLDMH:LCLDLM-1,igpt))
+                  end select
+                  CDSLDMP(icol) = CDSLDMP(icol) + wgt
+                  CDSLNMP(icol) = CDSLNMP(icol) + wgt * sltaump
+                  SDSLDMP(icol) = SDSLDMP(icol) + wgt * sltaump
+                  SDSLNMP(icol) = SDSLNMP(icol) + wgt * sltaussamp
+                  ADSLDMP(icol) = ADSLDMP(icol) + wgt * sltaussamp
+                  ADSLNMP(icol) = ADSLNMP(icol) + wgt * sltaussagmp
+                  FORLDMP(icol) = FORLDMP(icol) + wgt * sltaussamp
+                  FORLNMP(icol) = FORLNMP(icol) + wgt * sltaussafmp
+                end if
+                sitaussamp = 0.; sitaussagmp = 0.; sitaussafmp = 0.
+                if (sitaump > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussamp  = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt))
+                    sitaussagmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,LCLDMH:LCLDLM-1,igpt))
+                    sitaussafmp = sum(cloud_props_gpt_ice%tau(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,LCLDMH:LCLDLM-1,igpt) * &
+                                                      forwice(isub,LCLDMH:LCLDLM-1,igpt))
+                  end select
+                  CDSIDMP(icol) = CDSIDMP(icol) + wgt
+                  CDSINMP(icol) = CDSINMP(icol) + wgt * sitaump
+                  SDSIDMP(icol) = SDSIDMP(icol) + wgt * sitaump
+                  SDSINMP(icol) = SDSINMP(icol) + wgt * sitaussamp
+                  ADSIDMP(icol) = ADSIDMP(icol) + wgt * sitaussamp
+                  ADSINMP(icol) = ADSINMP(icol) + wgt * sitaussagmp
+                  FORIDMP(icol) = FORIDMP(icol) + wgt * sitaussamp
+                  FORINMP(icol) = FORINMP(icol) + wgt * sitaussafmp
+                end if
+
+                ! high pressure layer
+                sltauhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt))
+                sitauhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt))
+                stauhp = sltauhp + sitauhp
+                if (stauhp > 0.) then
+                  CDSNHP(icol) = CDSNHP(icol) + wgt * stauhp
+                  CDSDHP(icol) = CDSDHP(icol) + wgt
+                end if
+                sltaussahp = 0.; sltaussaghp = 0.; sltaussafhp = 0.
+                if (sltauhp > 0.) then
+                  select type(cloud_props_gpt_liq)
+                  class is (ty_optical_props_2str)
+                    sltaussahp  = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt))
+                    sltaussaghp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%g  (isub,1:LCLDMH-1,igpt))
+                    sltaussafhp = sum(cloud_props_gpt_liq%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_liq%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                      forwliq(isub,1:LCLDMH-1,igpt))
+                  end select
+                  CDSLDHP(icol) = CDSLDHP(icol) + wgt
+                  CDSLNHP(icol) = CDSLNHP(icol) + wgt * sltauhp
+                  SDSLDHP(icol) = SDSLDHP(icol) + wgt * sltauhp
+                  SDSLNHP(icol) = SDSLNHP(icol) + wgt * sltaussahp
+                  ADSLDHP(icol) = ADSLDHP(icol) + wgt * sltaussahp
+                  ADSLNHP(icol) = ADSLNHP(icol) + wgt * sltaussaghp
+                  FORLDHP(icol) = FORLDHP(icol) + wgt * sltaussahp
+                  FORLNHP(icol) = FORLNHP(icol) + wgt * sltaussafhp
+                end if
+                sitaussahp = 0.; sitaussaghp = 0.; sitaussafhp = 0.
+                if (sitauhp > 0.) then
+                  select type(cloud_props_gpt_ice)
+                  class is (ty_optical_props_2str)
+                    sitaussahp  = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt))
+                    sitaussaghp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%g  (isub,1:LCLDMH-1,igpt))
+                    sitaussafhp = sum(cloud_props_gpt_ice%tau(isub,1:LCLDMH-1,igpt) * &
+                                      cloud_props_gpt_ice%ssa(isub,1:LCLDMH-1,igpt) * &
+                                                      forwice(isub,1:LCLDMH-1,igpt))
+                  end select
+                  CDSIDHP(icol) = CDSIDHP(icol) + wgt
+                  CDSINHP(icol) = CDSINHP(icol) + wgt * sitauhp
+                  SDSIDHP(icol) = SDSIDHP(icol) + wgt * sitauhp
+                  SDSINHP(icol) = SDSINHP(icol) + wgt * sitaussahp
+                  ADSIDHP(icol) = ADSIDHP(icol) + wgt * sitaussahp
+                  ADSINHP(icol) = ADSINHP(icol) + wgt * sitaussaghp
+                  FORIDHP(icol) = FORIDHP(icol) + wgt * sitaussahp
+                  FORINHP(icol) = FORINHP(icol) + wgt * sitaussafhp
+                end if
+
+                ! whole subcolumn
+                sltautp = sltaulp + sltaump + sltauhp
+                sitautp = sitaulp + sitaump + sitauhp
+                stautp  = staulp  + staump  + stauhp
+                if (stautp > 0.) then
+                  CDSNTP(icol) = CDSNTP(icol) + wgt * stautp
+                  CDSDTP(icol) = CDSDTP(icol) + wgt
+                end if
+                sltaussatp  = sltaussalp  + sltaussamp  + sltaussahp
+                sltaussagtp = sltaussaglp + sltaussagmp + sltaussaghp
+                sltaussaftp = sltaussaflp + sltaussafmp + sltaussafhp
+                if (sltautp > 0.) then
+                  CDSLDTP(icol) = CDSLDTP(icol) + wgt
+                  CDSLNTP(icol) = CDSLNTP(icol) + wgt * sltautp
+                  SDSLDTP(icol) = SDSLDTP(icol) + wgt * sltautp
+                  SDSLNTP(icol) = SDSLNTP(icol) + wgt * sltaussatp
+                  ADSLDTP(icol) = ADSLDTP(icol) + wgt * sltaussatp
+                  ADSLNTP(icol) = ADSLNTP(icol) + wgt * sltaussagtp
+                  FORLDTP(icol) = FORLDTP(icol) + wgt * sltaussatp
+                  FORLNTP(icol) = FORLNTP(icol) + wgt * sltaussaftp
+                end if
+                sitaussatp  = sitaussalp  + sitaussamp  + sitaussahp
+                sitaussagtp = sitaussaglp + sitaussagmp + sitaussaghp
+                sitaussaftp = sitaussaflp + sitaussafmp + sitaussafhp
+                if (sitautp > 0.) then
+                  CDSIDTP(icol) = CDSIDTP(icol) + wgt
+                  CDSINTP(icol) = CDSINTP(icol) + wgt * sitautp
+                  SDSIDTP(icol) = SDSIDTP(icol) + wgt * sitautp
+                  SDSINTP(icol) = SDSINTP(icol) + wgt * sitaussatp
+                  ADSIDTP(icol) = ADSIDTP(icol) + wgt * sitaussatp
+                  ADSINTP(icol) = ADSINTP(icol) + wgt * sitaussagtp
+                  FORIDTP(icol) = FORIDTP(icol) + wgt * sitaussatp
+                  FORINTP(icol) = FORINTP(icol) + wgt * sitaussaftp
+                end if
+
+              end do ! igpt
+            end do ! ib
+
+          end if  ! potentially cloudy column
+        end do  ! isub
+      end if  ! include_aerosols
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+
+      RETURN_(ESMF_SUCCESS)
+
+    end subroutine compute_sprlyr_diags_postdelta
+#undef TEST_
+
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine compute_rte_sw( &
+        colS, colE, ngpt, &
+        tsi, toa_flux, optical_props, &
+        top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+        fluxes_clrsky, flux_up_clrsky, flux_net_clrsky, &
+        fluxes_allsky, flux_up_allsky, flux_net_allsky, &
+        bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        MAPL, RC)
+
+      use mo_optical_props,   only: ty_optical_props_arry
+      use mo_rte_kind,        only: wp
+      use mo_rte_sw,          only: rte_sw
+      use mo_fluxes_byband,   only: ty_fluxes_byband
+
+      integer,                              intent(in)    :: colS, colE, ngpt
+      real(wp),                             intent(in)    :: tsi(:)
+      real(wp),                             intent(inout) :: toa_flux(:,:)
+      class(ty_optical_props_arry),         intent(inout) :: optical_props
+      logical,                              intent(in)    :: top_at_1
+      real(wp),                             intent(in)    :: mu0(:)
+      real(wp),                             intent(in)    :: sfc_alb_dir(:,:)
+      real(wp),                             intent(in)    :: sfc_alb_dif(:,:)
+      type(ty_fluxes_byband),               intent(inout) :: fluxes_clrsky
+      real(wp),              target,        intent(inout) :: flux_up_clrsky(:,:)
+      real(wp),              target,        intent(inout) :: flux_net_clrsky(:,:)
+      type(ty_fluxes_byband),               intent(inout) :: fluxes_allsky
+      real(wp),              target,        intent(inout) :: flux_up_allsky(:,:)
+      real(wp),              target,        intent(inout) :: flux_net_allsky(:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_dn_allsky(:,:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_dir_allsky(:,:,:)
+      real(wp),              target,        intent(inout) :: bnd_flux_net_allsky(:,:,:)
+      class(ty_optical_props_arry),         intent(inout) :: cloud_props_gpt_liq
+      class(ty_optical_props_arry),         intent(inout) :: cloud_props_gpt_ice
+      type(MAPL_MetaComp),                  intent(inout) :: MAPL
+      integer,               optional,      intent(out)   :: RC
+
+      character(len=512) :: error_msg
+      integer            :: STATUS
+
+      ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
+
+      ! scale to our tsi
+      ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
+      toa_flux = toa_flux * spread(tsi(colS:colE)/sum(toa_flux,dim=2), 2, ngpt)
+
+      ! clear-sky radiative transfer
+      fluxes_clrsky%flux_up  => flux_up_clrsky
+      fluxes_clrsky%flux_net => flux_net_clrsky
+      error_msg = rte_sw( &
+        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
+        fluxes_clrsky)
+      TEST_(error_msg)
+
+      ! add in cloud optical properties
+      ! add ice first since its optical depths are usually smaller
+      TEST_(cloud_props_gpt_ice%increment(optical_props))
+      TEST_(cloud_props_gpt_liq%increment(optical_props))
+
+      ! all-sky radiative transfer
+      fluxes_allsky%flux_up         => flux_up_allsky
+      fluxes_allsky%flux_net        => flux_net_allsky
+      fluxes_allsky%bnd_flux_dn     => bnd_flux_dn_allsky
+      fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky
+      fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky
+      error_msg = rte_sw( &
+        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
+        fluxes_allsky)
+      TEST_(error_msg)
+
+      ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
+      ! call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+
+      RETURN
+    end subroutine compute_rte_sw
+#undef TEST_
+
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+    subroutine PROCESS_RRTMGP_BLOCK( &
+        b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
+        LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
+        cloud_overlap_type, IM_World, seeds_time_key, &
+        need_aer_optical_props, top_at_1, &
+        rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+        cwp_fac_arg, &
+        gas_concs, k_dist, cloud_optics, &
+        p_lay, p_lev, t_lay, QQ3, RR3, dp_wp, dummy_wp, &
+        CL, dzmid, adl, rdl, Ig1D, Jg1D, band_lims_gpt, &
+        tsi, mu0, sfc_alb_dir, sfc_alb_dif, taua, ssaa, asya, &
+        flux_up_clrsky, flux_net_clrsky, &
+        flux_up_allsky, flux_net_allsky, &
+        bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
+        CLDTS, CLDHS, CLDMS, CLDLS, &
+        COTTP, COTHP, COTMP, COTLP, &
+        COTDTP, COTDHP, COTDMP, COTDLP, &
+        COTNTP, COTNHP, COTNMP, COTNLP, &
+#ifdef SOLAR_RADVAL
+        TAUTP, TAUHP, TAUMP, TAULP, &
+        COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+        COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+        COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+        COTINTP, COTINHP, COTINMP, COTINLP, &
+        SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+        SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+        SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+        SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+        ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+        ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+        ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+        ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+        CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+        CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+        CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+        SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+        SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+        SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+        SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+        ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+        ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+        ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+        ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+        FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+        FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+        FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+        FORINTP, FORINHP, FORINMP, FORINLP, &
+#endif
+        MAPL, RC)
+
+      use mo_optical_props,         only: ty_optical_props_arry, ty_optical_props_1scl, &
+                                          ty_optical_props_2str, ty_optical_props_nstr
+      use mo_rte_kind,              only: wp
+      use mo_gas_optics_rrtmgp,     only: ty_gas_optics_rrtmgp
+      use mo_gas_concentrations,    only: ty_gas_concs
+      use mo_cloud_optics_rrtmgp,   only: ty_cloud_optics_rrtmgp
+      use mo_fluxes_byband,         only: ty_fluxes_byband
+
+      integer,                        intent(in)    :: b, ncol, rrtmgp_blockSize
+      integer,                        intent(in)    :: LM, ngpt, nbnd, nmom
+      integer,                        intent(in)    :: LCLDLM, LCLDMH
+      logical,                        intent(in)    :: include_aerosols
+      logical,                        intent(in)    :: gen_mro, cond_inhomo
+      character(len=*),               intent(in)    :: cloud_overlap_type
+      integer,                        intent(in)    :: IM_World
+      integer,                        intent(in)    :: seeds_time_key
+      logical,                        intent(in)    :: need_aer_optical_props
+      logical,                        intent(in)    :: top_at_1
+      logical,                        intent(in)    :: rrtmgp_delta_scale
+      logical,                        intent(in)    :: rrtmgp_use_rrtmg_iceflg3_like_forwice
+      real(wp),                       intent(in)    :: cwp_fac_arg
+      type(ty_gas_concs),             intent(in)    :: gas_concs
+      type(ty_gas_optics_rrtmgp),     intent(in)    :: k_dist
+      type(ty_cloud_optics_rrtmgp),   intent(inout) :: cloud_optics
+      real(wp),                       intent(in)    :: p_lay(:,:), p_lev(:,:), t_lay(:,:)
+      real,                           intent(in)    :: QQ3(:,:,:), RR3(:,:,:)
+      real(wp),                       intent(in)    :: dp_wp(:,:), dummy_wp(:,:)
+      real,                           intent(in)    :: CL(:,:)
+      real(wp),                       intent(in)    :: dzmid(:,:)
+      real,                           intent(in)    :: adl(:), rdl(:)
+      real,                           intent(in)    :: Ig1D(:), Jg1D(:)
+      integer,                        intent(in)    :: band_lims_gpt(:,:)
+      real(wp),                       intent(in)    :: tsi(:), mu0(:)
+      real(wp),                       intent(in)    :: sfc_alb_dir(:,:), sfc_alb_dif(:,:)
+      real,                           intent(in)    :: taua(:,:,:), ssaa(:,:,:), asya(:,:,:)
+      real(wp),          target,      intent(inout) :: flux_up_clrsky(:,:), flux_net_clrsky(:,:)
+      real(wp),          target,      intent(inout) :: flux_up_allsky(:,:), flux_net_allsky(:,:)
+      real(wp),          target,      intent(inout) :: bnd_flux_dn_allsky(:,:,:)
+      real(wp),          target,      intent(inout) :: bnd_flux_dir_allsky(:,:,:)
+      real(wp),          target,      intent(inout) :: bnd_flux_net_allsky(:,:,:)
+      real,                           intent(inout) :: CLDTS(:), CLDHS(:), CLDMS(:), CLDLS(:)
+      real,                           intent(inout) :: COTTP(:), COTHP(:), COTMP(:), COTLP(:)
+      real,                           intent(inout) :: COTDTP(:), COTDHP(:), COTDMP(:), COTDLP(:)
+      real,                           intent(inout) :: COTNTP(:), COTNHP(:), COTNMP(:), COTNLP(:)
+#ifdef SOLAR_RADVAL
+      real,                           intent(inout) :: TAUTP(:), TAUHP(:), TAUMP(:), TAULP(:)
+      real,                           intent(inout) :: COTLDTP(:), COTLDHP(:), COTLDMP(:), COTLDLP(:)
+      real,                           intent(inout) :: COTLNTP(:), COTLNHP(:), COTLNMP(:), COTLNLP(:)
+      real,                           intent(inout) :: COTIDTP(:), COTIDHP(:), COTIDMP(:), COTIDLP(:)
+      real,                           intent(inout) :: COTINTP(:), COTINHP(:), COTINMP(:), COTINLP(:)
+      real,                           intent(inout) :: SSALDTP(:), SSALDHP(:), SSALDMP(:), SSALDLP(:)
+      real,                           intent(inout) :: SSALNTP(:), SSALNHP(:), SSALNMP(:), SSALNLP(:)
+      real,                           intent(inout) :: SSAIDTP(:), SSAIDHP(:), SSAIDMP(:), SSAIDLP(:)
+      real,                           intent(inout) :: SSAINTP(:), SSAINHP(:), SSAINMP(:), SSAINLP(:)
+      real,                           intent(inout) :: ASMLDTP(:), ASMLDHP(:), ASMLDMP(:), ASMLDLP(:)
+      real,                           intent(inout) :: ASMLNTP(:), ASMLNHP(:), ASMLNMP(:), ASMLNLP(:)
+      real,                           intent(inout) :: ASMIDTP(:), ASMIDHP(:), ASMIDMP(:), ASMIDLP(:)
+      real,                           intent(inout) :: ASMINTP(:), ASMINHP(:), ASMINMP(:), ASMINLP(:)
+      real,                           intent(inout) :: CDSDTP(:), CDSDHP(:), CDSDMP(:), CDSDLP(:)
+      real,                           intent(inout) :: CDSNTP(:), CDSNHP(:), CDSNMP(:), CDSNLP(:)
+      real,                           intent(inout) :: CDSLDTP(:), CDSLDHP(:), CDSLDMP(:), CDSLDLP(:)
+      real,                           intent(inout) :: CDSLNTP(:), CDSLNHP(:), CDSLNMP(:), CDSLNLP(:)
+      real,                           intent(inout) :: CDSIDTP(:), CDSIDHP(:), CDSIDMP(:), CDSIDLP(:)
+      real,                           intent(inout) :: CDSINTP(:), CDSINHP(:), CDSINMP(:), CDSINLP(:)
+      real,                           intent(inout) :: SDSLDTP(:), SDSLDHP(:), SDSLDMP(:), SDSLDLP(:)
+      real,                           intent(inout) :: SDSLNTP(:), SDSLNHP(:), SDSLNMP(:), SDSLNLP(:)
+      real,                           intent(inout) :: SDSIDTP(:), SDSIDHP(:), SDSIDMP(:), SDSIDLP(:)
+      real,                           intent(inout) :: SDSINTP(:), SDSINHP(:), SDSINMP(:), SDSINLP(:)
+      real,                           intent(inout) :: ADSLDTP(:), ADSLDHP(:), ADSLDMP(:), ADSLDLP(:)
+      real,                           intent(inout) :: ADSLNTP(:), ADSLNHP(:), ADSLNMP(:), ADSLNLP(:)
+      real,                           intent(inout) :: ADSIDTP(:), ADSIDHP(:), ADSIDMP(:), ADSIDLP(:)
+      real,                           intent(inout) :: ADSINTP(:), ADSINHP(:), ADSINMP(:), ADSINLP(:)
+      real,                           intent(inout) :: FORLDTP(:), FORLDHP(:), FORLDMP(:), FORLDLP(:)
+      real,                           intent(inout) :: FORLNTP(:), FORLNHP(:), FORLNMP(:), FORLNLP(:)
+      real,                           intent(inout) :: FORIDTP(:), FORIDHP(:), FORIDMP(:), FORIDLP(:)
+      real,                           intent(inout) :: FORINTP(:), FORINHP(:), FORINMP(:), FORINLP(:)
+#endif
+      type(MAPL_MetaComp),            intent(inout) :: MAPL
+      integer,            optional,   intent(out)   :: RC
+
+      ! per-block private local variables
+      integer                                        :: colS, colE, ncols_block
+      integer,               allocatable             :: ClearCounts(:,:)
+      logical,               allocatable             :: cld_mask(:,:,:)
+      real(wp),              allocatable             :: toa_flux(:,:)
+      real(wp),              allocatable             :: forwliq(:,:,:), forwice(:,:,:)
+      class(ty_optical_props_arry), allocatable      :: optical_props
+      class(ty_optical_props_arry), allocatable      :: cloud_props_bnd_liq, cloud_props_bnd_ice
+      class(ty_optical_props_arry), allocatable      :: cloud_props_gpt_liq, cloud_props_gpt_ice
+      class(ty_optical_props_arry), allocatable      :: aer_props
+      type(ty_fluxes_byband)                         :: fluxes_clrsky, fluxes_allsky
+
+      character(len=512) :: error_msg
+      integer            :: STATUS
+
+      ! compute block column range; the final block may be partial
+      ncols_block = min(rrtmgp_blockSize, ncol - (b-1)*rrtmgp_blockSize)
+      colS = (b-1) * rrtmgp_blockSize + 1
+      colE = colS + ncols_block - 1
+
+      ! allocate per-block arrays
+      allocate(toa_flux(ncols_block,ngpt),    __STAT__)
+      allocate(forwliq(ncols_block,LM,ngpt),  __STAT__)
+      allocate(forwice(ncols_block,LM,ngpt),  __STAT__)
+      if (include_aerosols) &
+        allocate(ClearCounts(4,ncols_block),  __STAT__)
+
+      ! instantiate optical_props with desired streams
+      allocate(ty_optical_props_2str::optical_props,__STAT__)  ! <-- choose 2-stream SW
+      TEST_(optical_props%init(k_dist))
+
+      ! cloud optics: band-space and g-point allocatables (thread-private)
+      allocate(ty_optical_props_2str::cloud_props_bnd_liq,__STAT__)
+      allocate(ty_optical_props_2str::cloud_props_bnd_ice,__STAT__)
+      TEST_(cloud_props_bnd_liq%init(k_dist%get_band_lims_wavenumber()))
+      TEST_(cloud_props_bnd_ice%init(k_dist%get_band_lims_wavenumber()))
+
+      select type (cloud_props_bnd_liq)
+        class is (ty_optical_props_2str)
+          allocate(ty_optical_props_2str::cloud_props_gpt_liq,__STAT__)
+        class default
+          TEST_('cloud optical properties (liq) hardwired 2-stream for now')
+      end select
+      select type (cloud_props_bnd_ice)
+        class is (ty_optical_props_2str)
+          allocate(ty_optical_props_2str::cloud_props_gpt_ice,__STAT__)
+        class default
+          TEST_('cloud optical properties (ice) hardwired 2-stream for now')
+      end select
+      TEST_(cloud_props_gpt_liq%init(k_dist))
+      TEST_(cloud_props_gpt_ice%init(k_dist))
+
+      ! aerosol optical properties (thread-private)
+      if (need_aer_optical_props) then
+        allocate(ty_optical_props_2str::aer_props,__STAT__)
+        TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
+      end if
+
+      ! ty_optical_props routines have an internal deallocation
+      select type (cloud_props_bnd_liq)
+        class is (ty_optical_props_2str)
+          TEST_(cloud_props_bnd_liq%alloc_2str(ncols_block,LM))
+      end select
+      select type (cloud_props_bnd_ice)
+        class is (ty_optical_props_2str)
+          TEST_(cloud_props_bnd_ice%alloc_2str(ncols_block,LM))
+      end select
+      select type (cloud_props_gpt_liq)
+        class is (ty_optical_props_2str)
+          TEST_(cloud_props_gpt_liq%alloc_2str(ncols_block,LM))
+      end select
+      select type (cloud_props_gpt_ice)
+        class is (ty_optical_props_2str)
+          TEST_(cloud_props_gpt_ice%alloc_2str(ncols_block,LM))
+      end select
+      if (need_aer_optical_props) then
+        select type (aer_props)
+          class is (ty_optical_props_2str)
+            TEST_(aer_props%alloc_2str(ncols_block,LM))
+        end select
+      end if
+      select type (optical_props)
+        class is (ty_optical_props_1scl)
+          TEST_(optical_props%alloc_1scl(ncols_block,LM))
+        class is (ty_optical_props_2str)
+          TEST_(optical_props%alloc_2str(ncols_block,LM))
+        class is (ty_optical_props_nstr)
+          TEST_(optical_props%alloc_nstr(nmom,ncols_block,LM))
+      end select
+
+      call compute_gas_optics(colS, colE, ncols_block, LM, &
+        gas_concs, k_dist, p_lay, p_lev, t_lay, &
+        optical_props, toa_flux, MAPL, __RC__)
+
+      if (need_aer_optical_props) then
+        call compute_aer_optics(colS, colE, need_aer_optical_props, &
+          taua, ssaa, asya, aer_props, __RC__)
+      end if
+
+      call compute_cloud_optics_mcica( &
+        colS, colE, ncols_block, LM, ngpt, &
+        gen_mro, cond_inhomo, cloud_overlap_type, cwp_fac_arg, IM_World, &
+        seeds_time_key, &
+        QQ3, RR3, dp_wp, dummy_wp, CL, dzmid, adl, rdl, Ig1D, Jg1D, &
+        cloud_optics, &
+        cloud_props_bnd_liq, cloud_props_bnd_ice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        cld_mask, &
+        MAPL, __RC__)
+
+      ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
+      ! ** Calculated from subcolumn ensemble, so stochastic **
+      ! -------------------------------------------------------
+      call compute_sprlyr_diags_predelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        cld_mask, ClearCounts, CL, toa_flux, band_lims_gpt, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CLDTS, CLDHS, CLDMS, CLDLS, &
+        COTTP, COTHP, COTMP, COTLP, &
+        COTDTP, COTDHP, COTDMP, COTDLP, &
+        COTNTP, COTNHP, COTNMP, COTNLP, &
+#ifdef SOLAR_RADVAL
+        TAUTP, TAUHP, TAUMP, TAULP, &
+        COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+        COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+        COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+        COTINTP, COTINHP, COTINMP, COTINLP, &
+        SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+        SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+        SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+        SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+        ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+        ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+        ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+        ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+#endif
+        MAPL, __RC__)
+
+      ! delta-scaling of cloud optical properties (accounts for forward scattering)
+      call compute_delta_scale( &
+        colS, ncols_block, LM, ngpt, nbnd, &
+        rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
+        CL, RR3, band_lims_gpt, &
+        cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        forwliq, forwice, &
+        MAPL, __RC__)
+
+#ifdef SOLAR_RADVAL
+      ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
+      ! ** Calculated from subcolumn ensemble, so stochastic **
+      ! -------------------------------------------------------
+      call compute_sprlyr_diags_postdelta( &
+        colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
+        include_aerosols, &
+        CL, toa_flux, band_lims_gpt, &
+        forwliq, forwice, &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+        CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+        CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+        CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+        CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+        CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+        SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+        SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+        SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+        SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+        ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+        ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+        ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+        ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+        FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+        FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+        FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+        FORINTP, FORINHP, FORINMP, FORINLP, &
+        MAPL, __RC__)
+#endif
+
+      ! add in aerosol optical properties if requested and available
+      ! (done here rather than inside compute_rte_sw to avoid passing
+      !  an unallocated polymorphic aer_props when aerosols are inactive)
+      if (need_aer_optical_props) then
+        TEST_(aer_props%increment(optical_props))
+      end if
+
+      call compute_rte_sw( &
+        colS, colE, ngpt, &
+        tsi, toa_flux, optical_props, &
+        top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+        fluxes_clrsky, flux_up_clrsky(colS:colE,:), flux_net_clrsky(colS:colE,:), &
+        fluxes_allsky, flux_up_allsky(colS:colE,:), flux_net_allsky(colS:colE,:), &
+        bnd_flux_dn_allsky(colS:colE,:,:), bnd_flux_dir_allsky(colS:colE,:,:), &
+        bnd_flux_net_allsky(colS:colE,:,:), &
+        cloud_props_gpt_liq, cloud_props_gpt_ice, &
+        MAPL, __RC__)
+
+      ! deallocate per-block arrays
+      deallocate(toa_flux,      __STAT__)
+      deallocate(cld_mask,      __STAT__)
+      deallocate(forwliq,       __STAT__)
+      deallocate(forwice,       __STAT__)
+      if (include_aerosols) &
+        deallocate(ClearCounts, __STAT__)
+      ! cloud_props_*, aer_props, optical_props are local allocatables;
+      ! they are automatically finalized/deallocated on return.
+
+    end subroutine PROCESS_RRTMGP_BLOCK
+#undef TEST_
 
 
     subroutine SHRTWAVE(PLhPa,TA,WA,OA,CO2,COSZ   , &
@@ -6675,8 +7622,6 @@ contains
 
     subroutine UPDATE_EXPORT(IM,JM,LM, RC)
 
-      use parrrsw, only: nbndsw, jpb1, jpb2
-      use rrsw_wvn, only: wavenum1, wavenum2
       use mo_gas_concentrations, only: ty_gas_concs
       use mo_load_coefficients,  only: load_and_init
 
@@ -6731,6 +7676,8 @@ contains
       real, pointer, dimension(:,:  ) :: DFNIRN, DRNIRN
       real, pointer, dimension(:,:  ) :: ALBEDO
       real, pointer, dimension(:,:  ) :: COSZ, MCOSZ
+
+      real, allocatable, dimension(:,:) :: OSRB, ISRB
 
       real, pointer, dimension(:,:,:)   :: FCLD,CLIN,RH
       real, pointer, dimension(:,:,:)   :: DP, PL, PLL, AERO, T, Q
@@ -6788,8 +7735,10 @@ contains
       type (ty_RRTMGP_wrap)                :: wrap
       character (len=ESMF_MAXPATHLEN)      :: k_dist_file
       character (len=ESMF_MAXSTR)          :: error_msg
-      type (ty_gas_optics_rrtmgp), pointer :: k_dist
       type (ty_gas_concs)                  :: gas_concs
+
+      logical :: rrtmgp_state_set = .false.
+      logical :: have_rrtmgp_wavenums = .false.
 
       ! OBIO bands (start,finish) in [nm]
       real, parameter :: OBIO_bands_nm (2,NB_OBIO) = reshape([ &
@@ -6858,6 +7807,9 @@ contains
       real :: swvn1, swvn2, owvn1, owvn2, sfrac
       integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
       logical :: sfirst, ofirst
+
+      ! band wavenumber bounds (m-1) 
+      real :: wn1, wn2 
 
       Iam  = trim(COMP_NAME)//"SolarUpdateExport"
 
@@ -7247,6 +8199,10 @@ contains
          REFF(:,:,:,2) = RRL * 1.e6
          REFF(:,:,:,3) = RRR * 1.e6
          REFF(:,:,:,4) = RRS * 1.e6
+         WHERE (RRI == MAPL_UNDEF) REFF(:,:,:,1) = 36.
+         WHERE (RRL == MAPL_UNDEF) REFF(:,:,:,2) = 14.
+         WHERE (RRR == MAPL_UNDEF) REFF(:,:,:,3) = 50.
+         WHERE (RRS == MAPL_UNDEF) REFF(:,:,:,4) = 50.
 
          HYDROMETS(:,:,:,1) = RQI
          HYDROMETS(:,:,:,2) = RQL
@@ -7581,6 +8537,115 @@ contains
       if(associated( OSRNA))  OSRNA = (1.-FSWNAN(:,:, 0))*SLR
       if(associated(OSRCNA)) OSRCNA = (1.-FSCNAN(:,:, 0))*SLR
 
+! band OSR, ISR, and/or TBR output
+! --------------------------------
+
+      if (USE_RRTMG .or. USE_RRTMGP) then
+
+        do ibnd = 1,nbndsw
+          if (band_output(ibnd)) then
+
+            write(bb,'(I0.2)') ibnd
+            allocate(OSRB(IM,JM),__STAT__)
+            allocate(ISRB(IM,JM),__STAT__)
+
+            ! get last full calculation
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'OSRB'//bb//'RGN', __RC__)
+            OSRB = ptr2d
+            call MAPL_GetPointer(INTERNAL, ptr2d, 'ISRB'//bb//'RGN', __RC__)
+            ISRB = ptr2d
+
+            ! scale to current solar input
+            OSRB = OSRB * SLR
+            ISRB = ISRB * SLR
+
+            ! fill OSRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'OSRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+              if (all(OSRB == 0.)) then
+                ! handles pre-first-full-calc case
+                ptr2d = MAPL_UNDEF
+              else
+                ptr2d = OSRB
+              end if
+            end if
+
+            ! fill ISRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'ISRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+              if (all(ISRB == 0.)) then
+                ! handles pre-first-full-calc case
+                ptr2d = MAPL_UNDEF
+              else
+                ptr2d = ISRB
+              end if
+            end if
+
+            ! calculate TBRBbbRG if requested
+            call MAPL_GetPointer(EXPORT, ptr2d, 'TBRB'//bb//'RG', __RC__)
+            if (associated(ptr2d)) then
+              if (USE_RRTMG) then
+
+                ! note: RRTMG bands are [wavenum1(jpb1:jpb2),wavenum2(jpb1:jpb2)] in [cm^-1]
+                ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
+                wn1 = wavenum1(jpb1-1+ibnd)*100.; wn2 = wavenum2(jpb1-1+ibnd)*100.  ! [m-1]
+                call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+
+              else  ! USE_RRTMGP
+
+                ! get RRTMGP wavenumbers
+                if (.not. have_rrtmgp_wavenums) then 
+
+                  ! access RRTMGP internal state from the GC
+                  if (.not. rrtmgp_state_set) then
+                    call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+                    VERIFY_(status)
+                    rrtmgp_state => wrap%ptr
+                    rrtmgp_state_set = .true.
+                  end if 
+
+! helper for testing RRTMGP error status on return;
+! allows line number reporting cf. original call method
+#define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
+
+                  ! initialize k-distribution if not already done
+                  ! remember: its possible to have UPDATE_FIRST
+                  if (.not. rrtmgp_state%initialized) then
+                    call MAPL_GetResource( & 
+                      MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                      DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
+                    ! gas_concs needed only to access required gas names
+                    error_msg = gas_concs%init([character(3) :: &
+                      'h2o','co2','o3','n2o','co','ch4','o2','n2'])
+                    TEST_(error_msg)
+                    call load_and_init( &
+                      rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
+                    if (.not. rrtmgp_state%k_dist%source_is_external()) then
+                      TEST_('RRTMGP-SW: does not seem to be SW')
+                    endif
+                    rrtmgp_state%initialized = .true.
+                  endif
+#undef TEST_
+                  ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1],
+                  SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
+                  have_rrtmgp_wavenums = .true.
+                end if
+
+                ! get brightness temperature
+                wn1 = SOLAR_bands_wavenum(1,ibnd)*100. ! [m-1]
+                wn2 = SOLAR_bands_wavenum(2,ibnd)*100. ! [m-1]
+                call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+
+              end if
+            end if
+
+            deallocate(OSRB,ISRB,__STAT__)
+
+          end if
+        end do
+
+      endif  ! RRTMG[P]
+
 ! SOLAR TO OBIO conversion ...
 ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
 ! ---------------------------------------------------------------------------------------
@@ -7593,43 +8658,46 @@ contains
 
             if (USE_RRTMGP) then
 
+               ! get RRTMGP wavenumbers
+               if (.not. have_rrtmgp_wavenums) then 
+
+                 ! access RRTMGP internal state from the GC
+                 if (.not. rrtmgp_state_set) then
+                   call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
+                   VERIFY_(status)
+                   rrtmgp_state => wrap%ptr
+                   rrtmgp_state_set = .true.
+                 end if 
+
 ! helper for testing RRTMGP error status on return;
 ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
-               ! access RRTMGP internal state from the GC
-               call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-               VERIFY_(status)
-               rrtmgp_state => wrap%ptr
-
-               ! initialize k-distribution if not already done
-               ! remember: its possible to have UPDATE_FIRST
-               if (.not. rrtmgp_state%initialized) then
-                  call MAPL_GetResource( &
-                     MAPL, k_dist_file, "RRTMGP_DATA_SW:", &
-                     DEFAULT='rrtmgp-data-sw.nc', __RC__)
-                  ! gas_concs needed only to access required gas names
-                  error_msg = gas_concs%init([character(3) :: &
+                 ! initialize k-distribution if not already done
+                 ! remember: its possible to have UPDATE_FIRST
+                 if (.not. rrtmgp_state%initialized) then
+                   call MAPL_GetResource( & 
+                     MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                     DEFAULT='rrtmgp-gas-sw-g112.nc',__RC__)
+                   ! gas_concs needed only to access required gas names
+                   error_msg = gas_concs%init([character(3) :: &
                      'h2o','co2','o3','n2o','co','ch4','o2','n2'])
-                  TEST_(error_msg)
-                  call load_and_init( &
+                   TEST_(error_msg)
+                   call load_and_init( &
                      rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
-                  if (.not. rrtmgp_state%k_dist%source_is_external()) then
+                   if (.not. rrtmgp_state%k_dist%source_is_external()) then
                      TEST_('RRTMGP-SW: does not seem to be SW')
-                  endif
-                  rrtmgp_state%initialized = .true.
-               endif
-
-               ! access by shorter name
-               k_dist => rrtmgp_state%k_dist
-
-               ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
-               SOLAR_bands_wavenum = k_dist%get_band_lims_wavenumber()
+                   endif
+                   rrtmgp_state%initialized = .true.
+                 endif
+#undef TEST_
+                 ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
+                 SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
+                 have_rrtmgp_wavenums = .true.
+               end if
 
                ! RRTMGP bands are already ordered in increasing wavenumber
                SOLAR_band_number_in_wvn_order = [(i, i=1,NUM_BANDS_SOLAR)]
-
-#undef TEST_
 
             elseif (USE_RRTMG) then
 
@@ -7797,61 +8865,5 @@ contains
     end do
 
   end subroutine UnPackIt
-
-  ! Decide which radiation to use for thermodynamics state evolution.
-  ! RRTMGP dominates RRTMG dominates Chou-Suarez.
-  ! Chou-Suarez is the default if nothing else asked for in Resource file.
-  !----------------------------------------------------------------------
-
-  subroutine choose_solar_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_solar_scheme
-
-
-  subroutine choose_irrad_scheme (MAPL, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
-
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
-    logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
-
-    real :: RFLAG
-    integer :: STATUS
-
-    USE_RRTMGP = .false.
-    USE_RRTMG  = .false.
-    USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
-    USE_RRTMGP = RFLAG /= 0.
-    if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
-      USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
-    end if
-
-    _RETURN(_SUCCESS)
-  end subroutine choose_irrad_scheme
 
 end module GEOS_SolarGridCompMod
