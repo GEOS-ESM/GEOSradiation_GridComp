@@ -123,7 +123,7 @@ module GEOS_RadiationGridCompMod
 ! ---------------------------------------
 
     call ESMF_GridCompGet ( GC, name=COMP_NAME, RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     Iam = trim(COMP_NAME) // 'SetServices'
 
 
@@ -131,43 +131,43 @@ module GEOS_RadiationGridCompMod
 !--------------------------
 
     call MAPL_GetObjectFromGC ( GC, MAPL, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 ! Set the Run entry point
 ! -----------------------
 
     call MAPL_GridCompSetEntryPoint ( GC, ESMF_METHOD_INITIALIZE,  Initialize, RC=status )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GridCompSetEntryPoint ( GC, ESMF_METHOD_RUN,  Run, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     SOL = MAPL_AddChild(GC, NAME='SOLAR', SS=solarSetServices, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     IRR = MAPL_AddChild(GC, NAME='IRRAD', SS=irradSetServices, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_GetResource(MAPL,USE_SATSIM,LABEL="USE_SATSIM:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_ISCCP,LABEL="USE_SATSIM_ISCCP:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_MODIS,LABEL="USE_SATSIM_MODIS:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_RADAR,LABEL="USE_SATSIM_RADAR:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_LIDAR,LABEL="USE_SATSIM_LIDAR:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     call MAPL_GetResource(MAPL,USE_SATSIM_MISR,LABEL="USE_SATSIM_MISR:",default=0,   RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     ! Decide if should make OBIO exports    
 
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
    
 ! set use_satsim if anything is toggled
  
@@ -175,7 +175,7 @@ module GEOS_RadiationGridCompMod
 
    if (USE_SATSIM > 0 ) then
        STM = MAPL_AddChild(GC, NAME='SATSIM', SS=satsimSetServices, RC=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
    end if    
 
 ! Set the state variable specs.
@@ -192,7 +192,7 @@ module GEOS_RadiationGridCompMod
         DIMS               = MAPL_DimsHorzVert,                   &
         VLOCATION          = MAPL_VLocationEdge,                  &
                                                        RC=STATUS  )
-     VERIFY_(STATUS)
+     _VERIFY(STATUS)
 
 ! !EXPORT STATE:
 
@@ -203,7 +203,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADLW',                                           &
@@ -212,7 +212,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSW',                                           &
@@ -221,7 +221,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADLWC',                                          &
@@ -230,7 +230,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSWC',                                          &
@@ -239,7 +239,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADLWNA',                                         &
@@ -248,7 +248,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSWNA',                                         &
@@ -257,7 +257,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADLWCNA',                                        &
@@ -266,7 +266,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSWCNA',                                        &
@@ -275,7 +275,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzVert,                                 &
          VLOCATION  = MAPL_VLocationCenter,                              &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'RADSRF',                                          &
@@ -284,7 +284,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzOnly,                                 &
          VLOCATION  = MAPL_VLocationNone,                                &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'ALW',                                             &
@@ -293,7 +293,7 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzOnly,                                 &
          VLOCATION  = MAPL_VLocationNone,                                &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'BLW',                                             &
@@ -302,147 +302,147 @@ module GEOS_RadiationGridCompMod
          DIMS       = MAPL_DimsHorzOnly,                                 &
          VLOCATION  = MAPL_VLocationNone,                                &
                                                               RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRPAR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFPAR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRNIR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFNIR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRUVR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFUVR',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRPARN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFPARN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRNIRN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFNIRN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DRUVRN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'DFUVRN',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'FCLD',                                            &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                            &
          SHORT_NAME =  'TAUCLI',                                         &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
         call MAPL_AddExportSpec ( GC   ,                            &
          SHORT_NAME =  'TAUCLW',                                         &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'LWS',                                             &
          CHILD_ID = IRR,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'LWS0',                                            &
          CHILD_ID = IRR,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'CLDTT',                                           &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'ALBEDO',                                          &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     if (DO_OBIO/=0) then
        call MAPL_AddExportSpec ( GC   ,                                &
            SHORT_NAME = 'DROBIO',                                          &
            CHILD_ID = SOL,                                                 &
            RC=STATUS  )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 
        call MAPL_AddExportSpec ( GC   ,                                &
            SHORT_NAME = 'DFOBIO',                                          &
            CHILD_ID = SOL,                                                 &
            RC=STATUS  ) 
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'FSWBAND',                                         &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     call MAPL_AddExportSpec ( GC   ,                                &
          SHORT_NAME = 'FSWBANDNA',                                       &
          CHILD_ID = SOL,                                                 &
          RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 !EOS
 
@@ -462,7 +462,7 @@ module GEOS_RadiationGridCompMod
          DST_ID      =  STM,                                       &
          SRC_ID      =  SOL,                                       &
                                                         RC=STATUS  )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     endif
 
 !!EOP
@@ -472,9 +472,9 @@ module GEOS_RadiationGridCompMod
 ! --------------------------------------------------------------
 
     call MAPL_GenericSetServices    ( gc, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
 
   end subroutine SetServices
 
@@ -592,7 +592,7 @@ module GEOS_RadiationGridCompMod
 !---------
 
     call MAPL_TimerOff (MAPL,"TOTAL")
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
 
   end subroutine Initialize
 
@@ -693,14 +693,14 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 ! -----------------------------------------------------------
 
     call ESMF_GridCompGet( GC, name=COMP_NAME, RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     Iam = trim(COMP_NAME) // "Run"
 
 ! Get my internal MAPL_Generic state
 !-----------------------------------
 
     call MAPL_GetObjectFromGC ( GC, MAPL, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 ! Start Total timer
 !------------------
@@ -714,92 +714,92 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
          GEX=GEX,        &
          IM=IM, JM=JM, LM=LM,         &
                             RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 ! Get pointers to exports
 !------------------------
 
     call MAPL_GetPointer ( IMPORT, PLE    , 'PLEINST'  ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 ! Get pointers to exports
 !------------------------
 
     call MAPL_GetPointer ( EXPORT, DTDT    , 'DTDT'    ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, ALW     , 'ALW'     ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, BLW     , 'BLW'     ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSRF  , 'RADSRF'  ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADLW   , 'RADLW'   ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSW   , 'RADSW'   ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADLWC  , 'RADLWC'  ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWC  , 'RADSWC'  ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADLWNA , 'RADLWNA' ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWNA , 'RADSWNA' ,  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADLWCNA, 'RADLWCNA',  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWCNA, 'RADSWCNA',  RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
 ! Allocate children's exports that we need
 !-----------------------------------------
 
     if (associated(RADSW  ) .or. associated(DTDT   ) .or. associated(RADSRF) ) then
        call MAPL_GetPointer ( GEX(SOL), FSW   , 'FSW'    ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADSWC)                            ) then
        call MAPL_GetPointer ( GEX(SOL), FSWCLR, 'FSC'    ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADLW) .or. associated(DTDT   )   .or. associated(RADSRF)) then
        call MAPL_GetPointer ( GEX(IRR), FLW   , 'FLX'    ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADLWC)                            ) then
        call MAPL_GetPointer ( GEX(IRR), FLWCLR, 'FLC'    ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADSWNA) ) then
        call MAPL_GetPointer ( GEX(SOL), FSWNA , 'FSWNA'  ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADSWCNA)                          ) then
        call MAPL_GetPointer ( GEX(SOL), FSCNA,  'FSCNA'  ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADLWNA)                           ) then
        call MAPL_GetPointer ( GEX(IRR), FLWNA,  'FLXA'   ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (associated(RADLWCNA)                          ) then
        call MAPL_GetPointer ( GEX(IRR), FLA   , 'FLA'    ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
     if (  associated(ALW   )  .or. associated(BLW     ) ) then
        call MAPL_GetPointer ( GEX(IRR), DSFDTS, 'DSFDTS0',  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
        call MAPL_GetPointer ( GEX(IRR), SFCEM , 'SFCEM0' ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
        call MAPL_GetPointer ( GEX(IRR), TRD   , 'TSREFF' ,  alloc=.TRUE.,RC=STATUS )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     end if
 
 ! Run the child components and their couplers
@@ -807,7 +807,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
     call MAPL_TimerOff(MAPL,"TOTAL")
     call MAPL_GenericRunChildren (GC, IMPORT, EXPORT, CLOCK, RC=STATUS )
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     call MAPL_TimerOn (MAPL,"TOTAL")
 
 ! Prepare exports
@@ -825,7 +825,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
         associated (RADLWNA).or. associated (RADLWCNA) ) then
 
        allocate(DMI(IM,JM,LM),stat=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
        DMI = MAPL_GRAV/(MAPL_CP*(PLE(:,:,1:LM)-PLE(:,:,0:LM-1)))
 
        if( associated (RADLW   ) ) RADLW    = (FLW   (:,:,0:LM-1) - FLW   (:,:,1:LM))*DMI
@@ -838,13 +838,13 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        if( associated (RADSWCNA) ) RADSWCNA = (FSCNA (:,:,0:LM-1) - FSCNA (:,:,1:LM))*DMI
 
        deallocate(DMI,stat=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 
     end if
 
     call MAPL_TimerOff(MAPL,"TOTAL")
 
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
 
   end subroutine RUN
 

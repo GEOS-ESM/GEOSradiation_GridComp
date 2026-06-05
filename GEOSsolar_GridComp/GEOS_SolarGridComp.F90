@@ -486,7 +486,7 @@ contains
     allocate(rrtmgp_state, __STAT__)
     wrap%ptr => rrtmgp_state
     call ESMF_UserCompSetInternalState(GC, 'RRTMGP_state', wrap, status)
-    VERIFY_(status)
+    _VERIFY(status)
 
     ! Get my internal MAPL_Generic state
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
@@ -520,7 +520,7 @@ contains
 
     ! Decide if should make OBIO exports
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
     
     SOLAR_TO_OBIO = (DO_OBIO/=0)
 
@@ -2805,7 +2805,7 @@ contains
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices    (GC, __RC__)
 
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3104,7 +3104,7 @@ contains
    !-----------------------------------
 
     call MAPL_GetResource ( MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:",DEFAULT=0, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     SOLAR_TO_OBIO = (DO_OBIO/=0)
 
@@ -3321,8 +3321,8 @@ contains
               call ESMF_MethodExecute(AERO, &
                  label="run_aerosol_optics", &
                  userRC=AS_STATUS, RC=STATUS)
-              VERIFY_(AS_STATUS)
-              VERIFY_(STATUS)
+              _VERIFY(AS_STATUS)
+              _VERIFY(STATUS)
               call MAPL_TimerOff(MAPL,"---AEROSOL_OPTICS")
 
               ! EXT from AERO_PROVIDER
@@ -3464,7 +3464,7 @@ contains
     end if
 
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
 
   contains
 
@@ -4882,7 +4882,7 @@ contains
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-      VERIFY_(status)
+      _VERIFY(status)
       rrtmgp_state => wrap%ptr
 
       ! initialize k-distribution if not already done
@@ -6398,10 +6398,10 @@ contains
 
       if (LM > 72) then    
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
-        VERIFY_(STATUS)    
+        _VERIFY(STATUS)    
       else
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGSW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
-        VERIFY_(STATUS)
+        _VERIFY(STATUS)
       endif
 
       ! Normalize aerosol inputs
@@ -6913,7 +6913,7 @@ contains
 
       call MAPL_TimerOff(MAPL,"-BALANCE")
 
-      RETURN_(ESMF_SUCCESS)
+      _RETURN(ESMF_SUCCESS)
     end subroutine SORADCORE
 
 
@@ -6990,7 +6990,7 @@ contains
 
       call MAPL_TimerOff(MAPL,"-SORAD")
 
-      RETURN_(ESMF_SUCCESS)
+      _RETURN(ESMF_SUCCESS)
 
     end subroutine SHRTWAVE
 
@@ -7975,7 +7975,7 @@ contains
                   ! access RRTMGP internal state from the GC
                   if (.not. rrtmgp_state_set) then
                     call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-                    VERIFY_(status)
+                    _VERIFY(status)
                     rrtmgp_state => wrap%ptr
                     rrtmgp_state_set = .true.
                   end if 
@@ -8040,7 +8040,7 @@ contains
                  ! access RRTMGP internal state from the GC
                  if (.not. rrtmgp_state_set) then
                    call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-                   VERIFY_(status)
+                   _VERIFY(status)
                    rrtmgp_state => wrap%ptr
                    rrtmgp_state_set = .true.
                  end if 
@@ -8187,7 +8187,7 @@ contains
       if(associated( MCOSZ))  MCOSZ = ZTH
       if(associated(  COSZ))   COSZ = ZTHN
 
-      RETURN_(ESMF_SUCCESS)
+      _RETURN(ESMF_SUCCESS)
     end subroutine UPDATE_EXPORT
 
 

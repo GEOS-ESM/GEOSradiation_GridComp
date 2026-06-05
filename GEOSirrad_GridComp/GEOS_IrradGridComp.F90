@@ -222,7 +222,7 @@ contains
     allocate(rrtmgp_state, __STAT__)
     wrap%ptr => rrtmgp_state
     call ESMF_UserCompSetInternalState(GC, 'RRTMGP_state', wrap, status)
-    VERIFY_(status)
+    _VERIFY(status)
 
     ! Get my internal MAPL_Generic state
     call MAPL_GetObjectFromGC (GC, MAPL, __RC__)
@@ -478,7 +478,7 @@ contains
     ! Using DT below since it is already declared, and avoids adding an additional var - MSL
     call ESMF_GridCompGet(GC, CONFIG=CF, __RC__)
     call ESMF_ConfigGetAttribute(CF, DT, Label='CO2:', default=-1.0, RC=STATUS)
-    VERIFY_(STATUS)
+    _VERIFY(STATUS)
 
     ! If using 3-D CO2, set up the import
     if (DT.eq.-2.0) then
@@ -501,7 +501,7 @@ contains
             AVERAGING_INTERVAL = ACCUMINT,                            &
             REFRESH_INTERVAL   = MY_STEP,                             &
             RC=STATUS  )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     endif
 
 !  !EXPORT STATE:
@@ -991,7 +991,7 @@ contains
 
     IF (STATUS .eq. ESMF_SUCCESS) THEN
        n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
     ENDIF
 
     ! No error thrown. Just go around this if nothing learnable from config.
@@ -999,19 +999,19 @@ contains
 
        ! Get number of words in config line
        n = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 
        allocate(nameRATS(n), STAT=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 
        ! Put the cursor at the label
        call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 
        ! Loop over RATS in list
        DO i=1,n
           call ESMF_ConfigGetAttribute(CF,gen_str,RC=STATUS)
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
 
           nameRATS(i) = trim(gen_str)
 
@@ -1035,42 +1035,42 @@ contains
                UNITS      = 'W m-2',                                             &
                DIMS       = MAPL_DimsHorzOnly,                                   &
                VLOCATION  = MAPL_VLocationNone,                       RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
           call MAPL_AddExportSpec(GC,                                    &
                SHORT_NAME = 'dLWS_'//trim(nameRATS(i)),                  &
                LONG_NAME  = 'chg_in_surface_absorbed_LW_rad_from_'//trim(nameRATS(i)), &
                UNITS      = 'W m-2',                                     &
                DIMS       = MAPL_DimsHorzOnly,                           &
                VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
           call MAPL_AddExportSpec(GC,                                    &
                SHORT_NAME = 'dFLNS_'//trim(nameRATS(i)),                 &
                LONG_NAME  = 'chg_in_sfc_net_downward_LW_flux_from_'//trim(nameRATS(i)),&
                UNITS      = 'W m-2',                                     &
                DIMS       = MAPL_DimsHorzOnly,                           &
                VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
           call MAPL_AddExportSpec(GC,                                  &
                SHORT_NAME = 'dSFCEM_'//trim(nameRATS(i)),                &
                LONG_NAME  = 'LW_flux_emitted_from_sfc_from_'//trim(nameRATS(i)), &
                UNITS      = 'W m-2',                                     &
                DIMS       = MAPL_DimsHorzOnly,                           &
                VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
           call MAPL_AddExportSpec(GC,                                    &
                SHORT_NAME = 'NETTRAP_'//trim(nameRATS(i)),                 &
                LONG_NAME  = 'Net_Heat_trapping_due_to_'//trim(nameRATS(i)),&
                UNITS      = 'W m-2',                                     &
                DIMS       = MAPL_DimsHorzOnly,                           &
                VLOCATION  = MAPL_VLocationNone,               RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
           call MAPL_AddExportSpec(GC,                                    &
                SHORT_NAME = 'COLTRAP_'//trim(nameRATS(i)),               &
                LONG_NAME  = 'Heat_trapping_due_to_'//trim(nameRATS(i)),  &
                UNITS      = 'W m-2',                                     &
                DIMS       = MAPL_DimsHorzVert,                           &
                VLOCATION  = MAPL_VLocationCenter,             RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
 
           call MAPL_AddExportSpec(GC,                                    &
                SHORT_NAME = 'FLX_'//trim(nameRATS(i)),                   &
@@ -1094,16 +1094,16 @@ contains
             UNITS      = 'mol/mol',                                      &
             DIMS       = MAPL_DimsHorzVert,                              &
             VLOCATION  = MAPL_VLocationCenter,               RC=STATUS  )
-          VERIFY_(STATUS)
+          _VERIFY(STATUS)
        call MAPL_AddExportSpec(GC,                                       &
             SHORT_NAME = 'DELT',                                         &
             LONG_NAME  = 'change in surface temperature in RRTMG',       &
             UNITS      = 'K',                                            &
             DIMS       = MAPL_DimsHorzOnly,                              &
             VLOCATION  = MAPL_VLocationCenter,               RC=STATUS  )
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
        if (allocated(nameRATS)) deallocate(nameRATS, STAT=STATUS)
-       VERIFY_(STATUS)
+       _VERIFY(STATUS)
 ! end rats code <<>> MSL
 
        ! Add necessary internal fields
@@ -1174,7 +1174,7 @@ contains
     call MAPL_GridCompSetEntryPoint (GC, ESMF_METHOD_RUN, Run, __RC__)
     call MAPL_GenericSetServices(GC, __RC__)
 
-    RETURN_(ESMF_SUCCESS)
+    _RETURN(ESMF_SUCCESS)
   end subroutine SetServices
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1288,14 +1288,14 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
    Iam = "Run"
    call ESMF_GridCompGet( GC, name=COMP_NAME, GRID=ESMFGRID, CONFIG=CF, RC=STATUS )
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
    Iam = trim(COMP_NAME) // Iam
 
 ! Get my internal MAPL_Generic state
 !-----------------------------------
 
    call MAPL_GetObjectFromGC ( GC, MAPL, RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
    call MAPL_TimerOn(MAPL,"TOTAL")
 
@@ -1376,30 +1376,30 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 ! Pointers to Internals; these are needed by both Update and Refresh
 !-------------------------------------------------------------------
 
-   call MAPL_GetPointer(INTERNAL, SFCEM_INT, 'SFCEM', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLX_INT,   'FLX',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLXA_INT,  'FLXA',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLC_INT,   'FLC',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLA_INT,   'FLA',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLXU_INT,  'FLXU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLXAU_INT, 'FLXAU', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLCU_INT,  'FLCU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLAU_INT,  'FLAU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLXD_INT,  'FLXD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLXAD_INT, 'FLXAD', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLCD_INT,  'FLCD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, FLAD_INT,  'FLAD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, TS_INT,    'TS',    RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, DFDTS,     'DFDTS', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, DFDTSC,    'DFDTSC',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, DFDTSNA,   'DFDTSNA', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(INTERNAL, DFDTSCNA,  'DFDTSCNA',RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(INTERNAL, SFCEM_INT, 'SFCEM', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLX_INT,   'FLX',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLXA_INT,  'FLXA',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLC_INT,   'FLC',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLA_INT,   'FLA',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLXU_INT,  'FLXU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLXAU_INT, 'FLXAU', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLCU_INT,  'FLCU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLAU_INT,  'FLAU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLXD_INT,  'FLXD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLXAD_INT, 'FLXAD', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLCD_INT,  'FLCD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, FLAD_INT,  'FLAD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, TS_INT,    'TS',    RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, DFDTS,     'DFDTS', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, DFDTSC,    'DFDTSC',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, DFDTSNA,   'DFDTSNA', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(INTERNAL, DFDTSCNA,  'DFDTSCNA',RC=STATUS); _VERIFY(STATUS)
 
 ! Determine calling sequence
 !---------------------------
 
    call MAPL_GetResource(MAPL,CalledLast,'CALLED_LAST:', default=1, RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
 ! Fill exported fluxed based on latest Ts
 !----------------------------------------
@@ -1415,7 +1415,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
    if (ESMF_AlarmIsRinging(ALARM,RC=STATUS)) then
       call ESMF_AlarmRingerOff(ALARM,RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       call MAPL_TimerOn(MAPL,"-LW_DRIVER")
       call LW_Driver(IM,JM,LM,LATS,LONS,__RC__)
@@ -1775,29 +1775,29 @@ contains
 ! Pointer to Imports used only for full transfer calculation
 !-----------------------------------------------------------
 
-   call MAPL_GetPointer(IMPORT, PLE,    'PLE',    RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, T,      'T',      RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, Q,      'QV',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, QL,     'QL',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, QI,     'QI',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, QR,     'QR',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, QS,     'QS',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, QG,     'QG',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, RL,     'RL',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, RI,     'RI',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, RR,     'RR',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, RS,     'RS',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, RG,     'RG',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, O3,     'O3',     RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, CH4,    'CH4',    RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, N2O,    'N2O',    RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, CFC11,  'CFC11',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, CFC12,  'CFC12',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, HCFC22, 'HCFC22', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, FCLD_IN,'FCLD',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, EMIS,   'EMIS',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, PREF,   'PREF',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(IMPORT, TS,     'TS',     RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(IMPORT, PLE,    'PLE',    RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, T,      'T',      RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, Q,      'QV',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, QL,     'QL',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, QI,     'QI',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, QR,     'QR',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, QS,     'QS',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, QG,     'QG',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, RL,     'RL',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, RI,     'RI',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, RR,     'RR',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, RS,     'RS',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, RG,     'RG',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, O3,     'O3',     RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, CH4,    'CH4',    RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, N2O,    'N2O',    RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, CFC11,  'CFC11',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, CFC12,  'CFC12',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, HCFC22, 'HCFC22', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, FCLD_IN,'FCLD',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, EMIS,   'EMIS',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, PREF,   'PREF',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(IMPORT, TS,     'TS',     RC=STATUS); _VERIFY(STATUS)
 
    PL = 0.5*(PLE(:,:,:UBOUND(PLE,3)-1)+PLE(:,:,LBOUND(PLE,3)+1:))
    RH = Q/GEOS_QSAT(T,PL,PASCALS=.true.)
@@ -1819,11 +1819,11 @@ contains
       if (USE_CHOU) then ! No 3D CO2 if USE_CHOU
          CO2_FIXED = -1.0
       else
-         call MAPL_GetPointer(IMPORT, CO2_3d, 'CO2', RC=STATUS); VERIFY_(STATUS)
+         call MAPL_GetPointer(IMPORT, CO2_3d, 'CO2', RC=STATUS); _VERIFY(STATUS)
          call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME, RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
          call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
          CO2_FIXED = GETCO2(YY,DOY)
          call MAPL_GetPointer(EXPORT, tmp_3d, 'CO2_FIXED', NotFoundOK=.true., RC=STATUS)
          if (associated(tmp_3d)) then
@@ -1835,9 +1835,9 @@ contains
 
    if(CO2_FIXED.eq.-1.0) then
       call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME, RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
       call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
       CO2_FIXED = GETCO2(YY,DOY)
    endif
 
@@ -1862,18 +1862,18 @@ contains
 
       ! Get number of words in config line
       nRATS = ESMF_ConfigGetLen(CF,label='RATS_DIAGNOSTICS:',RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       allocate(nameRATS(nRATS), STAT=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! Put the cursor at the label
       call ESMF_ConfigFindLabel(CF, 'RATS_DIAGNOSTICS:', RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       DO i=1,nRATS
          call ESMF_ConfigGetAttribute(CF,gen_str,RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
          nameRATS(i) = trim(gen_str)
       ENDDO
 
@@ -1998,32 +1998,32 @@ contains
    call MAPL_TimerOn(MAPL,"---AEROSOLS")
 
    call ESMF_StateGet(IMPORT, 'AERO', AERO, RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
    call ESMF_AttributeGet(aero, name='implements_aerosol_optics_method', &
                                 value=implements_aerosol_optics, RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
    RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
 
       ! set RH for aerosol optics
       call ESMF_AttributeGet(AERO, name='relative_humidity_for_aerosol_optics', value=AS_FIELD_NAME, RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       if (AS_FIELD_NAME /= '') then
          call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          AS_PTR_3D = RH
       end if
 
       ! set PLE for aerosol optics
       call ESMF_AttributeGet(AERO, name='air_pressure_for_aerosol_optics', value=AS_FIELD_NAME, RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       if (AS_FIELD_NAME /= '') then
          call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          AS_PTR_3D = PLE
       end if
@@ -2032,7 +2032,7 @@ contains
       allocate(AEROSOL_EXT(IM,JM,LM,NB_IRRAD),  &
                AEROSOL_SSA(IM,JM,LM,NB_IRRAD),  &
                AEROSOL_ASY(IM,JM,LM,NB_IRRAD),  stat=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       AEROSOL_EXT = 0.
       AEROSOL_SSA = 0.
@@ -2041,18 +2041,18 @@ contains
       ! compute aerosol optics at all solar bands
       IR_BANDS: do band = 1, NB_IRRAD
          call ESMF_AttributeSet(AERO, name='band_for_aerosol_optics', value=(OFFSET+band), RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          ! execute the aero provider's optics method
          call ESMF_MethodExecute(AERO, label="run_aerosol_optics", RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          ! EXT from AERO_PROVIDER
          call ESMF_AttributeGet(AERO, name='extinction_in_air_due_to_ambient_aerosol', value=AS_FIELD_NAME, RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          if (AS_FIELD_NAME /= '') then
-            call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
+            call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); _VERIFY(STATUS)
 
             if (associated(AS_PTR_3D)) then
                AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
@@ -2061,10 +2061,10 @@ contains
 
          ! SSA from AERO_PROVIDER
          call ESMF_AttributeGet(AERO, name='single_scattering_albedo_of_ambient_aerosol', value=AS_FIELD_NAME, RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          if (AS_FIELD_NAME /= '') then
-            call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); VERIFY_(STATUS)
+            call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS); _VERIFY(STATUS)
 
             if (associated(AS_PTR_3D)) then
                AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
@@ -2073,11 +2073,11 @@ contains
 
          ! ASY from AERO_PROVIDER
          call ESMF_AttributeGet(AERO, name='asymmetry_parameter_of_ambient_aerosol', value=AS_FIELD_NAME, RC=STATUS)
-         VERIFY_(STATUS)
+         _VERIFY(STATUS)
 
          if (AS_FIELD_NAME /= '') then
             call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME),  RC=STATUS)
-            VERIFY_(STATUS)
+            _VERIFY(STATUS)
 
             if (associated(AS_PTR_3D)) then
                AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
@@ -2132,7 +2132,7 @@ contains
       DFDTSCNA = DFDTSC
 
       call MAPL_TimerOff(MAPL,"--IRRAD",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
    else if (USE_RRTMGP) then
 
@@ -2194,7 +2194,7 @@ contains
 
       ! access RRTMGP internal state from the GC
       call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-      VERIFY_(status)
+      _VERIFY(status)
       rrtmgp_state => wrap%ptr
 
       ! initialize k-distribution if not already done
@@ -3283,18 +3283,18 @@ contains
    else if (USE_RRTMG) then
 
       call MAPL_TimerOn(MAPL,"--RRTMG",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       if (LM > 72) then
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGLW_USE_PRECIP_IN_RADIATION:',DEFAULT=.TRUE.,RC=STATUS)
-        VERIFY_(STATUS)
+        _VERIFY(STATUS)
       else
         call MAPL_GetResource(MAPL,USE_PRECIP_IN_RADIATION,'RRTMGLW_USE_PRECIP_IN_RADIATION:',DEFAULT=.FALSE.,RC=STATUS)
-        VERIFY_(STATUS)
+        _VERIFY(STATUS)
       endif
 
       call MAPL_GetResource(MAPL,PARTITION_SIZE,'RRTMGLW_PARTITION_SIZE:',DEFAULT=4,RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! reversed profiles for RRTMG (1=bottom layer)
       ! note 0:LM indexing for [PT]LEV_R
@@ -3335,15 +3335,15 @@ contains
 
       ! choices for cloud physical to optical conversion
       call MAPL_GetResource(MAPL,ICEFLGLW,'RRTMG_ICEFLG:',DEFAULT=3,RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
       call MAPL_GetResource(MAPL,LIQFLGLW,'RRTMG_LIQFLG:',DEFAULT=1,RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! calculate derivatives of upward flux with Tsurf
       Ts_derivs = .true.
 
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! reverse super-layer interface indicies
       LCLDMH = LM - LCLDMH + 1
@@ -3502,20 +3502,20 @@ contains
       WHERE (FCLD_R < 0.) FCLD_R = 0.
 
       call MAPL_TimerOff(MAPL,"---RRTMG_FLIP",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       call MAPL_TimerOn(MAPL,"---RRTMG_INIT",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
 ! pmn: consider putting futher up calling tree?
 ! pmn: only needs to be done once per run, but does consume memory
       call RRTMG_LW_INI
 
       call MAPL_TimerOff(MAPL,"---RRTMG_INIT",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       call MAPL_TimerOn(MAPL,"---RRTMG_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       if (nRATS .gt. 0) then !<<>> MSL
          allocate(UFLXRAT(IM*JM,LM+1,nRATS),      __STAT__)
@@ -3609,10 +3609,10 @@ contains
               BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
 
       call MAPL_TimerOff(MAPL,"---RRTMG_RUN",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       call MAPL_TimerOn(MAPL,"---RRTMG_FLIP",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! for outputs, unpack flattened horizontal and flip back vertical
       IJ = 0
@@ -3678,7 +3678,7 @@ contains
       end do
 
       call MAPL_TimerOff(MAPL,"---RRTMG_FLIP",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
       ! pmn:
       ! RRTMG does not provide no-aerosol derivatives
@@ -3721,7 +3721,7 @@ contains
       deallocate(DOLRBRG_DTS,__STAT__)
 
       call MAPL_TimerOff(MAPL,"--RRTMG",RC=STATUS)
-      VERIFY_(STATUS)
+      _VERIFY(STATUS)
 
    else
 
@@ -3755,12 +3755,12 @@ contains
    call MAPL_TimerOn (MAPL,"--MISC")
 
    call MAPL_GetResource( MAPL, TAUCRIT, 'TAUCRIT:', DEFAULT=0.30, RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
    TAUCRIT   = TAUCRIT/2.13
 
-   call MAPL_GetPointer(EXPORT,   CLDPRS,  'CLDPRS'  ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   CLDTMP,  'CLDTMP'  ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,    TAUIR,   'TAUIR'  ,RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(EXPORT,   CLDPRS,  'CLDPRS'  ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   CLDTMP,  'CLDTMP'  ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,    TAUIR,   'TAUIR'  ,RC=STATUS); _VERIFY(STATUS)
 
    if(associated(TAUIR)) TAUIR = 0.5*(TAUDIAG(:,:,:,3)+TAUDIAG(:,:,:,4))
 
@@ -3782,10 +3782,10 @@ contains
 
    ! Correcting the timing of the alw and blw (mjs)
 
-   call MAPL_GetPointer(EXPORT,   TSREFF,    'TSREFF' ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   SFCEM,     'SFCEM0' ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   DSFDTS,    'DSFDTS0',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LWS0,      'LWS0'   ,RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(EXPORT,   TSREFF,    'TSREFF' ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   SFCEM,     'SFCEM0' ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   DSFDTS,    'DSFDTS0',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LWS0,      'LWS0'   ,RC=STATUS); _VERIFY(STATUS)
 
    if(associated(TSREFF)) TSREFF = TS             ! reference TS for linearization
    if(associated(DSFDTS)) DSFDTS =-DFDTS(:,:,LM)  ! d(non-negated upward sfc flux) / dTS
@@ -3805,7 +3805,7 @@ contains
 !  All done
 !-----------
 
-   RETURN_(ESMF_SUCCESS)
+   _RETURN(ESMF_SUCCESS)
 
  end subroutine LW_Driver
 
@@ -3893,55 +3893,55 @@ contains
 ! Pointers to Exports
 !--------------------
 
-   call MAPL_GetPointer(EXPORT,   FLX   ,    'FLX',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLXA  ,    'FLXA',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLC   ,    'FLC',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLA   ,    'FLA',   RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLXU  ,    'FLXU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLXAU ,    'FLXAU', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLCU  ,    'FLCU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLAU  ,    'FLAU',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLXD  ,    'FLXD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLXAD ,    'FLXAD', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLCD  ,    'FLCD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLAD  ,    'FLAD',  RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   TSREFF,    'TSREFF',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   SFCEM ,    'SFCEM', RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   DSFDTS,    'DSFDTS',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   SFCEM0,    'SFCEM0',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,  DSFDTS0,   'DSFDTS0',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   OLR   ,    'OLR'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   OLRA  ,    'OLRA'  ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   OLC   ,    'OLC'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   OLCC5 ,    'OLCC5' ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   OLA   ,    'OLA'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LWS   ,    'LWS'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LWSA  ,    'LWSA'  ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LCS   ,    'LCS'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LCSC5 ,    'LCSC5' ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   LAS   ,    'LAS'   ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLNS  ,    'FLNS'  ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLNSNA,    'FLNSNA',RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLNSC ,    'FLNSC' ,RC=STATUS); VERIFY_(STATUS)
-   call MAPL_GetPointer(EXPORT,   FLNSA ,    'FLNSA' ,RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLX   ,    'FLX',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLXA  ,    'FLXA',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLC   ,    'FLC',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLA   ,    'FLA',   RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLXU  ,    'FLXU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLXAU ,    'FLXAU', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLCU  ,    'FLCU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLAU  ,    'FLAU',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLXD  ,    'FLXD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLXAD ,    'FLXAD', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLCD  ,    'FLCD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLAD  ,    'FLAD',  RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   TSREFF,    'TSREFF',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   SFCEM ,    'SFCEM', RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   DSFDTS,    'DSFDTS',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   SFCEM0,    'SFCEM0',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,  DSFDTS0,   'DSFDTS0',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   OLR   ,    'OLR'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   OLRA  ,    'OLRA'  ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   OLC   ,    'OLC'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   OLCC5 ,    'OLCC5' ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   OLA   ,    'OLA'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LWS   ,    'LWS'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LWSA  ,    'LWSA'  ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LCS   ,    'LCS'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LCSC5 ,    'LCSC5' ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   LAS   ,    'LAS'   ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLNS  ,    'FLNS'  ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLNSNA,    'FLNSNA',RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLNSC ,    'FLNSC' ,RC=STATUS); _VERIFY(STATUS)
+   call MAPL_GetPointer(EXPORT,   FLNSA ,    'FLNSA' ,RC=STATUS); _VERIFY(STATUS)
 
-   call MAPL_GetPointer(EXPORT,   CLDTT ,  'CLDTT'   ,ALLOC=.TRUE.,RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(EXPORT,   CLDTT ,  'CLDTT'   ,ALLOC=.TRUE.,RC=STATUS); _VERIFY(STATUS)
 
 ! Determine the 2-D Total Cloud Fraction
 !---------------------------------------
 
    call MAPL_GetResource( MAPL, PRS_LOW_MID,    'PRS_LOW_MID_CLOUDS:' ,   DEFAULT=70000.,      RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
    call MAPL_GetResource( MAPL, PRS_MID_HIGH,   'PRS_MID_HIGH_CLOUDS:',   DEFAULT=40000.,      RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
    call MAPL_GetPointer( IMPORT, FCLD, 'FCLD', RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
    call MAPL_GetPointer( IMPORT, PREF, 'PREF', RC=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
    ALLOCATE( DUMTT(IM,JM), STAT=STATUS)
-   VERIFY_(STATUS)
+   _VERIFY(STATUS)
 
 ! Determine the model level separating mid and high clouds
 !---------------------------------------------------------
@@ -3982,7 +3982,7 @@ contains
 ! Pointers to Imports
 !--------------------
 
-   call MAPL_GetPointer(IMPORT,   TSINST, 'TSINST',   RC=STATUS); VERIFY_(STATUS)
+   call MAPL_GetPointer(IMPORT,   TSINST, 'TSINST',   RC=STATUS); _VERIFY(STATUS)
 
 ! Update fluxes
 !--------------
@@ -4135,7 +4135,7 @@ contains
 
       if (USE_RRTMGP) then
          call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-         VERIFY_(status)
+         _VERIFY(status)
          rrtmgp_state => wrap%ptr
          if (rrtmgp_state%initialized) &
             band_lims_wvn = rrtmgp_state%k_dist%get_band_lims_wavenumber()
@@ -4201,7 +4201,7 @@ contains
       call MAPL_GetPointer(INTERNAL, FLX_INT_RAT,   'FLX_RAT',    RC=STATUS)
       call MAPL_GetPointer(INTERNAL, SFCEM_INT_RAT, 'SFCEM_RAT',  RC=STATUS)
       call MAPL_GetPointer(INTERNAL, FLXU_INT_RAT,  'FLXU_RAT',   RC=STATUS)
-      call MAPL_GetPointer(IMPORT, EMIS,   'EMIS',   RC=STATUS); VERIFY_(STATUS)
+      call MAPL_GetPointer(IMPORT, EMIS,   'EMIS',   RC=STATUS); _VERIFY(STATUS)
       do n=1,nRATS
          ! OLR
 !<<>>         if (MAPL_am_I_root()) then
@@ -4245,7 +4245,7 @@ contains
             RAT_2d => null()
          endif
          gen_str = 'COLTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-!         call MAPL_GetPointer(IMPORT, AREA,   'AREA',   RC=STATUS); VERIFY_(STATUS) ! Uncomment for AREA
+!         call MAPL_GetPointer(IMPORT, AREA,   'AREA',   RC=STATUS); _VERIFY(STATUS) ! Uncomment for AREA
          call MAPL_GetPointer(EXPORT,   RAT_3d, trim(gen_str),   RC=STATUS) ! Don't verify.
          if (associated(RAT_3d)) then
             do K = 1, LM
@@ -4286,7 +4286,7 @@ contains
 !-----------
    deallocate( DUMTT )
 
-   RETURN_(ESMF_SUCCESS)
+   _RETURN(ESMF_SUCCESS)
 
  end subroutine Update_Flx
 
