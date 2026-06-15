@@ -3753,11 +3753,17 @@ contains
    type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
    type(ty_fluxes_byband)    :: fluxes_byband_allnoa, fluxes_byband_allsky
 
-   !call MAPL_TimerOn(MAPL,"---RRTMGP_RT",RC=STATUS)
-   !VERIFY_(STATUS)
+    !call MAPL_TimerOn(MAPL,"---RRTMGP_RT",RC=STATUS)
+    !VERIFY_(STATUS)
 
-   ! clean clear-sky case
-   if (calc_clrnoa) then
+    write(0,*) 'DIAG: compute_lw_rte entered, colS=', colS, ' colE=', colE
+    if (any(ieee_is_nan(emis_sfc))) then
+      write(0,*) 'DIAG: NaN in emis_sfc entering compute_lw_rte'
+      call abort()
+    end if
+
+    ! clean clear-sky case
+    if (calc_clrnoa) then
      fluxes_clrnoa%flux_up     => flux_up_clrnoa(colS:colE,:)
      fluxes_clrnoa%flux_dn     => flux_dn_clrnoa(colS:colE,:)
      fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
