@@ -3573,10 +3573,12 @@ contains
    gas_concs_block, clean_optical_props, sources, &
    MAPL, RC)
 
+   use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
    use mo_rte_kind,              only: wp
    use mo_gas_optics_rrtmgp,    only: ty_gas_optics_rrtmgp
    use mo_gas_concentrations,   only: ty_gas_concs
-   use mo_optical_props,        only: ty_optical_props_arry
+   use mo_optical_props,        only: ty_optical_props_arry, ty_optical_props_1scl, &
+                                      ty_optical_props_2str, ty_optical_props_nstr
    use mo_source_functions,     only: ty_source_func_lw
 
 #define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
@@ -3603,6 +3605,64 @@ contains
      t_sfc(colS:colE), gas_concs_block, clean_optical_props, sources, &
      tlev = t_lev(colS:colE,:))
    TEST_(error_msg)
+
+   ! Diagnose whether NaNs are coming from gas optics / source-function generation
+   if (any(ieee_is_nan(p_lay(colS:colE,:)))) then
+     write(0,*) 'RRTMGP-LW: NaN in p_lay input to gas_optics'
+     call abort()
+   end if
+   if (any(ieee_is_nan(t_lay(colS:colE,:)))) then
+     write(0,*) 'RRTMGP-LW: NaN in t_lay input to gas_optics'
+     call abort()
+   end if
+   if (any(ieee_is_nan(t_lev(colS:colE,:)))) then
+     write(0,*) 'RRTMGP-LW: NaN in t_lev input to gas_optics'
+     call abort()
+   end if
+   if (any(ieee_is_nan(t_sfc(colS:colE)))) then
+     write(0,*) 'RRTMGP-LW: NaN in t_sfc input to gas_optics'
+     call abort()
+   end if
+
+   select type (clean_optical_props)
+     class is (ty_optical_props_1scl)
+       if (any(ieee_is_nan(clean_optical_props%tau))) then
+         write(0,*) 'RRTMGP-LW: NaN in clean_optical_props%tau after gas_optics'
+         write(0,*) '  tau range = ', minval(clean_optical_props%tau), maxval(clean_optical_props%tau)
+         write(0,*) '  p_lay range = ', minval(p_lay(colS:colE,:)), maxval(p_lay(colS:colE,:))
+         write(0,*) '  t_lay range = ', minval(t_lay(colS:colE,:)), maxval(t_lay(colS:colE,:))
+         call abort()
+       end if
+     class is (ty_optical_props_2str)
+       if (any(ieee_is_nan(clean_optical_props%tau))) then
+         write(0,*) 'RRTMGP-LW: NaN in clean_optical_props%tau after gas_optics'
+         write(0,*) '  tau range = ', minval(clean_optical_props%tau), maxval(clean_optical_props%tau)
+         write(0,*) '  p_lay range = ', minval(p_lay(colS:colE,:)), maxval(p_lay(colS:colE,:))
+         write(0,*) '  t_lay range = ', minval(t_lay(colS:colE,:)), maxval(t_lay(colS:colE,:))
+         call abort()
+       end if
+     class is (ty_optical_props_nstr)
+       if (any(ieee_is_nan(clean_optical_props%tau))) then
+         write(0,*) 'RRTMGP-LW: NaN in clean_optical_props%tau after gas_optics'
+         write(0,*) '  tau range = ', minval(clean_optical_props%tau), maxval(clean_optical_props%tau)
+         write(0,*) '  p_lay range = ', minval(p_lay(colS:colE,:)), maxval(p_lay(colS:colE,:))
+         write(0,*) '  t_lay range = ', minval(t_lay(colS:colE,:)), maxval(t_lay(colS:colE,:))
+         call abort()
+       end if
+   end select
+
+   if (any(ieee_is_nan(sources%lay_source))) then
+     write(0,*) 'RRTMGP-LW: NaN in sources%lay_source after gas_optics'
+     call abort()
+   end if
+   if (any(ieee_is_nan(sources%lev_source))) then
+     write(0,*) 'RRTMGP-LW: NaN in sources%lev_source after gas_optics'
+     call abort()
+   end if
+   if (any(ieee_is_nan(sources%sfc_source))) then
+     write(0,*) 'RRTMGP-LW: NaN in sources%sfc_source after gas_optics'
+     call abort()
+   end if
 
    !call MAPL_TimerOff(MAPL,"---RRTMGP_GAS_OPTICS",RC=STATUS)
    !VERIFY_(STATUS)
@@ -3679,12 +3739,18 @@ contains
      fluxes_clrnoa%flux_up     => flux_up_clrnoa(colS:colE,:)
      fluxes_clrnoa%flux_dn     => flux_dn_clrnoa(colS:colE,:)
      fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
-     error_msg = rte_lw( &
-       clean_optical_props, &
-       sources, emis_sfc(:,colS:colE), &
-       fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
-     TEST_(error_msg)
-   end if
+      error_msg = rte_lw( &
+        clean_optical_props, &
+        sources, emis_sfc(:,colS:colE), &
+        fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
+      TEST_(error_msg)
+      if (any(ieee_is_nan(flux_up_clrnoa(colS:colE,:)))) then
+        write(0,*) 'RRTMGP-LW: NaN in rte_lw clear-sky flux_up_clrnoa'
+        write(0,*) '  col range = ', colS, colE
+        write(0,*) '  flux_dn range = ', minval(flux_dn_clrnoa(colS:colE,:)), maxval(flux_dn_clrnoa(colS:colE,:))
+        call abort()
+      end if
+    end if
 
    if (present(dirty_optical_props)) then
      ! make copy of clrnoa optical properties as the
@@ -4564,4 +4630,3 @@ contains
 end subroutine RUN
 
 end module GEOS_IrradGridCompMod
-
