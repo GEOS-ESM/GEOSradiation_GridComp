@@ -1445,8 +1445,9 @@ contains
    subroutine LW_Driver(IM,JM,LM,LATS,LONS,RC)
 
    ! RRTMGP module uses
-   use mo_rte_kind,                only: wp
-   use mo_gas_concentrations,      only: ty_gas_concs
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
+    use mo_rte_kind,                only: wp
+    use mo_gas_concentrations,      only: ty_gas_concs
    use mo_cloud_optics_rrtmgp,     only: ty_cloud_optics_rrtmgp
    use mo_cloud_sampling,          only: draw_samples, &
                                          sampled_mask_max_ran, sampled_mask_exp_ran, &
@@ -2649,11 +2650,12 @@ contains
       ! Total number of blocks including any final partial block
        nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
 
-       ! loop over all blocks
-        loop_status = ESMF_SUCCESS
-        !$OMP PARALLEL DO SCHEDULE(DYNAMIC) DEFAULT(SHARED) PRIVATE(STATUS)
-        do b = 1, nBlocks
-          call PROCESS_RRTMGP_LW_BLOCK( &
+        ! loop over all blocks
+         write(0,*) 'DIAG: entering RRTMGP LW block loop, nBlocks=', nBlocks
+         loop_status = ESMF_SUCCESS
+         !$OMP PARALLEL DO SCHEDULE(DYNAMIC) DEFAULT(SHARED) PRIVATE(STATUS)
+         do b = 1, nBlocks
+           call PROCESS_RRTMGP_LW_BLOCK( &
            b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga, &
            IM, IM_World, iBeg, jBeg, &
            u2s, &
@@ -2692,7 +2694,26 @@ contains
            end if
         end do ! loop over blocks
         !$OMP END PARALLEL DO
-        VERIFY_(loop_status)
+         VERIFY_(loop_status)
+         write(0,*) 'DIAG: RRTMGP LW block loop completed successfully'
+
+         ! NaN check on LW output fluxes
+         if (allocated(flux_up_allsky)) then
+           if (any(ieee_is_nan(flux_up_allsky))) then
+             write(0,*) 'DIAG: NaN in LW flux_up_allsky after block loop'
+             call abort()
+           end if
+           if (any(ieee_is_nan(flux_dn_allsky))) then
+             write(0,*) 'DIAG: NaN in LW flux_dn_allsky after block loop'
+             call abort()
+           end if
+         end if
+         if (allocated(flux_up_clrnoa)) then
+           if (any(ieee_is_nan(flux_up_clrnoa))) then
+             write(0,*) 'DIAG: NaN in LW flux_up_clrnoa after block loop'
+             call abort()
+           end if
+         end if
 
 
       ! tidy up
