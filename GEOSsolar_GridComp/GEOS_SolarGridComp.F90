@@ -3694,7 +3694,7 @@ contains
       class(ty_optical_props_arry), allocatable :: optical_props
 
       ! RRTMGP locals
-      logical :: top_at_1, need_aer_optical_props
+      logical :: need_aer_optical_props
       logical :: gen_mro, cond_inhomo
       logical :: rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice
       integer :: nbnd, ngpt, nmom, icergh
@@ -5195,7 +5195,7 @@ contains
           b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
           LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
           cloud_overlap_type, IM_World, seeds(2), &
-          need_aer_optical_props, top_at_1, &
+          need_aer_optical_props, &
           rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
           cwp_fac, &
           gas_concs, k_dist, cloud_optics, &
@@ -7112,7 +7112,7 @@ contains
     subroutine compute_rte_sw( &
         colS, colE, ngpt, &
         tsi, toa_flux, optical_props, &
-        top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+        mu0, sfc_alb_dir, sfc_alb_dif, &
         fluxes_clrsky, flux_up_clrsky, flux_net_clrsky, &
         fluxes_allsky, flux_up_allsky, flux_net_allsky, &
         bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
@@ -7128,7 +7128,6 @@ contains
       real(wp),                             intent(in)    :: tsi(:)
       real(wp),                             intent(inout) :: toa_flux(:,:)
       class(ty_optical_props_arry),         intent(inout) :: optical_props
-      logical,                              intent(in)    :: top_at_1
       real(wp),                             intent(in)    :: mu0(:)
       real(wp),                             intent(in)    :: sfc_alb_dir(:,:)
       real(wp),                             intent(in)    :: sfc_alb_dif(:,:)
@@ -7160,7 +7159,7 @@ contains
       fluxes_clrsky%flux_up  => flux_up_clrsky
       fluxes_clrsky%flux_net => flux_net_clrsky
       error_msg = rte_sw( &
-        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        optical_props, mu0(colS:colE), toa_flux, &
         sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
         fluxes_clrsky)
       TEST_(error_msg)
@@ -7177,7 +7176,7 @@ contains
       fluxes_allsky%bnd_flux_dn_dir => bnd_flux_dir_allsky
       fluxes_allsky%bnd_flux_net    => bnd_flux_net_allsky
       error_msg = rte_sw( &
-        optical_props, top_at_1, mu0(colS:colE), toa_flux, &
+        optical_props, mu0(colS:colE), toa_flux, &
         sfc_alb_dir(:,colS:colE), sfc_alb_dif(:,colS:colE), &
         fluxes_allsky)
       TEST_(error_msg)
@@ -7194,7 +7193,7 @@ contains
         b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
         LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
         cloud_overlap_type, IM_World, seeds_time_key, &
-        need_aer_optical_props, top_at_1, &
+        need_aer_optical_props, &
         rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
         cwp_fac_arg, &
         gas_concs, k_dist, cloud_optics, &
@@ -7260,7 +7259,6 @@ contains
       integer,                        intent(in)    :: IM_World
       integer,                        intent(in)    :: seeds_time_key
       logical,                        intent(in)    :: need_aer_optical_props
-      logical,                        intent(in)    :: top_at_1
       logical,                        intent(in)    :: rrtmgp_delta_scale
       logical,                        intent(in)    :: rrtmgp_use_rrtmg_iceflg3_like_forwice
       real(wp),                       intent(in)    :: cwp_fac_arg
@@ -7512,7 +7510,7 @@ contains
       call compute_rte_sw( &
         colS, colE, ngpt, &
         tsi, toa_flux, optical_props, &
-        top_at_1, mu0, sfc_alb_dir, sfc_alb_dif, &
+        mu0, sfc_alb_dir, sfc_alb_dif, &
         fluxes_clrsky, flux_up_clrsky(colS:colE,:), flux_net_clrsky(colS:colE,:), &
         fluxes_allsky, flux_up_allsky(colS:colE,:), flux_net_allsky(colS:colE,:), &
         bnd_flux_dn_allsky(colS:colE,:,:), bnd_flux_dir_allsky(colS:colE,:,:), &
