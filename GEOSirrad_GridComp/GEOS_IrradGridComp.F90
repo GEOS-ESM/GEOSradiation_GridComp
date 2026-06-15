@@ -2695,25 +2695,16 @@ contains
         end do ! loop over blocks
         !$OMP END PARALLEL DO
          VERIFY_(loop_status)
-         write(0,*) 'DIAG: RRTMGP LW block loop completed successfully'
-
-         ! NaN check on LW output fluxes
-         if (allocated(flux_up_allsky)) then
-           if (any(ieee_is_nan(flux_up_allsky))) then
-             write(0,*) 'DIAG: NaN in LW flux_up_allsky after block loop'
-             call abort()
-           end if
-           if (any(ieee_is_nan(flux_dn_allsky))) then
-             write(0,*) 'DIAG: NaN in LW flux_dn_allsky after block loop'
-             call abort()
-           end if
-         end if
-         if (allocated(flux_up_clrnoa)) then
-           if (any(ieee_is_nan(flux_up_clrnoa))) then
-             write(0,*) 'DIAG: NaN in LW flux_up_clrnoa after block loop'
-             call abort()
-           end if
-         end if
+         write(0,*) 'DIAG LW: block loop done'
+         if (allocated(flux_up_allsky)) &
+           write(0,*) 'DIAG LW: flux_up_allsky range =', &
+             minval(flux_up_allsky), maxval(flux_up_allsky)
+         if (allocated(flux_dn_allsky)) &
+           write(0,*) 'DIAG LW: flux_dn_allsky range =', &
+             minval(flux_dn_allsky), maxval(flux_dn_allsky)
+         if (allocated(flux_up_clrnoa)) &
+           write(0,*) 'DIAG LW: flux_up_clrnoa range =', &
+             minval(flux_up_clrnoa), maxval(flux_up_clrnoa)
 
 
       ! tidy up
