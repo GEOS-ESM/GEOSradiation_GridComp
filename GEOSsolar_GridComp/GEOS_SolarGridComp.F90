@@ -5247,6 +5247,13 @@ contains
       end do ! loop over blocks
       !$OMP END PARALLEL DO
 
+      write(0,*) 'DIAG SW: block loop done, flux_up_allsky range =', &
+        minval(flux_up_allsky), maxval(flux_up_allsky)
+      write(0,*) 'DIAG SW: flux_net_allsky range =', &
+        minval(flux_net_allsky), maxval(flux_net_allsky)
+      write(0,*) 'DIAG SW: flux_up_clrsky range =', &
+        minval(flux_up_clrsky), maxval(flux_up_clrsky)
+
       call MAPL_TimerOn(MAPL,"--RRTMGP_POST",__RC__)
 
       ! normalize by incoming solar radiation
