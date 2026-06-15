@@ -3694,6 +3694,7 @@ contains
    bnd_flux_up_allsky, bnd_dfupdts_allsky, &
    MAPL, RC)
 
+   use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
    use mo_rte_kind,        only: wp
    use mo_optical_props,   only: ty_optical_props_arry, ty_optical_props_1scl, &
                                  ty_optical_props_2str, ty_optical_props_nstr
