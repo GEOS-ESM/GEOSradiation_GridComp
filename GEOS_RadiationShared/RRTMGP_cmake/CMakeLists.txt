@@ -2,9 +2,9 @@ esma_set_this (OVERRIDE RRTMGP)
 
 # These are from RRTMGP
 set (RRTMGP_SRCS
-  rte-frontend/mo_rte_kind.F90
   rte-frontend/mo_rte_config.F90
   rte-frontend/mo_rte_util_array_validation.F90
+  rte-kernels/mo_rte_kind.F90
   rte-kernels/mo_rte_util_array.F90
   rte-kernels/mo_rte_solver_kernels.F90
   rte-kernels/mo_optical_props_kernels.F90
@@ -19,6 +19,7 @@ set (RRTMGP_SRCS
   gas-optics/mo_gas_concentrations.F90
   gas-optics/mo_gas_optics.F90
   rrtmgp-kernels/mo_gas_optics_rrtmgp_kernels.F90
+  rrtmgp-kernels/mo_cloud_optics_rrtmgp_kernels.F90
   rrtmgp-frontend/mo_gas_optics_rrtmgp.F90
   rrtmgp-frontend/mo_cloud_optics_rrtmgp.F90
   extensions/mo_compute_bc.F90
