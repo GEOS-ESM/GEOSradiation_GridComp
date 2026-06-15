@@ -57,9 +57,12 @@ if (MKL_FOUND)
     rng/mo_rng_mklvsl.F90
     rng/mo_rng_mklvsl_plus.F90
     )
-
+  message(STATUS "MKL found. The mklvsl rng will be compiled.")
 else ()
-  ecbuild_warn("MKL was not found. The mklvsl rng will not be compiled. RRTMGP should not be used.")
+  list (APPEND SRCS
+    rng/mo_rng_mt19937.F90
+    )
+  message(STATUS "MKL not found. The mt19937 rng will be compiled.")
 endif()
 
 esma_add_library(${this}
@@ -69,9 +72,9 @@ esma_add_library(${this}
 # Use of the GEOS Vectorized flags in RRTMGP caused a segfault leading to
 # line 726 of mo_gas_optics_kernels.F90. Moving to the "old" no-vect flags
 # allows RRTMGP to run again.
-if (CMAKE_Fortran_COMPILER_ID MATCHES Intel AND CMAKE_BUILD_TYPE MATCHES Release)
-  set (CMAKE_Fortran_FLAGS_RELEASE "${GEOS_Fortran_FLAGS_NOVECT}")
-endif ()
+#if (CMAKE_Fortran_COMPILER_ID MATCHES Intel AND CMAKE_BUILD_TYPE MATCHES Release)
+#  set (CMAKE_Fortran_FLAGS_RELEASE "${GEOS_Fortran_FLAGS_NOVECT}")
+#endif ()
 
 if (MKL_FOUND)
   target_include_directories (${this} PRIVATE ${MKL_INCLUDE_DIRS})
