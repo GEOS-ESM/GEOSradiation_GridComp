@@ -2897,6 +2897,7 @@ contains
     logical :: REFRESH_FLUXES
     logical :: UPDATE_FIRST
     logical :: GEOS_MLT ! +++ awlee
+    logical :: RUN_MLRAD ! +++ awlee
 
     real, external                  :: getco2
     character(len=ESMF_MAXSTR)      :: MSGSTRING
@@ -2922,6 +2923,7 @@ contains
 
     ! +++ awlee
     logical, save :: pybridge_initialized = .false.
+    logical, save :: FIRST_MLRAD_CALL = .true.
     ! --- awlee
 
 !=============================================================================
@@ -3184,43 +3186,50 @@ contains
     ! ---------------------------------------------------------------
     REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
 
+    ! +++ awlee: Run ML radiation on the normal radiation refresh cadence,
+    ! or once immediately after initialization/restart. This prevents
+    ! MLRADSW, MLRADLW, and MLRADJH from remaining zero until the first
+    ! hourly radiation alarm after restart.
+    RUN_MLRAD = GEOS_MLT .and. (REFRESH_FLUXES .or. FIRST_MLRAD_CALL)
+    
+    if (RUN_MLRAD) then
+    
+       call MAPL_TimerOn(MAPL,"MLRAD",__RC__)
+    
+       call MAPL_GetPointer(IMPORT, T,   'T',   __RC__)
+       call MAPL_GetPointer(IMPORT, PLE, 'PLE', __RC__)
+    
+       call MAPL_GetPointer(INTERNAL, MLRAD_LATS_2D, 'MLRAD_LATS', __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_LONS_2D, 'MLRAD_LONS', __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_YY_2D,   'MLRAD_YY',   __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_DOY_2D,  'MLRAD_DOY',  __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_HH_2D,   'MLRAD_HH',   __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_PBOT_2D, 'MLRAD_PBOT', __RC__)
+    
+       MLRAD_LATS_2D(:,:) = LATS(:,:)
+       MLRAD_LONS_2D(:,:) = LONS(:,:)
+       MLRAD_YY_2D(:,:)   = real(YY)
+       MLRAD_DOY_2D(:,:)  = real(DOY)
+       !MLRAD_HH_2D(:,:)   = real(HH) + real(MM)/60
+       MLRAD_HH_2D(:,:)   = real(int(HH))
+       MLRAD_PBOT_2D(:,:) = MLRAD_P_BOTTOM_HPA
+    
+       if (.not. pybridge_initialized) then
+          call MAPL_pybridge_gcinit("geos_mlrad_driver", MAPL, IMPORT, EXPORT)
+          pybridge_initialized = .true.
+       end if
+    
+       call MAPL_pybridge_gcrun_with_internal("geos_mlrad_driver", MAPL, IMPORT, EXPORT, INTERNAL)
+    
+       FIRST_MLRAD_CALL = .false.
+    
+       call MAPL_TimerOff(MAPL,"MLRAD",__RC__)
+    
+    end if
+    ! --- awlee
+
     REFRESH: if (REFRESH_FLUXES) then
        call MAPL_TimerOn (MAPL,"REFRESH",__RC__)
-
-       ! +++ awlee: Run ML radiation only for GEOS_MLT.
-       ! Run ML radiation only on the solar/radiation refresh cadence.
-       if (GEOS_MLT) then
-
-          call MAPL_TimerOn(MAPL,"MLRAD",__RC__)
-
-          call MAPL_GetPointer(IMPORT, T,   'T',   __RC__)
-          call MAPL_GetPointer(IMPORT, PLE, 'PLE', __RC__)
-
-          call MAPL_GetPointer(INTERNAL, MLRAD_LATS_2D, 'MLRAD_LATS', __RC__)
-          call MAPL_GetPointer(INTERNAL, MLRAD_LONS_2D, 'MLRAD_LONS', __RC__)
-          call MAPL_GetPointer(INTERNAL, MLRAD_YY_2D,   'MLRAD_YY',   __RC__)
-          call MAPL_GetPointer(INTERNAL, MLRAD_DOY_2D,  'MLRAD_DOY',  __RC__)
-          call MAPL_GetPointer(INTERNAL, MLRAD_HH_2D,   'MLRAD_HH',   __RC__)
-          call MAPL_GetPointer(INTERNAL, MLRAD_PBOT_2D, 'MLRAD_PBOT', __RC__)
-
-          MLRAD_LATS_2D(:,:) = LATS(:,:)
-          MLRAD_LONS_2D(:,:) = LONS(:,:)
-          MLRAD_YY_2D(:,:)   = real(YY)
-          MLRAD_DOY_2D(:,:)  = real(DOY)
-          MLRAD_HH_2D(:,:)   = real(HH) + real(MM)/60
-          MLRAD_PBOT_2D(:,:) = MLRAD_P_BOTTOM_HPA
-
-          if (.not. pybridge_initialized) then
-             call MAPL_pybridge_gcinit("geos_mlrad_driver", MAPL, IMPORT, EXPORT)
-             pybridge_initialized = .true.
-          end if
-
-          call MAPL_pybridge_gcrun_with_internal("geos_mlrad_driver", MAPL, IMPORT, EXPORT, INTERNAL)
-
-          call MAPL_TimerOff(MAPL,"MLRAD",__RC__)
-
-       end if
-       ! --- awlee
 
        call ESMF_AlarmRingerOff (ALARM, __RC__)
        call ESMF_ClockGet (CLOCK, currTIME=CURRENTTIME, __RC__)

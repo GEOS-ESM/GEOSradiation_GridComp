@@ -1151,12 +1151,13 @@ class MLRadDriver(UserCode):
 
             YY = int(YY_2D[0, 0])
             DOY = int(DOY_2D[0, 0])
-            HH = int(HH_2D[0, 0])
+            HH_FLOAT = float(HH_2D[0, 0])
+            HH_INDEX = int(round(HH_FLOAT))
 
             P_ml_bottom_hpa = float(PBOT_2D[0, 0])
             P_ml_bottom_pa = P_ml_bottom_hpa * 100.0
 
-            space_weather = get_space_weather_indices(YY, DOY, HH)
+            space_weather = get_space_weather_indices(YY, DOY, HH_INDEX)
 
             F107_VAL = space_weather["f107"]
             F107A_VAL = space_weather["f107a"]
@@ -1171,7 +1172,7 @@ class MLRadDriver(UserCode):
                 LATS=LATS,
                 LONS=LONS,
                 doy=DOY,
-                hour=HH,
+                hour=HH_FLOAT,
                 norm_stats=_NORM_STATS,
                 feature_names=_FEATURE_NAMES,
                 cond_names=_COND_NAMES,
@@ -1221,7 +1222,7 @@ class MLRadDriver(UserCode):
 
             rank0_log(
                 f"[MLRAD_TIMING] rank={_MLRAD_RANK} dims={IM}x{JM}x{LM} "
-                f"date={YY}:{DOY}:{HH} "
+                f"date={YY}:{DOY}:{HH_FLOAT} "
                 f"F107={F107_VAL:.3f} F107A={F107A_VAL:.3f} "
                 f"AP={AP_VAL:.3f} KP={KP_VAL:.3f} "
                 f"Pbot_hPa={P_ml_bottom_hpa:.6g} "
