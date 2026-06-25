@@ -786,44 +786,44 @@ def init_once():
         #rank0_log(f"[MLRAD] feature_names ({len(_FEATURE_NAMES)}) = {_FEATURE_NAMES}")
         #rank0_log(f"[MLRAD] cond_names ({_COND_DIM}) = {_COND_NAMES}")
 
-        if "lev_log" in _NORM_STATS:
-            #rank0_log(
-            #    "[MLRAD] norm[lev_log] "
-            #    f"mean={_NORM_STATS['lev_log']['mean']:.8e} "
-            #    f"std={_NORM_STATS['lev_log']['std']:.8e}"
-            #)
-        else:
-            #rank0_log("[MLRAD/WARN] no normalization stats for lev_log")
-
-        for name in ("f107", "f107a", "kp"):
-            if name in _NORM_STATS:
-                #rank0_log(
-                #    f"[MLRAD] norm[{name}] "
-                #    f"mean={_NORM_STATS[name]['mean']:.8e} "
-                #    f"std={_NORM_STATS[name]['std']:.8e}"
-                #)
-            else:
-                #rank0_log(f"[MLRAD/WARN] no normalization stats for {name}")
-
-        #rank0_log(arr_minmax_str(_Y_MEAN_LEV, "y_mean_lev [K/day]"))
-        #rank0_log(arr_minmax_str(_Y_STD_LEV, "y_std_lev [K/day scale]"))
-        #rank0_log(
-        #    "[MLRAD] lev_log uses log(P_TRAIN_HPA); "
-        #    "log(P_TRAIN_PA) is not used."
-        #)
-
-        if INPUT_CONFIG.get("use_T", False):
-            if "T" in _NORM_STATS:
-                #rank0_log(
-                #    "[MLRAD] norm[T] "
-                #    f"mean={_NORM_STATS['T']['mean']:.8e} "
-                #    f"std={_NORM_STATS['T']['std']:.8e}"
-                #)
-            else:
-                raise RuntimeError(
-                    "use_T=True but normalization stats do not contain 'T'. "
-                    "Check NormalizationStats_GEOSgrid_2000-2010.npz."
-                )
+#        if "lev_log" in _NORM_STATS:
+#            #rank0_log(
+#            #    "[MLRAD] norm[lev_log] "
+#            #    f"mean={_NORM_STATS['lev_log']['mean']:.8e} "
+#            #    f"std={_NORM_STATS['lev_log']['std']:.8e}"
+#            #)
+#        else:
+#            #rank0_log("[MLRAD/WARN] no normalization stats for lev_log")
+#
+#        for name in ("f107", "f107a", "kp"):
+#            if name in _NORM_STATS:
+#                #rank0_log(
+#                #    f"[MLRAD] norm[{name}] "
+#                #    f"mean={_NORM_STATS[name]['mean']:.8e} "
+#                #    f"std={_NORM_STATS[name]['std']:.8e}"
+#                #)
+#            else:
+#                #rank0_log(f"[MLRAD/WARN] no normalization stats for {name}")
+#
+#        #rank0_log(arr_minmax_str(_Y_MEAN_LEV, "y_mean_lev [K/day]"))
+#        #rank0_log(arr_minmax_str(_Y_STD_LEV, "y_std_lev [K/day scale]"))
+#        #rank0_log(
+#        #    "[MLRAD] lev_log uses log(P_TRAIN_HPA); "
+#        #    "log(P_TRAIN_PA) is not used."
+#        #)
+#
+#        if INPUT_CONFIG.get("use_T", False):
+#            if "T" in _NORM_STATS:
+#                #rank0_log(
+#                #    "[MLRAD] norm[T] "
+#                #    f"mean={_NORM_STATS['T']['mean']:.8e} "
+#                #    f"std={_NORM_STATS['T']['std']:.8e}"
+#                #)
+#            else:
+#                raise RuntimeError(
+#                    "use_T=True but normalization stats do not contain 'T'. "
+#                    "Check NormalizationStats_GEOSgrid_2000-2010.npz."
+#                )
 
     expected_in_channels = 17 if INPUT_CONFIG.get("use_T", False) else 16
     
