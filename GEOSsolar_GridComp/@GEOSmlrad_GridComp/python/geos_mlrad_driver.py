@@ -264,7 +264,7 @@ def load_f107_ap_table():
         raise RuntimeError(f"No valid F107/AP records found in {F107_AP_PATH}")
 
     _INDEX_TABLE = table
-    rank0_log(f"[MLRAD] loaded {n_valid} F107/AP records from {F107_AP_PATH}")
+    #rank0_log(f"[MLRAD] loaded {n_valid} F107/AP records from {F107_AP_PATH}")
 
     return _INDEX_TABLE
 
@@ -706,10 +706,10 @@ def load_model(ckpt_path, in_channels, cond_dim, device=DEVICE):
         ckpt_in_channels = int(w.shape[1])
         ckpt_kernel = int(w.shape[2])
 
-        rank0_log(
-            f"[MLRAD] checkpoint={ckpt_path} "
-            f"in_conv.weight={tuple(w.shape)}"
-        )
+        #rank0_log(
+        #    f"[MLRAD] checkpoint={ckpt_path} "
+        #    f"in_conv.weight={tuple(w.shape)}"
+        #)
 
         if ckpt_in_channels != in_channels:
             raise RuntimeError(
@@ -735,10 +735,10 @@ def load_model(ckpt_path, in_channels, cond_dim, device=DEVICE):
         w = sd["cond_mlp.0.weight"]
         ckpt_cond_dim = int(w.shape[1])
 
-        rank0_log(
-            f"[MLRAD] checkpoint={ckpt_path} "
-            f"cond_mlp.0.weight={tuple(w.shape)}"
-        )
+        #rank0_log(
+        #    f"[MLRAD] checkpoint={ckpt_path} "
+        #    f"cond_mlp.0.weight={tuple(w.shape)}"
+        #)
 
         if ckpt_cond_dim != cond_dim:
             raise RuntimeError(
@@ -783,42 +783,42 @@ def init_once():
     if COMPACT_DIAGNOSTICS:
         rank0_log(f"[MLRAD] NORM_PATH = {NORM_PATH}")
         rank0_log(f"[MLRAD] MODEL_DIR = {MODEL_DIR}")
-        rank0_log(f"[MLRAD] feature_names ({len(_FEATURE_NAMES)}) = {_FEATURE_NAMES}")
-        rank0_log(f"[MLRAD] cond_names ({_COND_DIM}) = {_COND_NAMES}")
+        #rank0_log(f"[MLRAD] feature_names ({len(_FEATURE_NAMES)}) = {_FEATURE_NAMES}")
+        #rank0_log(f"[MLRAD] cond_names ({_COND_DIM}) = {_COND_NAMES}")
 
         if "lev_log" in _NORM_STATS:
-            rank0_log(
-                "[MLRAD] norm[lev_log] "
-                f"mean={_NORM_STATS['lev_log']['mean']:.8e} "
-                f"std={_NORM_STATS['lev_log']['std']:.8e}"
-            )
+            #rank0_log(
+            #    "[MLRAD] norm[lev_log] "
+            #    f"mean={_NORM_STATS['lev_log']['mean']:.8e} "
+            #    f"std={_NORM_STATS['lev_log']['std']:.8e}"
+            #)
         else:
-            rank0_log("[MLRAD/WARN] no normalization stats for lev_log")
+            #rank0_log("[MLRAD/WARN] no normalization stats for lev_log")
 
         for name in ("f107", "f107a", "kp"):
             if name in _NORM_STATS:
-                rank0_log(
-                    f"[MLRAD] norm[{name}] "
-                    f"mean={_NORM_STATS[name]['mean']:.8e} "
-                    f"std={_NORM_STATS[name]['std']:.8e}"
-                )
+                #rank0_log(
+                #    f"[MLRAD] norm[{name}] "
+                #    f"mean={_NORM_STATS[name]['mean']:.8e} "
+                #    f"std={_NORM_STATS[name]['std']:.8e}"
+                #)
             else:
-                rank0_log(f"[MLRAD/WARN] no normalization stats for {name}")
+                #rank0_log(f"[MLRAD/WARN] no normalization stats for {name}")
 
-        rank0_log(arr_minmax_str(_Y_MEAN_LEV, "y_mean_lev [K/day]"))
-        rank0_log(arr_minmax_str(_Y_STD_LEV, "y_std_lev [K/day scale]"))
-        rank0_log(
-            "[MLRAD] lev_log uses log(P_TRAIN_HPA); "
-            "log(P_TRAIN_PA) is not used."
-        )
+        #rank0_log(arr_minmax_str(_Y_MEAN_LEV, "y_mean_lev [K/day]"))
+        #rank0_log(arr_minmax_str(_Y_STD_LEV, "y_std_lev [K/day scale]"))
+        #rank0_log(
+        #    "[MLRAD] lev_log uses log(P_TRAIN_HPA); "
+        #    "log(P_TRAIN_PA) is not used."
+        #)
 
         if INPUT_CONFIG.get("use_T", False):
             if "T" in _NORM_STATS:
-                rank0_log(
-                    "[MLRAD] norm[T] "
-                    f"mean={_NORM_STATS['T']['mean']:.8e} "
-                    f"std={_NORM_STATS['T']['std']:.8e}"
-                )
+                #rank0_log(
+                #    "[MLRAD] norm[T] "
+                #    f"mean={_NORM_STATS['T']['mean']:.8e} "
+                #    f"std={_NORM_STATS['T']['std']:.8e}"
+                #)
             else:
                 raise RuntimeError(
                     "use_T=True but normalization stats do not contain 'T'. "
@@ -854,7 +854,7 @@ def init_once():
         ckpt_path = field_cfg["ckpt_path"]
         export_name = field_cfg["export_name"]
 
-        rank0_log(f"[MLRAD] loading {field_key} model for {export_name}: {ckpt_path}")
+        #rank0_log(f"[MLRAD] loading {field_key} model for {export_name}: {ckpt_path}")
 
         _MODELS[field_key] = load_model(
             ckpt_path,
@@ -1220,16 +1220,16 @@ class MLRadDriver(UserCode):
                 if PRINT_OUTPUT_MINMAX and _MLRAD_RANK == 0:
                     rank0_log(arr_minmax_str(out, f"[MLRAD] {export_name} written [K/s]"))
 
-            rank0_log(
-                f"[MLRAD_TIMING] rank={_MLRAD_RANK} dims={IM}x{JM}x{LM} "
-                f"date={YY}:{DOY}:{HH_FLOAT} "
-                f"F107={F107_VAL:.3f} F107A={F107A_VAL:.3f} "
-                f"AP={AP_VAL:.3f} KP={KP_VAL:.3f} "
-                f"Pbot_hPa={P_ml_bottom_hpa:.6g} "
-                f"cols={IM * JM} batches={len(batches)} batch_size={COL_BATCH_SIZE} "
-                f"build_inputs={t_build:.3f}s fields={','.join(field_timings)} "
-                f"total={time.perf_counter() - t_total0:.3f}s"
-            )
+            #rank0_log(
+            #    f"[MLRAD_TIMING] rank={_MLRAD_RANK} dims={IM}x{JM}x{LM} "
+            #    f"date={YY}:{DOY}:{HH_FLOAT} "
+            #    f"F107={F107_VAL:.3f} F107A={F107A_VAL:.3f} "
+            #    f"AP={AP_VAL:.3f} KP={KP_VAL:.3f} "
+            #    f"Pbot_hPa={P_ml_bottom_hpa:.6g} "
+            #    f"cols={IM * JM} batches={len(batches)} batch_size={COL_BATCH_SIZE} "
+            #    f"build_inputs={t_build:.3f}s fields={','.join(field_timings)} "
+            #    f"total={time.perf_counter() - t_total0:.3f}s"
+            #)
 
         except Exception as e:
             log(f"[MLRAD] EXCEPTION in run_with_internal: {repr(e)}")
