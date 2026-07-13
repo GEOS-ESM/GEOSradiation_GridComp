@@ -196,7 +196,6 @@ module GEOS_RadiationGridCompMod
 
 ! !EXPORT STATE:
 
-    ! +++ awlee
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'MLRADSW',                                    &
          LONG_NAME  = 'air_temperature_tendency_due_to_ml_shortwave', &
@@ -241,7 +240,6 @@ module GEOS_RadiationGridCompMod
          VLOCATION  = MAPL_VLocationCenter,                          &
                                                               RC=STATUS  )
     VERIFY_(STATUS)
-    ! --- awlee
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'DTDT',                                            &
@@ -714,7 +712,6 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   real, pointer, dimension(:,:  )     :: BLW
   real, pointer, dimension(:,:  )     :: RADSRF
 
-! For GEOS-MLT +++ awlee
   real, pointer, dimension(:,:,:) :: MLRADSW
   real, pointer, dimension(:,:,:) :: MLRADLW
   real, pointer, dimension(:,:,:) :: MLRADJH
@@ -732,6 +729,18 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   real, allocatable :: RADLW_BLEND(:,:,:)
 
   logical :: GEOS_MLT
+
+  ! Runtime controls for the GEOS/ML radiation blending region.
+  ! These are read from RC resources in pressure units [hPa].
+  ! The upper boundary is the low-pressure / high-altitude side.
+  ! The lower boundary is the high-pressure / low-altitude side.
+  ! For p <= upper, use pure ML radiation.
+  ! For p >= lower, use pure native GEOS radiation.
+  real :: MLRAD_SW_BLEND_UPPER_HPA
+  real :: MLRAD_SW_BLEND_LOWER_HPA
+  real :: MLRAD_LW_BLEND_UPPER_HPA
+  real :: MLRAD_LW_BLEND_LOWER_HPA
+
 ! ---
 
 ! Locals
@@ -772,10 +781,29 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                             RC=STATUS )
     VERIFY_(STATUS)
 
-    ! +++ awlee: Use GEOS-MLT radiation path only for extended-lid configurations.
+    ! Use GEOS-MLT radiation path only for extended-lid configurations.
     ! This follows the dynamics-side logic where GEOS_MLT is enabled for npz >= 186.
     GEOS_MLT = (LM >= 186)
-    ! --- awlee
+
+    ! Read pressure bounds for the GEOS/ML radiation blend.
+    ! Defaults are conservative for the extended MLT lid:
+    !   p <= 0.1 hPa : pure ML radiation
+    !   p >= 0.3 hPa : pure native GEOS radiation
+    call MAPL_GetResource(MAPL, MLRAD_SW_BLEND_UPPER_HPA, &
+         LABEL="MLRAD_SW_BLEND_UPPER_HPA:", default=0.1, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_SW_BLEND_LOWER_HPA, &
+         LABEL="MLRAD_SW_BLEND_LOWER_HPA:", default=0.3, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_LW_BLEND_UPPER_HPA, &
+         LABEL="MLRAD_LW_BLEND_UPPER_HPA:", default=0.1, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_LW_BLEND_LOWER_HPA, &
+         LABEL="MLRAD_LW_BLEND_LOWER_HPA:", default=0.2, RC=STATUS)
+    VERIFY_(STATUS)
 
 ! Get pointers to exports
 !------------------------
@@ -966,45 +994,38 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                 allocate(RADLW_BLEND(IM,JM,LM), stat=STATUS)
                 VERIFY_(STATUS)
 
-                ! Separate hard-coded tapers for SW and LW radiation.
+                ! Runtime-controlled tapers for SW and LW radiation.
                 !
-                ! SW:
-                !   p >= 0.1  hPa : GEOS SW radiation
-                !   p <= 0.01 hPa : ML SW radiation
-                !   midpoint       : sqrt(0.1 * 0.01) = 0.0316227766 hPa
-                !   width          : 0.5 in log-pressure units
+                ! Pressure decreases upward, so the "upper" pressure bound is
+                ! smaller than the "lower" pressure bound.
                 !
-                ! LW:
-                !   p >= 0.3 hPa : GEOS LW radiation
-                !   p <= 0.2 hPa : ML LW radiation
-                !   midpoint      : sqrt(0.3 * 0.2) = 0.2449489743 hPa
-                !   width         : use a smaller value because the transition is narrow
+                ! For each radiation band:
+                !   p <= upper hPa : pure ML radiation,        WGEOS = 0
+                !   p >= lower hPa : pure native GEOS radiation, WGEOS = 1
+                !   otherwise      : smooth log-pressure blend
                 !
-                ! WGEOS_* = 1 means use GEOS.
-                ! WGEOS_* = 0 means use ML.
-                
-                WGEOS_SW = 0.5 * (1.0 + tanh( log(max(PMID_HPA, tiny(1.0)) / &
-                        0.0316227766) / 0.5 ))
-                
-                where (PMID_HPA >= 0.1)
-                   WGEOS_SW = 1.0
-                elsewhere (PMID_HPA <= 0.01)
-                   WGEOS_SW = 0.0
-                end where
-                
-                WGEOS_LW = 0.5 * (1.0 + tanh( log(max(PMID_HPA, tiny(1.0)) / &
-                        0.2449489743) / 0.15 ))
-                
-                where (PMID_HPA >= 0.3)
-                   WGEOS_LW = 1.0
-                elsewhere (PMID_HPA <= 0.2)
-                   WGEOS_LW = 0.0
-                end where
-                
+                ! The smoothstep function is used after mapping log-pressure to
+                ! [0, 1]. This gives exact zero/one weights at the requested
+                ! pressure bounds while avoiding a sharp discontinuity.
+
+                WGEOS_SW = (log(max(PMID_HPA, tiny(1.0))) - &
+                     log(MLRAD_SW_BLEND_UPPER_HPA)) / &
+                     (log(MLRAD_SW_BLEND_LOWER_HPA) - &
+                     log(MLRAD_SW_BLEND_UPPER_HPA))
+                WGEOS_SW = max(0.0, min(1.0, WGEOS_SW))
+                WGEOS_SW = WGEOS_SW * WGEOS_SW * (3.0 - 2.0 * WGEOS_SW)
+
+                WGEOS_LW = (log(max(PMID_HPA, tiny(1.0))) - &
+                     log(MLRAD_LW_BLEND_UPPER_HPA)) / &
+                     (log(MLRAD_LW_BLEND_LOWER_HPA) - &
+                     log(MLRAD_LW_BLEND_UPPER_HPA))
+                WGEOS_LW = max(0.0, min(1.0, WGEOS_LW))
+                WGEOS_LW = WGEOS_LW * WGEOS_LW * (3.0 - 2.0 * WGEOS_LW)
+
                 ! Blended GEOS-MLT SW/LW heating rates.
                 RADSW_BLEND = WGEOS_SW * RADSW_GEOS + (1.0 - WGEOS_SW) * MLRADSW
                 RADLW_BLEND = WGEOS_LW * RADLW_GEOS + (1.0 - WGEOS_LW) * MLRADLW
-                
+
                 ! Export blended diagnostics separately.
                 if( associated(RADSWMLT) ) RADSWMLT = RADSW_BLEND
                 if( associated(RADLWMLT) ) RADLWMLT = RADLW_BLEND
@@ -1091,4 +1112,3 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 end module GEOS_RadiationGridCompMod
-
