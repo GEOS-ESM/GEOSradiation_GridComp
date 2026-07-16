@@ -2953,9 +2953,10 @@ contains
          EXPORTspec          = ExportSpec,             &
          INTERNAL_ESMF_STATE = INTERNAL,         __RC__)
 
-    ! +++ awlee: Run ML radiation only for extended-lid GEOS-MLT configurations.
+    ! Run ML radiation only for extended-lid GEOS-MLT configurations.
     GEOS_MLT = (LM >= 186)
-    ! --- awlee
+    call MAPL_GetResource( MAPL, GEOS_MLT, 'GEOS_MLT:', &
+                           DEFAULT=.FALSE., __RC__ )
 
     ! Get parameters from configuration
     call MAPL_GetResource (MAPL, PRS_LOW_MID,  'PRS_LOW_MID_CLOUDS:' , DEFAULT=70000., __RC__)
@@ -2963,7 +2964,7 @@ contains
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
-    if (GEOS_MLT) then ! +++ awlee
+    if (GEOS_MLT) then
        call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=0.1, __RC__)
     end if
 

@@ -781,9 +781,12 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                             RC=STATUS )
     VERIFY_(STATUS)
 
-    ! Use GEOS-MLT radiation path only for extended-lid configurations.
-    ! This follows the dynamics-side logic where GEOS_MLT is enabled for npz >= 186.
-    GEOS_MLT = (LM >= 186)
+    ! Read the GEOS-MLT switch from AGCM.rc.
+    call MAPL_GetResource( MAPL, GEOS_MLT,              &
+         LABEL='GEOS_MLT:',                             &
+         DEFAULT=.FALSE.,                               &
+         RC=STATUS )
+    VERIFY_(STATUS)
 
     ! Read pressure bounds for the GEOS/ML radiation blend.
     ! Defaults are conservative for the extended MLT lid:
@@ -836,14 +839,12 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     VERIFY_(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWCNA, 'RADSWCNA',  RC=STATUS )
     VERIFY_(STATUS)
-    ! GEOS-MLT +++ awlee
     if (GEOS_MLT) then
        call MAPL_GetPointer ( EXPORT, RADSWMLT, 'RADSWMLT', RC=STATUS )
        VERIFY_(STATUS)
        call MAPL_GetPointer ( EXPORT, RADLWMLT, 'RADLWMLT', RC=STATUS )
        VERIFY_(STATUS)
     end if
-    ! ---
 
 ! Allocate children's exports that we need
 !-----------------------------------------
@@ -894,7 +895,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        VERIFY_(STATUS)
     end if
 
-    ! +++ awlee: Get ML radiation only for GEOS-MLT runs.
+    ! Get ML radiation only for GEOS-MLT runs.
     if (GEOS_MLT .and. &
        (associated(DTDT) .or. associated(RADSWMLT) .or. associated(RADLWMLT))) then
 
@@ -907,7 +908,6 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        call MAPL_GetPointer ( GEX(SOL), MLRADJH, 'MLRADJH', alloc=.TRUE., RC=STATUS )
        VERIFY_(STATUS)
     end if
-    ! --- awlee
 
 ! Run the child components and their couplers
 !--------------------------------------------
@@ -930,7 +930,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     if( associated (ALW     ) ) ALW      =  SFCEM - DSFDTS*TRD
     if( associated (RADSRF  ) ) RADSRF   =   (FSW(:,:,  LM  ) + FLW(:,:,  LM))
 
-    ! +++ awlee: GEOS-MLT radiation tapering
+    ! GEOS-MLT radiation tapering
     if (GEOS_MLT) then
 
        if( associated (DTDT  ) .or. associated (RADLW ) .or. associated (RADSW )   .or. &
