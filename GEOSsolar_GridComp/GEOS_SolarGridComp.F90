@@ -2954,7 +2954,6 @@ contains
          INTERNAL_ESMF_STATE = INTERNAL,         __RC__)
 
     ! Run ML radiation only for extended-lid GEOS-MLT configurations.
-    GEOS_MLT = (LM >= 186)
     call MAPL_GetResource( MAPL, GEOS_MLT, 'GEOS_MLT:', &
                            DEFAULT=.FALSE., __RC__ )
 
