@@ -1,0 +1,146 @@
+schema_version: 2.0.0
+component: IRRAD
+
+category: INTERNAL
+#--------------------------------------------------------------------------------------------------------------------------------
+#  VARIABLE       | DIMENSION   |          Additional Metadata
+#--------------------------------------------------------------------------------------------------------------------------------
+ NAME             | ALIAS       | UNITS       | DIMS | VLOC | COND                          | ADD2EXPORT | LONG NAME
+#--------------------------------------------------------------------------------------------------------------------------------
+ FLX              | FLX_INT          | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air
+ FLC              | FLC_INT          | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air_for_clear_sky
+ FLA              | FLA_INT          | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air_for_clear_sky_and_no_aerosol
+ FLXD             | FLXD_INT         | W m-2       | xyz  | E    |                               |            | downward_longwave_flux_in_air
+ FLXU             | FLXU_INT         | W m-2       | xyz  | E    |                               |            | upward_longwave_flux_in_air
+ FLCD             | FLCD_INT         | W m-2       | xyz  | E    |                               |            | downward_longwave_flux_in_air_for_clear_sky
+ FLCU             | FLCU_INT         | W m-2       | xyz  | E    |                               |            | upward_longwave_flux_in_air_for_clear_sky
+ FLAD             | FLAD_INT         | W m-2       | xyz  | E    |                               |            | downward_longwave_flux_in_air_for_clear_sky_and_no_aerosol
+ FLAU             | FLAU_INT         | W m-2       | xyz  | E    |                               |            | upward_longwave_flux_in_air_for_clear_sky_and_no_aerosol
+ DFDTS            |                  | W m-2 K-1   | xyz  | E    |                               | .TRUE.     | sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature
+ DFDTSC           |                  | W m-2 K-1   | xyz  | E    |                               |            | sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_for_clear_sky
+ DFDTSNA          |                  | W m-2 K-1   | xyz  | E    |                               |            | sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_no_aerosol
+ DFDTSCNA         |                  | W m-2 K-1   | xyz  | E    |                               |            | sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_for_clear_sky_no_aerosol
+ SFCEM            | SFCEM_INT        | W m-2       | xy   | N    |                               |            | longwave_flux_emitted_from_surface
+ TS               | TS_INT           | K           | xy   | N    |                               |            | surface_temperature
+ FLXA             | FLXA_INT         | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air_and_no_aerosol
+ FLXAD            | FLXAD_INT        | W m-2       | xyz  | E    |                               |            | downward_longwave_flux_in_air_and_no_aerosol
+ FLXAU            | FLXAU_INT        | W m-2       | xyz  | E    |                               |            | upward_longwave_flux_in_air_and_no_aerosol
+ OLRB05RG         | OLRB05RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band05
+ DOLRB05RGDT      | DOLRB05RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band05_wrt_surface_temp
+ OLRB06RG         | OLRB06RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band06
+ DOLRB06RGDT      | DOLRB06RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band06_wrt_surface_temp
+ OLRB07RG         | OLRB07RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band07
+ DOLRB07RGDT      | DOLRB07RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band07_wrt_surface_temp
+ OLRB08RG         | OLRB08RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band08
+ DOLRB08RGDT      | DOLRB08RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band08_wrt_surface_temp
+ OLRB09RG         | OLRB09RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band09
+ DOLRB09RGDT      | DOLRB09RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band09_wrt_surface_temp
+ OLRB10RG         | OLRB10RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band10
+ DOLRB10RGDT      | DOLRB10RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band10_wrt_surface_temp
+ OLRB11RG         | OLRB11RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band11
+ DOLRB11RGDT      | DOLRB11RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band11_wrt_surface_temp
+ OLRB15RG         | OLRB15RG_INT     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | upwelling_longwave_flux_at_TOA_in_RR_band15
+ DOLRB15RGDT      | DOLRB15RGDT_INT  | W m-2 K-1   | xy   | N    | USE_RRTMG .or. USE_RRTMGP     |            | derivative_of_upwelling_longwave_flux_at_TOA_in_RR_band15_wrt_surface_temp
+
+
+category: IMPORT
+#-------------------------------------------------------------------------------------------------------------------
+#  VARIABLE    | DIMENSIONS  |          Additional Metadata
+#-------------------------------------------------------------------------------------------------------------------
+ NAME    | ALIAS    | UNITS       | DIMS | VLOC | RESTART | COND        | LONG NAME
+#-------------------------------------------------------------------------------------------------------------------
+ PLE     |          | Pa          | xyz  | E    | SKIP    |             | air_pressure
+ T       |          | K           | xyz  | C    | SKIP    |             | air_temperature
+ QV      | Q        | kg kg-1     | xyz  | C    | SKIP    |             | specific_humidity
+ QL      |          | kg kg-1     | xyz  | C    | SKIP    |             | mass_fraction_of_cloud_liquid_water_in_air
+ QI      |          | kg kg-1     | xyz  | C    | SKIP    |             | mass_fraction_of_cloud_ice_in_air
+ QR      |          | kg kg-1     | xyz  | C    | SKIP    |             | mass_fraction_of_rain_water_in_air
+ QS      |          | kg kg-1     | xyz  | C    | SKIP    |             | mass_fraction_of_snow_in_air
+ QG      |          | kg kg-1     | xyz  | C    | SKIP    |             | mass_fraction_of_graupel_in_air
+ RL      |          | m           | xyz  | C    | SKIP    |             | effective_radius_of_cloud_liquid_water_particles
+ RI      |          | m           | xyz  | C    | SKIP    |             | effective_radius_of_cloud_ice_particles
+ RR      |          | m           | xyz  | C    | SKIP    |             | effective_radius_of_rain_particles
+ RS      |          | m           | xyz  | C    | SKIP    |             | effective_radius_of_snow_particles
+ RG      |          | m           | xyz  | C    | SKIP    |             | effective_radius_of_graupel_particles
+ O3      |          | kg kg-1     | xyz  | C    | SKIP    |             | ozone_mass_mixing_ratio
+ CH4     |          | pppv        | xyz  | C    | SKIP    |             | methane_concentration
+ N2O     |          | pppv        | xyz  | C    | SKIP    |             | nitrous_oxide_concentration
+ CFC11   |          | pppv        | xyz  | C    | SKIP    |             | CFC11_concentration
+ CFC12   |          | pppv        | xyz  | C    | SKIP    |             | CFC12_concentration
+ HCFC22  |          | pppv        | xyz  | C    | SKIP    |             | HCFC22_concentration
+ FCLD    | FCLD_IN  | 1           | xyz  | C    | SKIP    |             | cloud_area_fraction_in_atmosphere_layer
+ TS      |          | K           | xy   | N    | SKIP    |             | surface_skin_temperature
+ EMIS    |          | 1           | xy   | N    | SKIP    |             | surface_emissivity
+ PREF    |          | Pa          |   z  | E    | SKIP    |             | reference_air_pressure
+ TSINST  |          | K           | xy   | N    | SKIP    |             | surface_skin_temperature_instantaneous
+ AERO    |          | kg kg-1     | xyz  | C    | SKIP    |             | aerosols
+ CO2     |          | pppv        | xyz  | C    | SKIP    | USE_CO2_3D  | carbondioxide_concentration
+
+category: EXPORT
+#-------------------------------------------------------------------------------------------------------
+#  VARIABLE    | DIMENSIONS  |          Additional Metadata
+#-------------------------------------------------------------------------------------------------------
+ NAME         | UNITS       | DIMS | VLOC | COND                          | LONG NAME
+#-------------------------------------------------------------------------------------------------------
+ FLX          | W m-2       | xyz  | E    |                               | net_downward_longwave_flux_in_air
+ FLXA         | W m-2       | xyz  | E    |                               | net_downward_longwave_flux_in_air_and_no_aerosol
+ FLXD         | W m-2       | xyz  | E    |                               | downward_longwave_flux_in_air
+ FLXAD        | W m-2       | xyz  | E    |                               | downward_longwave_flux_in_air_and_no_aerosol
+ FLXU         | W m-2       | xyz  | E    |                               | upward_longwave_flux_in_air
+ FLXAU        | W m-2       | xyz  | E    |                               | upward_longwave_flux_in_air_and_no_aerosol
+ FLC          | W m-2       | xyz  | E    |                               | net_downward_longwave_flux_in_air_assuming_clear_sky
+ FLCD         | W m-2       | xyz  | E    |                               | downward_longwave_flux_in_air_assuming_clear_sky
+ FLCU         | W m-2       | xyz  | E    |                               | upward_longwave_flux_in_air_assuming_clear_sky
+ FLA          | W m-2       | xyz  | E    |                               | net_downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol
+ FLAD         | W m-2       | xyz  | E    |                               | downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol
+ FLAU         | W m-2       | xyz  | E    |                               | upward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol
+ SFCEM        | W m-2       | xy   | N    |                               | longwave_flux_emitted_from_surface
+ SFCEM0       | W m-2       | xy   | N    |                               | longwave_flux_emitted_from_surface_at_reference_time
+ LWS0         | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation_at_reference_time
+ DSFDTS       | W m-2 K-1   | xy   | N    |                               | sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature
+ DSFDTS0      | W m-2 K-1   | xy   | N    |                               | sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature_at_reference_time
+ TSREFF       | K           | xy   | N    |                               | surface_temperature
+ OLR          | W m-2       | xy   | N    |                               | upwelling_longwave_flux_at_toa
+ OLRA         | W m-2       | xy   | N    |                               | upwelling_longwave_flux_at_toa_and_no_aerosol
+ OLC          | W m-2       | xy   | N    |                               | upwelling_longwave_flux_at_toa_assuming_clear_sky
+ OLCC5        | W m-2       | xy   | N    |                               | upwelling_longwave_flux_at_toa_assuming_clear_sky_masked_using_cldtt_LE_5
+ OLA          | W m-2       | xy   | N    |                               | upwelling_longwave_flux_at_toa_assuming_clear_sky_and_no_aerosol
+ OLRB05RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band05
+ TBRB05RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band05
+ OLRB06RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band06
+ TBRB06RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band06
+ OLRB07RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band07
+ TBRB07RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band07
+ OLRB08RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band08
+ TBRB08RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band08
+ OLRB09RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band09
+ TBRB09RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band09
+ OLRB10RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band10
+ TBRB10RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band10
+ OLRB11RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band11
+ TBRB11RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band11
+ OLRB15RG     | W m-2       | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | upwelling_longwave_flux_at_TOA_in_RR_band15
+ TBRB15RG     | K           | xy   | N    | USE_RRTMG .or. USE_RRTMGP     | brightness_temperature_in_RR_LW_band15
+ FLNS         | W m-2       | xy   | N    |                               | surface_net_downward_longwave_flux
+ FLNSNA       | W m-2       | xy   | N    |                               | surface_net_downward_longwave_flux_and_no_aerosol
+ FLNSC        | W m-2       | xy   | N    |                               | surface_net_downward_longwave_flux_assuming_clear_sky
+ FLNSA        | W m-2       | xy   | N    |                               | surface_net_downward_longwave_flux_assuming_clear_sky_and_no_aerosol
+ LWS          | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation
+ LWSA         | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation_and_no_aerosol
+ LCS          | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation_assuming_clear_sky
+ LCSC5        | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation_assuming_clear_sky_masked_using_cldtt_LE_5
+ LAS          | W m-2       | xy   | N    |                               | surface_absorbed_longwave_radiation_assuming_clear_sky_and_no_aerosol
+ CLDTMP       | K           | xy   | N    |                               | cloud_top_temperature
+ CLDPRS       | Pa          | xy   | N    |                               | cloud_top_pressure
+ TAUIR        | W m-2       | xyz  | C    |                               | longwave_cloud_optical_thickness_at_800_cm-1
+ CLDTT        | 1           | xy   | N    |                               | total_2D_cloud_area_fraction
+ CLDTTLW      | 1           | xy   | N    |                               | total_cloud_area_fraction_rrtmg_lw_REFRESH
+ CLDHILW      | 1           | xy   | N    |                               | high-level_cloud_area_fraction_rrtmg_lw_REFRESH
+ CLDMDLW      | 1           | xy   | N    |                               | mid-level_cloud_area_fraction_rrtmg_lw_REFRESH
+ CLDLOLW      | 1           | xy   | N    |                               | low_level_cloud_area_fraction_rrtmg_lw_REFRESH
+#-- DFDTS is declared in the INTERNAL category above with ADD2EXPORT so it
+#-- is automatically also exported under the same name.
+#-- The dynamic RATS diagnostics exports (dOLR_*, dLWS_*, dFLNS_*, dSFCEM_*,
+#-- NETTRAP_*, COLTRAP_*, FLX_*, DFDTS_*, CO2_FIXED, DELT) are added manually
+#-- in SetServices since their names/count depend on the runtime
+#-- RATS_DIAGNOSTICS: configuration list and cannot be statically enumerated.

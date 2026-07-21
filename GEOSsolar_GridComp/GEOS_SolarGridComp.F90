@@ -507,7 +507,7 @@ contains
     ! Needed in SetServices because we Export a per-band flux and the
     !   number of bands differs between codes.
     !----------------------------------------------------------------------
-    call choose_solar_scheme (MAPL, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
+    call choose_solar_scheme (GC, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
 
     ! Set number of solar bands
     if (USE_RRTMGP) then
@@ -3037,9 +3037,9 @@ contains
     ! Decide which radiation to use:
     ! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
     !-------------------------------------------------------------------------------
-    call choose_solar_scheme (MAPL, &
+    call choose_solar_scheme (GC, &
       USE_RRTMGP,       USE_RRTMG,       USE_CHOU,       __RC__)
-    call choose_irrad_scheme (MAPL, &
+    call choose_irrad_scheme (GC, &
       USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD, __RC__)
 
     ! Set number of solar bands
