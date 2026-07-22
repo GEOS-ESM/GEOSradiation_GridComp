@@ -101,6 +101,35 @@ flux can't be correctly computed yet:
   (`set_inhomogeneity`, `initialize_cloud_subcol_gen`) beyond what the
   generic layer does automatically.
 
+## Edge (VLOC=E) import pointers needed the same 0-based remap as IRRAD (2026-07-22)
+Same bug class as the one found and fixed in `GEOS_IrradGridComp.F90`
+(see that file's own `mapl3-porting-notes.md` for the full root-cause
+writeup): MAPL always creates Edge-staggered fields with Fortran bounds
+`1:LM+1`, never `0:LM`, but `Run`'s arithmetic assumes 0-based throughout
+(`PLE(:,:,1:LM)-PLE(:,:,0:LM-1)`, `FLW(:,:,0:LM-1) - FLW(:,:,1:LM)`,
+etc). Checked `Radiation_StateSpecs.rc`: only the 5 IMPORT fields are
+`VLOC=E` - `PLEINST` (this container's own import) and `FLX`/`FLC`/
+`FLXA`/`FLA` (connected in from IRRAD). All 9 EXPORT fields (`DTDT`,
+`RADLW`, ..., `ALW`, `BLW`) are `VLOC=C` or `VLOC=N` - no export-side
+remap needed here, unlike IRRAD which had 12 Edge exports.
+
+These 5 pointers are fetched via plain, hand-written
+`MAPL_StateGetPointer` calls in `Run` (this file doesn't use ACG's
+`GET_POINTERS`/`DECLARE_POINTERS` for `Run` at all, only the `_Import___.h`/
+`_Export___.h` spec-registration includes in `SetServices`), so the ACG
+`CONTIGUOUS` fix doesn't reach them automatically - added
+`contiguous` directly to their hand-written declarations (`PLE`, `FLW`,
+`FLWCLR`, `FLWNA`, `FLA`), plus a `p3d` scratch pointer, and routed the
+remap through it (`p3d => PLE; PLE(1:IM,1:JM,0:LM) => p3d`, etc.) -
+**not** a self-remap, since gfortran-15 rejects that even on a
+CONTIGUOUS pointer (confirmed via isolated test compile while fixing
+the IRRAD instance of this same bug - see that file's notes). All 5 are
+mandatory (no `COND`) - `PLEINST` has no conditional gating and
+`FLX`/`FLC`/`FLXA`/`FLA` are forced-allocated by the
+`MAPL_GridCompAddConnection(..., dst_comp="<self>")` wiring in
+`SetServices` - so no `associated()` guard needed before remapping,
+same reasoning as `Run`'s Edge remap block in `GEOS_IrradGridComp.F90`.
+
 ## Build verification caveat
 Editing `CMakeLists.txt` forces a full top-level CMake reconfigure (not
 incremental) on the next `make`. In this session's sandboxed tool

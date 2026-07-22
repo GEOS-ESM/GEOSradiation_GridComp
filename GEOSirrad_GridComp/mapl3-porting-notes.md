@@ -685,3 +685,158 @@ CMakeLists.txt):
   Verified via the same tokenize-and-diff approach as `Update_Flx`
   (stripping type/attribute keywords, comparing identifier multisets
   before/after) - exact match, no variable lost or duplicated.
+
+## Edge (VLOC=E) fields need an explicit 0-based bounds remap (2026-07-22)
+**Real, confirmed bug, not a style issue.** Traced why: MAPL3's field
+creation (`src/Shared/@MAPL/infrastructure/field/FieldCreate.F90`,
+`make_bounds_from_args`) always gives the vertical dimension Fortran
+bounds `LU_Bound(1, num_levels)` - i.e. `1:num_levels` - regardless of
+whether the field is Center- or Edge-staggered. For an Edge field
+(`num_levels = LM+1`), that means `MAPL_StateGetPointer` hands back a
+pointer bounded `1:LM+1`, **never** `0:LM`. There is no MAPL3-wide
+"Edge means 0-based" convention - confirmed by checking
+`FV_StateMod.F90` (FVdycoreCubed, already MAPL3-ported): it explicitly
+remaps `ak`/`bk` after fetching them (`ak(0:km) => ak1(1:km+1)`,
+comment: "AK and BK are expected to be 0-based"), but its OTHER 3D Edge
+field, `PE` ("Pressure at layer edges"), is used with plain 1-based
+indexing (`PE(:,:,1)`, `PE(:,:,NPZ+1)`) everywhere, no remap at all.
+So it's a per-field, per-component decision, not automatic.
+
+IRRAD's code assumes 0-based throughout without ever remapping (e.g. the
+comment `! note: PLE(0:LM) but TLEV(1:LM+1)`, and pervasive `(:,:,0)`/
+`(:,:,LM)` indexing in `LW_Driver`/`Update_Flx`). Since this build has
+`-fcheck=all` enabled, every one of these accesses would have been a
+genuine out-of-bounds runtime error the first time the physics actually
+ran - it just hadn't surfaced yet because execution hadn't gotten that
+far. Found by cross-referencing `Irrad_StateSpecs.rc`'s `VLOC=E` rows
+against actual usage, then confirming the fix is *correct* (not just
+silencing a crash) via an independent consistency check: `PREF`'s usage
+at ~line 991-1008 (`_ASSERT(... > PREF(1) ...)`, `_ASSERT(... <
+PREF(LM) ...)`, a `do while` loop starting at `k=1`) only makes physical
+sense if `PREF` is 0-based - deliberately skipping index 0 (trivial
+near-zero TOA pressure) and treating `LM` as the last/surface index.
+Before the fix, `PREF(LM)` would have been the *second-to-last* element
+of a `1:LM+1` array, not the surface - this check independently confirms
+the remap is the right fix, not just a bounds-check workaround.
+
+**Fix applied** - `ptr(new_bounds) => ptr` self-remap (Fortran pointer
+bounds-remapping with the pointer as its own data-target; legal because
+the RHS is fully evaluated - target + current association - before the
+LHS descriptor is updated, same as any `a => a`-style pointer
+reassignment) immediately after each fetch, at every site an Edge
+pointer is fetched:
+- **`Run`**, right after `#include "Irrad_GetPointer___.h"` (~line 518):
+  all 16 INTERNAL Edge fields (`FLX_INT`, `FLC_INT`, `FLA_INT`,
+  `FLXD_INT`, `FLXU_INT`, `FLCD_INT`, `FLCU_INT`, `FLAD_INT`,
+  `FLAU_INT`, `FLXA_INT`, `FLXAD_INT`, `FLXAU_INT`, `DFDTS`, `DFDTSC`,
+  `DFDTSNA`, `DFDTSCNA`) plus the 2 no-COND IMPORT Edge fields (`PLE`
+  3D, `PREF` 1D) - all mandatory/always-associated, so no
+  `associated()` guard needed. This covers what `LW_Driver` and
+  `Update_Flx` both use via host association from `Run`.
+- **`Update_Flx`**, right after its own separate `MAPL_StateGetPointer`
+  calls for the 12 EXPORT Edge fields (`FLX`, `FLXA`, `FLXD`, `FLXAD`,
+  `FLXU`, `FLXAU`, `FLC`, `FLCD`, `FLCU`, `FLA`, `FLAD`, `FLAU`) -
+  **does** need `if (associated(X)) X(...) => X` guards, since export
+  pointers can be null if not requested downstream by a coupler/HISTORY.
+  (`Update_Flx` fetches these itself rather than using `Run`'s
+  ACG-fetched copies of the same short names - the two are different
+  variable instances due to Fortran scoping/shadowing; `Run`'s own copies
+  of the EXPORT-category pointers are fetched by the blanket
+  `GET_POINTERS` call but never actually used in `Run`'s own body, only
+  in `Update_Flx`'s locally-shadowed ones.)
+- **Both RATS-diagnostics fetch sites** (inside `LW_Driver`'s
+  `if (nRATS .gt. 0) then` block, and again inside `Update_Flx`'s RAT
+  diagnostic section): `DFDTS_RAT`, `FLX_INT_RAT`, `FLXU_INT_RAT`
+  (4D, edge is dim 3 of 4, remapped as
+  `X(1:IM,1:JM,0:LM,1:nRATS) => X`), plus `FLXD_INT_RAT` at the
+  `LW_Driver` site only (not fetched at all in the `Update_Flx` site).
+  `SFCEM_INT_RAT` is 3D with no vertical dimension at all (surface-only
+  RAT diagnostic) - does NOT need remapping, confirmed by its usage
+  (`SFCEM_INT_RAT(:,:,n)`, no `0`/`LM` edge indexing).
+- Verified completeness two ways: cross-checked every `VLOC=E` row in
+  `Irrad_StateSpecs.rc` against the remap list, and grepped the whole
+  file for `X(:,:,0...)`/`X(:,:,LM...)` index patterns to confirm every
+  matched variable name was already on the remap list (none missed).
+
+### Follow-up: rank-remapping needs CONTIGUOUS - fixed at the ACG root, not per-callsite
+The self-remap pattern above (`X(new_bounds) => X`) failed to compile:
+`Error: Rank remapping target must be rank 1 or simply contiguous`.
+Fortran's rank-remapping rule requires the data-target to be rank-1 or
+provably "simply contiguous" - a plain `pointer` declaration (no
+`CONTIGUOUS` attribute) doesn't qualify even when self-referencing.
+First fix attempt was a per-callsite workaround: route every remap
+through a small `contiguous`-declared scratch pointer
+(`p3d => X; X(bounds) => p3d`), needing separate `p3d`/`p1d`/`p4d`
+scratch variables in `Run`, `LW_Driver`, and `Update_Flx`. User asked
+"can we update ACG instead?" - much better, since this same
+rank-remapping need will recur for any other MAPL3 component wanting to
+0-base an Edge field, and fixing it once at the generator is a real
+root-cause fix vs. N per-component workarounds.
+
+Fixed in `src/Shared/@MAPL/apps/MAPL_GridCompSpecs_ACG.py`,
+`emit_declare_pointer()`: added `, contiguous` to the emitted
+`pointer` attribute list unconditionally for every ACG-generated
+declaration. Confirmed safe first: `compute_rank()` (same file) only
+ever returns rank >= 1 for a spec that reaches this function (its
+`base_rank` table is `{'z':1, 'xy':2, 'xyz':3}` - there's no rank-0/
+scalar case), and `CONTIGUOUS` is invalid for scalars but always legal
+for rank>=1 pointers - so the blanket addition can't break a scalar
+declaration. This is also just formalizing an assumption MAPL already
+relies on elsewhere (`FV_StateMod.F90`'s `ak(0:km) => ak1(1:km+1)`
+remap already assumes the underlying ESMF per-DE field data is
+contiguous - it just wasn't previously asserted to the compiler via the
+attribute). Verified via direct generator invocation (not a full
+rebuild): `python3 MAPL_GridCompSpecs_ACG.py Irrad_StateSpecs.rc -d
+/tmp/d.h ...` - confirmed `real(kind=ESMF_KIND_R4), pointer, contiguous
+:: FLX_INT(:,:,:)` in the output.
+
+After the ACG fix, first reverted `GEOS_IrradGridComp.F90`'s remaps back
+to plain direct self-remaps (`X(bounds) => X`, no scratch pointer),
+assuming `CONTIGUOUS` on the ACG-generated declaration would be enough.
+**That assumption was wrong** - the exact same
+"Rank remapping target must be rank 1 or simply contiguous" error
+recurred, even with `X` now declared `pointer, contiguous`. Root cause:
+`gfortran-15` rejects a *self*-referencing rank remap specifically -
+`CONTIGUOUS` on `X` is necessary but not sufficient when `X` is also its
+own data-target in the same statement. Tried the obvious-looking
+alternative next - add `TARGET` too - but that's outright illegal
+Fortran: `gfortran-15` immediately rejects
+`real, pointer, contiguous, target :: X(:,:,:)` with "POINTER attribute
+conflicts with TARGET attribute" (confirmed via an isolated one-file
+test compile, not just reasoning about it). So `POINTER`+`TARGET`
+together is never an option, self-remap or not.
+
+**Final, verified-working fix**: keep the ACG `CONTIGUOUS` addition
+(still correct and worth having - it's a real improvement, just not
+sufficient alone), and reintroduce the two-variable scratch-pointer
+routing in `GEOS_IrradGridComp.F90` (`p3d => X; X(bounds) => p3d`,
+`p3d`/`p1d`/`p4d` per rank, matching the `ak`/`ak1` two-variable
+pattern in `FV_StateMod.F90` - which was never actually a
+self-remap to begin with, just looked similar at a glance). Confirmed
+this combination (CONTIGUOUS-declared X, remap routed through a
+CONTIGUOUS-declared but *distinct* scratch pointer) compiles AND runs
+correctly with an isolated `gfortran-15` test program before reapplying
+across `Run`, `LW_Driver`, and `Update_Flx` (all 3 needed their
+`p3d`/`p1d`/`p4d` scratch declarations put back). One remaining manual
+fix outside ACG's reach: `DFDTS_RAT`/`FLX_INT_RAT`/`FLXU_INT_RAT`/
+`FLXD_INT_RAT` are hand-declared in `Run` (dynamic RATS-diagnostics
+fields added via manual `MAPL_GridCompAddSpec`, not part of the static
+`.rc`/ACG output) - added `contiguous` to that one hand-written
+declaration line directly; `Update_Flx` shares these via host
+association (no separate local declaration), so this covers both the
+`LW_Driver` and `Update_Flx` RATS remap sites.
+
+**Lesson for next time**: don't trust "should work now" reasoning about
+pointer-remap contiguity rules without an isolated compile test - the
+Fortran standard's rules here are subtle enough (rank-1-source vs.
+CONTIGUOUS-source vs. self-vs-distinct-target) that a one-file
+`gfortran-15 test.f90` check (seconds) is far cheaper than discovering
+a wrong assumption after reverting real code back to a broken state.
+
+The ACG `CONTIGUOUS` addition itself still affects every MAPL3
+component using `DECLARE_POINTERS`, not just IRRAD - worth knowing if
+something elsewhere ever relied on a generated pointer NOT being
+contiguous (unlikely - `CONTIGUOUS` only adds a compiler assertion/
+optimization hint, it doesn't restrict what the pointer can be assigned
+from, and MAPL_StateGetPointer's underlying ESMF field data is
+contiguous per-DE in every realistic case).

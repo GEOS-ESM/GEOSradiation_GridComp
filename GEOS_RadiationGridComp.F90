@@ -158,9 +158,22 @@ contains
 
       ! Pointers to imports (PLEINST plus IRRAD's exports, connected into
       ! our own Import state in SetServices)
-      real, pointer, dimension(:,:,:) :: PLE
-      real, pointer, dimension(:,:,:) :: FLW, FLWCLR, FLWNA, FLA
+      real, pointer, contiguous, dimension(:,:,:) :: PLE
+      real, pointer, contiguous, dimension(:,:,:) :: FLW, FLWCLR, FLWNA, FLA
       real, pointer, dimension(:,:  ) :: DSFDTS, SFCEM, TRD
+
+      ! Scratch pointer for the Edge-array bounds remap below. MAPL always
+      ! creates Edge-staggered fields with Fortran bounds 1:LM+1 (no
+      ! automatic 0-based remap for VLOC=E fields), but this routine
+      ! assumes the 0:LM layer-interface convention throughout (e.g.
+      ! PLE(:,:,0:LM-1)/(:,:,1:LM)). A *self*-referencing rank remap
+      ! (X(bounds) => X) is rejected by gfortran-15 even when X is
+      ! declared CONTIGUOUS ("Rank remapping target must be rank 1 or
+      ! simply contiguous") - routing through this distinct
+      ! CONTIGUOUS-declared scratch pointer avoids that (verified with an
+      ! isolated test compile; see GEOS_IrradGridComp.F90's identical
+      ! fix and porting notes for the full explanation).
+      real, pointer, contiguous, dimension(:,:,:) :: p3d
 
       ! Pointers to exports
       real, pointer, dimension(:,:,:) :: RADLW, RADLWC, RADLWNA, RADLWCNA
@@ -185,6 +198,14 @@ contains
       call MAPL_StateGetPointer(import, DSFDTS, 'DSFDTS0', _RC)
       call MAPL_StateGetPointer(import, SFCEM,  'SFCEM0',  _RC)
       call MAPL_StateGetPointer(import, TRD,    'TSREFF',  _RC)
+
+      ! Edge imports: remap to the 0:LM layer-interface convention used
+      ! below (see the declaration comment above for why).
+      p3d => PLE;    PLE   (1:IM,1:JM,0:LM) => p3d
+      p3d => FLW;    FLW   (1:IM,1:JM,0:LM) => p3d
+      p3d => FLWCLR; FLWCLR(1:IM,1:JM,0:LM) => p3d
+      p3d => FLWNA;  FLWNA (1:IM,1:JM,0:LM) => p3d
+      p3d => FLA;    FLA   (1:IM,1:JM,0:LM) => p3d
 
       ! Get pointers to exports
       call MAPL_StateGetPointer(export, ALW,      'ALW',      _RC)
