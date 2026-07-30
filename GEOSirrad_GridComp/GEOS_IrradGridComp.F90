@@ -80,13 +80,13 @@ module GEOS_IrradGridCompMod
    !EOP
 
    ! number of bands in different radiation codes
-   integer, parameter :: NB_CHOU   = 10        ! #bands in IRRAD calcs for Chou
-   integer, parameter :: NB_RRTMG  = 16        ! #bands in IRRAD calcs for RRTMG
-   integer, parameter :: NB_RRTMGP = 16        ! #bands in IRRAD calcs for RRTMGP
+   integer, parameter :: NB_CHOU = 10 ! #bands in IRRAD calcs for Chou
+   integer, parameter :: NB_RRTMG = 16 ! #bands in IRRAD calcs for RRTMG
+   integer, parameter :: NB_RRTMGP = 16 ! #bands in IRRAD calcs for RRTMGP
 
-   integer, parameter :: NB_CHOU_SORAD   = 8   ! #bands in SORAD calcs for Chou
-   integer, parameter :: NB_RRTMG_SORAD  = 14  ! #bands in SORAD calcs for RRTMG
-   integer, parameter :: NB_RRTMGP_SORAD = 14  ! #bands in SORAD calcs for RRTMGP
+   integer, parameter :: NB_CHOU_SORAD = 8 ! #bands in SORAD calcs for Chou
+   integer, parameter :: NB_RRTMG_SORAD = 14 ! #bands in SORAD calcs for RRTMG
+   integer, parameter :: NB_RRTMGP_SORAD = 14 ! #bands in SORAD calcs for RRTMGP
 
    ! Select which RRTMG[P] bands support OLR output
    !    via OLRBbbRG and TBRBbbRG exports ...
@@ -114,23 +114,23 @@ module GEOS_IrradGridCompMod
    !      very similar, but not identical, band limits)
    !    (Actual calculation only if export is requested)
    ! Supported?    Band  Requested by (and use)
-   logical, parameter :: band_output_supported (nbndlw) = [ &
-        .false. , & !  01
-        .false. , & !  02
-        .false. , & !  03
-        .false. , & !  04
-        .true.  , & !  05   W. Putman (CO2 Longwave IR, GOES Band 16)
-        .true.  , & !  06   A. Collow (Longwave IR, GOES Band 14)
-        .true.  , & !  07   W. Putman (Ozone IR, GOES Band 12)
-        .true.  , & !  08   W. Putman (needed for lightning param)
-        .true.  , & !  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
-        .true.  , & !  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
-        .true.  , & !  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
-        .false. , & !  12
-        .false. , & !  13
-        .false. , & !  14
-        .true.  , & !  15   W. Putman (Shortwave IR, GOES Band 7)
-        .false. ]   !  16
+   logical, parameter :: band_output_supported(nbndlw) = [ &
+        .false., & !  01
+        .false., & !  02
+        .false., & !  03
+        .false., & !  04
+        .true., &  !  05   W. Putman (CO2 Longwave IR, GOES Band 16)
+        .true., &  !  06   A. Collow (Longwave IR, GOES Band 14)
+        .true., &  !  07   W. Putman (Ozone IR, GOES Band 12)
+        .true., &  !  08   W. Putman (needed for lightning param)
+        .true., &  !  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
+        .true., &  !  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
+        .true., &  !  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
+        .false., & !  12
+        .false., & !  13
+        .false., & !  14
+        .true., &  !  15   W. Putman (Shortwave IR, GOES Band 7)
+        .false. ]  !  16
    ! PMN: TODO, make LW method like SW so it doesnt waste
    ! intermediate variable space on unused bands?
 
@@ -142,9 +142,9 @@ module GEOS_IrradGridCompMod
    ! This will be attached to the Gridded Component
    ! used to provide efficient initialization
    type ty_RRTMGP_state
-     private
-     logical :: initialized = .false.
-     type(ty_gas_optics_rrtmgp) :: k_dist
+      private
+      logical :: initialized = .false.
+      type(ty_gas_optics_rrtmgp) :: k_dist
    end type ty_RRTMGP_state
 
    ! name under which the RRTMGP state is attached as a private state
@@ -178,6 +178,7 @@ contains
       ! for RATS-specific radiation diagnostics
       integer :: i, n
       character(len=:), allocatable :: gen_str
+      character(len=:), allocatable :: err_msg
       character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
       type(MAPL_UngriddedDim) :: ungrd_n
 
@@ -196,17 +197,13 @@ contains
       call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
 
       call MAPL_GridCompGetResource(gc, "CO2", CO2_RESOURCE, default=-1.0, _RC)
-      USE_CO2_3D = (CO2_RESOURCE .eq. -2.0)
+      USE_CO2_3D = (CO2_RESOURCE == -2.0)
       ! If using 3-D CO2, validate that a CO2_PROVIDER was also given
       if (USE_CO2_3D) then
          call MAPL_GridCompGetResource(gc, "CO2_PROVIDER", gen_str, default='none', _RC)
-         ! NOTE: this _ASSERT's argument list must stay on a single physical line -
-         ! gfortran's integrated preprocessor mis-parses a multi-argument macro
-         ! invocation whose arguments are split across a Fortran '&' continuation
-         ! line (reproducibly gives "Syntax error in argument list" during real
-         ! compilation, even though -E-only preprocessing shows no problem).
-         _ASSERT(ESMF_UtilStringLowerCase(trim(gen_str)) .ne. 'none', 'In AGCM.rc, cannot set CO2: to -2 and not give a valid CO2_PROVIDER')
-      endif
+         err_msg = 'In AGCM.rc, cannot set CO2: to -2 and not give a valid CO2_PROVIDER'
+         _ASSERT(ESMF_UtilStringLowerCase(trim(gen_str)) /= 'none', err_msg)
+      end if
 
       ! Set entry points (Finalize uses MAPL generic default)
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
@@ -293,64 +290,65 @@ contains
       do i = 1, n
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='dOLR_'//trim(nameRATS(i)), &
-              standard_name='chg_in_upwell_LW_flx_at_toa_from_'//trim(nameRATS(i)), &
+              short_name='dOLR_' // trim(nameRATS(i)), &
+              standard_name='chg_in_upwell_LW_flx_at_toa_from_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xy', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='dLWS_'//trim(nameRATS(i)), &
-              standard_name='chg_in_surface_absorbed_LW_rad_from_'//trim(nameRATS(i)), &
+              short_name='dLWS_' // trim(nameRATS(i)), &
+              standard_name='chg_in_surface_absorbed_LW_rad_from_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xy', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='dFLNS_'//trim(nameRATS(i)), &
-              standard_name='chg_in_sfc_net_downward_LW_flux_from_'//trim(nameRATS(i)), &
+              short_name='dFLNS_' // trim(nameRATS(i)), &
+              standard_name='chg_in_sfc_net_downward_LW_flux_from_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xy', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='dSFCEM_'//trim(nameRATS(i)), &
-              standard_name='LW_flux_emitted_from_sfc_from_'//trim(nameRATS(i)), &
+              short_name='dSFCEM_' // trim(nameRATS(i)), &
+              standard_name='LW_flux_emitted_from_sfc_from_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xy', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='NETTRAP_'//trim(nameRATS(i)), &
-              standard_name='Net_Heat_trapping_due_to_'//trim(nameRATS(i)), &
+              short_name='NETTRAP_' // trim(nameRATS(i)), &
+              standard_name='Net_Heat_trapping_due_to_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xy', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='COLTRAP_'//trim(nameRATS(i)), &
-              standard_name='Heat_trapping_due_to_'//trim(nameRATS(i)), &
+              short_name='COLTRAP_' // trim(nameRATS(i)), &
+              standard_name='Heat_trapping_due_to_' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xyz', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='FLX_'//trim(nameRATS(i)), &
-              standard_name='net_downward_longwave_flux_in_air_due_to'//trim(nameRATS(i)), &
+              short_name='FLX_' // trim(nameRATS(i)), &
+              standard_name='net_downward_longwave_flux_in_air_due_to' // trim(nameRATS(i)), &
               units='W m-2', &
               dims='xyz', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='DFDTS_'//trim(nameRATS(i)), &
-              standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_due_to'//trim(nameRATS(i)), &
+              short_name='DFDTS_' // trim(nameRATS(i)), &
+              standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_due_to' // trim(&
+              nameRATS(i)), &
               units='W m-2 K-1', &
               dims='xyz', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
@@ -403,9 +401,12 @@ contains
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
       call ESMF_TimeIntervalSet(lw_alarm_interval, s=irrad_dt, _RC)
-      lw_alarm = ESMF_AlarmCreate(name="irrad_lw_alarm", clock=clock, ringInterval=lw_alarm_interval, sticky=.true., _RC)
+      lw_alarm = ESMF_AlarmCreate( &
+           name="irrad_lw_alarm", &
+           clock=clock, &
+           ringInterval=lw_alarm_interval, &
+           sticky=.true., _RC)
 
-      
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(import)
       _UNUSED_DUMMY(export)
@@ -460,7 +461,7 @@ contains
       ! applying here. (POINTER+TARGET together, an alternative that was
       ! tried first, is illegal Fortran - "POINTER attribute conflicts
       ! with TARGET attribute" - so that's not an option.)
-      real, pointer, contiguous, dimension(:,:,:) :: p3d
+      real, pointer, contiguous, dimension(:, :, :) :: p3d
       real, pointer, contiguous, dimension(:) :: p1d
 
       real, external :: getco2
@@ -474,29 +475,29 @@ contains
       integer :: TOTAL_RAD_BANDS, NUM_BANDS
 
       ! Additional pointers for RRTMG
-      real, allocatable, dimension(:,:) :: lons, lats
+      real, allocatable, dimension(:, :) :: lons, lats
 
       ! which bands require OLR output?
       ! (only RRTMG[P]; OLRBbbRG, TBRBbbRG)
-      real, pointer, dimension(:,:) :: ptr2d
-      logical :: band_output (nbndlw)
+      real, pointer, dimension(:, :) :: ptr2d
+      logical :: band_output(nbndlw)
       logical :: any_band_output
       integer :: ibnd
       character*2 :: bb
 
       ! For RATS <<>> MSL
-      logical, save :: first = .true.     ! I don't wanna do this, but there's no Initialize() method. This prevents repeating unneeded ops
-      integer, save :: nRATS              ! Number of active RATs to toggle
+      logical, save :: first = .true. ! I don't wanna do this, but there's no Initialize() method. This prevents repeating unneeded ops
+      integer, save :: nRATS ! Number of active RATs to toggle
       character(len=128) :: gen_str
-      character(len=128), allocatable, save :: nameRATS(:)  ! Current toggles read from AGCM.rc
-      real, allocatable, dimension(:,:) :: TMP_R
-      real, allocatable, dimension(:,:,:) :: UFLXRAT, DFLXRAT, DUFLX_DT_RAT
-      real, pointer, dimension(:,:,:) :: SFCEM_INT_RAT
-      real, pointer, contiguous, dimension(:,:,:,:) :: DFDTS_RAT, FLX_INT_RAT, FLXU_INT_RAT, FLXD_INT_RAT
+      character(len=128), allocatable, save :: nameRATS(:) ! Current toggles read from AGCM.rc
+      real, allocatable, dimension(:, :) :: TMP_R
+      real, allocatable, dimension(:, :, :) :: UFLXRAT, DFLXRAT, DUFLX_DT_RAT
+      real, pointer, dimension(:, :, :) :: SFCEM_INT_RAT
+      real, pointer, contiguous, dimension(:, :, :, :) :: DFDTS_RAT, FLX_INT_RAT, FLXU_INT_RAT, FLXD_INT_RAT
 
       ! Get the target components grid.
       call MAPL_GridCompGet(gc, grid=esmfgrid, hconfig=hconfig, num_levels=LM, _RC)
-      call MAPL_GridGet(esmfgrid, im=IM, jm=JM, _RC)
+      call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
       call MAPL_GridGetCoordinates(esmfgrid, longitudes=lons, latitudes=lats, _RC)
 
       ! Get my internal MAPL_Generic state
@@ -535,12 +536,12 @@ contains
       if (NUM_BANDS /= TOTAL_RAD_BANDS) then
          band_msg = "Total number of radiation bands is inconsistent! " // &
               "NUM_BANDS is not set up correctly for the radiation combination selected: " // &
-              "IRRAD RRTMG: USE_RRTMGP="//merge('T','F',USE_RRTMGP)// &
-              " USE_RRTMG="//merge('T','F',USE_RRTMG)// &
-              " USE_CHOU="//merge('T','F',USE_CHOU)// &
-              "; SOLAR RRTMG: USE_RRTMGP_SORAD="//merge('T','F',USE_RRTMGP_SORAD)// &
-              " USE_RRTMG_SORAD="//merge('T','F',USE_RRTMG_SORAD)// &
-              " USE_CHOU_SORAD="//merge('T','F',USE_CHOU_SORAD)// &
+              "IRRAD RRTMG: USE_RRTMGP=" // merge('T', 'F', USE_RRTMGP) // &
+              " USE_RRTMG=" // merge('T', 'F', USE_RRTMG) // &
+              " USE_CHOU=" // merge('T', 'F', USE_CHOU) // &
+              "; SOLAR RRTMG: USE_RRTMGP_SORAD=" // merge('T', 'F', USE_RRTMGP_SORAD) // &
+              " USE_RRTMG_SORAD=" // merge('T', 'F', USE_RRTMG_SORAD) // &
+              " USE_CHOU_SORAD=" // merge('T', 'F', USE_CHOU_SORAD) // &
               "; please check that your optics tables and NUM_BANDS are correct."
          _FAIL(band_msg)
       end if
@@ -553,13 +554,13 @@ contains
          do ibnd = 1, nbndlw
             band_output(ibnd) = .false.
             if (.not. band_output_supported(ibnd)) cycle
-            write(bb,'(I0.2)') ibnd
-            call MAPL_StateGetPointer(export, ptr2d, 'OLRB'//bb//'RG', _RC)
+            write(bb, '(I0.2)') ibnd
+            call MAPL_StateGetPointer(export, ptr2d, 'OLRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
             end if
-            call MAPL_StateGetPointer(export, ptr2d, 'TBRB'//bb//'RG', _RC)
+            call MAPL_StateGetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
@@ -607,7 +608,7 @@ contains
          call MAPL_GridCompTimerStart(gc, "UPDATE_FLX", _RC)
          call Update_Flx(IM, JM, LM, _RC)
          call MAPL_GridCompTimerStop(gc, "UPDATE_FLX", _RC)
-      endif
+      end if
 
       ! If it is time, refresh internal state.
       lw_alarm_ringing = ESMF_AlarmIsRinging(lw_alarm, _RC)
@@ -616,14 +617,14 @@ contains
          call MAPL_GridCompTimerStart(gc, "LW_DRIVER", _RC)
          call LW_Driver(IM, JM, LM, lats, lons, _RC)
          call MAPL_GridCompTimerStop(gc, "LW_DRIVER", _RC)
-      endif
+      end if
 
       ! Fill exported fluxes based on latest Ts
-      if (called_last==0) then
+      if (called_last == 0) then
          call MAPL_GridCompTimerStart(gc, "UPDATE_FLX", _RC)
          call Update_Flx(IM, JM, LM, _RC)
          call MAPL_GridCompTimerStop(gc, "UPDATE_FLX", _RC)
-      endif
+      end if
 
       _RETURN(_SUCCESS)
 
@@ -660,7 +661,7 @@ contains
 
          !  Locals
 
-         integer :: STATUS, loop_status
+         integer :: status, loop_status
 
          ! local variables
 
@@ -683,7 +684,7 @@ contains
          integer :: LCLDLM ! model level separating low  and middle clouds
 
          integer :: i, j, K, L, YY, DOY, ibinary
-         integer :: N !<<>> MSL
+         integer :: n !<<>> MSL
 
          real, dimension(IM, JM, NS) :: FS ! fractional cover of sub-grid regions
          real, dimension(IM, JM, NS) :: TG ! land or ocean surface temperature
@@ -699,12 +700,12 @@ contains
          ! Local Aerosol Variables
 
          ! 4d: dimensioned (IM,JM,LM,NB_IRRAD)
-         real, allocatable, dimension(:,:,:,:), target :: TAUA, SSAA, ASYA
+         real, allocatable, dimension(:, :, :, :), target :: TAUA, SSAA, ASYA
 
          ! 3d pointer arrays to be associated with several 4d arrays for RRTMGP blocking.
          ! Collapses first two horizontal dimensions of these 4d arrays. OK since the
          ! latter arrays are not MAPL and so can be assumed contiguous.
-         real, dimension(:,:,:), pointer :: TAUA_3d, SSAA_3d, ASYA_3d, CWC_3d, REFF_3d
+         real, dimension(:, :, :), pointer :: TAUA_3d, SSAA_3d, ASYA_3d, CWC_3d, REFF_3d
 
          ! type(C_PTR) :: cptr  ! = c_loc(var), but done implicitly with c_loc below
 
@@ -712,11 +713,11 @@ contains
          integer :: OFFSET
 
          ! AERO state variables
-         type (ESMF_State) :: AERO
-         type (ESMF_Info) :: aero_info
+         type(ESMF_State) :: AERO
+         type(ESMF_Info) :: aero_info
          character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
-         real, pointer, dimension(:,:,:) :: AS_PTR_3D
-         real, allocatable, dimension(:,:,:,:) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
+         real, pointer, dimension(:, :, :) :: AS_PTR_3D
+         real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
          logical :: implements_aerosol_optics
          integer :: band
 
@@ -726,23 +727,23 @@ contains
          logical :: Ts_derivs ! calculate Tsurf derivatives of upward fluxes
          integer :: IJ, LV
 
-         real, allocatable, dimension(:,:) :: FCLD_R
-         real, allocatable, dimension(:,:) :: TLEV_R ! Edge Level temperature
-         real, allocatable, dimension(:,:) :: PLE_R ! Reverse of level pressure
-         real, allocatable, dimension(:,:) :: ZM_R ! Reverse of layer height
-         real, allocatable, dimension(:,:) :: EMISS ! Surface emissivity at 16 RRTMG bands
-         real, allocatable, dimension(:,:) :: CLIQWP ! Cloud liquid water path
-         real, allocatable, dimension(:,:) :: CICEWP ! Cloud ice water path
-         real, allocatable, dimension(:,:) :: RELIQ ! Cloud liquid effective radius
-         real, allocatable, dimension(:,:) :: REICE ! Cloud ice effective radius
-         real, allocatable, dimension(:,:,:) :: TAUAER
-         real, allocatable, dimension(:,:) :: PL_R, T_R, Q_R, O2_R, O3_R
-         real, allocatable, dimension(:,:) :: CO2_R, CH4_R, N2O_R, CFC11_R, CFC12_R, CFC22_R, CCL4_R
+         real, allocatable, dimension(:, :) :: FCLD_R
+         real, allocatable, dimension(:, :) :: TLEV_R ! Edge Level temperature
+         real, allocatable, dimension(:, :) :: PLE_R ! Reverse of level pressure
+         real, allocatable, dimension(:, :) :: ZM_R ! Reverse of layer height
+         real, allocatable, dimension(:, :) :: EMISS ! Surface emissivity at 16 RRTMG bands
+         real, allocatable, dimension(:, :) :: CLIQWP ! Cloud liquid water path
+         real, allocatable, dimension(:, :) :: CICEWP ! Cloud ice water path
+         real, allocatable, dimension(:, :) :: RELIQ ! Cloud liquid effective radius
+         real, allocatable, dimension(:, :) :: REICE ! Cloud ice effective radius
+         real, allocatable, dimension(:, :, :) :: TAUAER
+         real, allocatable, dimension(:, :) :: PL_R, T_R, Q_R, O2_R, O3_R
+         real, allocatable, dimension(:, :) :: CO2_R, CH4_R, N2O_R, CFC11_R, CFC12_R, CFC22_R, CCL4_R
          real, allocatable, dimension(:) :: TSFC
-         real, allocatable, dimension(:,:) :: UFLX, DFLX, UFLXC, DFLXC, DUFLX_DTS, DUFLXC_DTS
-         integer, allocatable, dimension(:,:) :: CLEARCOUNTS
+         real, allocatable, dimension(:, :) :: UFLX, DFLX, UFLXC, DFLXC, DUFLX_DTS, DUFLXC_DTS
+         integer, allocatable, dimension(:, :) :: CLEARCOUNTS
          real, allocatable, dimension(:) :: ALAT
-         real, allocatable, dimension(:,:) :: OLRBRG, DOLRBRG_DTS
+         real, allocatable, dimension(:, :) :: OLRBRG, DOLRBRG_DTS
 
          ! pmn: should we update these?
          real, parameter :: O2 = 0.2090029E+00 ! preexisting
@@ -753,29 +754,29 @@ contains
          ! variables for RRTMGP code
 
          ! conversion factor (see below)
-         real(wp), parameter :: cwp_fac = real(1000./MAPL_GRAV,kind=wp)
+         real(kind=wp), parameter :: cwp_fac = real(1000. / MAPL_GRAV, kind=wp)
 
          ! input arrays: dimensions (ncol, nlay[+1]) [Pa,K]
-         real(wp), dimension(:,:), allocatable :: p_lay, t_lay, dp_wp, cf_wp
-         real(wp), dimension(:,:), allocatable :: p_lev
-         real(wp), dimension(:,:), allocatable, target :: t_lev
+         real(kind=wp), dimension(:, :), allocatable :: p_lay, t_lay, dp_wp, cf_wp
+         real(kind=wp), dimension(:, :), allocatable :: p_lev
+         real(kind=wp), dimension(:, :), allocatable, target :: t_lev
 
          ! inter-layer separations (from mid-points) (ncol,nlay-1) [m]
-         real(wp), dimension(:,:), allocatable :: dzmid
+         real(kind=wp), dimension(:, :), allocatable :: dzmid
 
          ! surface input arrays
-         real(wp), dimension(:), allocatable :: t_sfc
-         real(wp), dimension(:,:), allocatable :: emis_sfc ! first dim is band
+         real(kind=wp), dimension(:), allocatable :: t_sfc
+         real(kind=wp), dimension(:, :), allocatable :: emis_sfc ! first dim is band
 
          ! fluxes:
          ! broadband
-         real(wp), dimension(:,:), allocatable, target :: &
+         real(kind=wp), dimension(:, :), allocatable, target :: &
               flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
               flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
               flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
               flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
          ! byband
-         real(wp), dimension(:,:,:), allocatable, target :: &
+         real(kind=wp), dimension(:, :, :), allocatable, target :: &
               bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
               bnd_flux_up_allsky, bnd_dfupdts_allsky
 
@@ -818,7 +819,7 @@ contains
          ! scratch pointer to satisfy Fortran's rank-remapping rule for the
          ! RATS Edge-array remap below (self-remap alone isn't enough, see
          ! the fuller explanation in Run's own scratch-pointer block)
-         real, pointer, contiguous, dimension(:,:,:,:) :: p4d
+         real, pointer, contiguous, dimension(:, :, :, :) :: p4d
 
          integer, dimension(:), allocatable :: seeds
 
@@ -826,9 +827,9 @@ contains
          real, dimension(:), allocatable :: adl, rdl
 
          ! TEMP ... see below
-         real(wp) :: press_ref_min
-         real(wp) :: temp_ref_min
-         real(wp) :: temp_ref_max, tmax
+         real(kind=wp) :: press_ref_min
+         real(kind=wp) :: temp_ref_min
+         real(kind=wp) :: temp_ref_max, tmax
 
          ! block size for efficient column processing (set from resource file)
          integer :: rrtmgp_blockSize
@@ -836,7 +837,7 @@ contains
          ! For aerosol
          real :: xx, LWT, IWT
          type(ESMF_Time) :: current_time
-         real :: TLEV(LM+1), DP(LM)
+         real :: TLEV(LM + 1), DP(LM)
 
          ! pointers to import
          ! (PLE, T, Q, QL, QI, QR, QS, QG, RI, RL, RR, RS, RG, O3, CH4, N2O, CFC11,
@@ -844,16 +845,17 @@ contains
          ! which declares/fetches them once via the ACG-generated
          ! Irrad_DeclarePointer___.h / Irrad_GetPointer___.h includes)
 
-         real, pointer, dimension(:,:,:) :: CO2_3d => null() ! <<>> MSL
-         real, pointer, dimension(:,:,:) :: tmp_3d => null() ! <<>> MSL
+         real, pointer, dimension(:, :, :) :: CO2_3d => null() ! <<>> MSL
+         real, pointer, dimension(:, :, :) :: tmp_3d => null() ! <<>> MSL
 
          ! pointers to exports
-         real, pointer, dimension(:,:) :: CLDPRS, CLDTMP, CLDTTLW, CLDHILW, CLDMDLW, CLDLOLW, TSREFF, SFCEM, LWS0, DSFDTS
-         real, pointer, dimension(:,:,:) :: TAUIR
+         real, pointer, dimension(:, :) :: CLDPRS, CLDTMP, CLDTTLW, CLDHILW, CLDMDLW, CLDLOLW, TSREFF, SFCEM, LWS0, &
+              DSFDTS
+         real, pointer, dimension(:, :, :) :: TAUIR
 
          ! for compact multi-export handling
-         real, pointer, dimension(:,:) :: ptr2d
-         real, pointer, dimension(:,:,:) :: ptr3d
+         real, pointer, dimension(:, :) :: ptr2d
+         real, pointer, dimension(:, :, :) :: ptr3d
 
          type(StringVector) :: string_vec
          type(StringVectorIterator) :: string_vec_iter
@@ -875,8 +877,8 @@ contains
          ! (fetched once in Run via the ACG-generated Irrad_GetPointer___.h
          !  include and host-associated here; see declarations above)
 
-         PL = 0.5*(PLE(:,:,:UBOUND(PLE,3)-1)+PLE(:,:,LBOUND(PLE,3)+1:))
-         RH = Q/GEOS_QSAT(T,PL,PASCALS=.true.)
+         PL = 0.5 * (PLE(:, :, :UBOUND(PLE, 3) - 1) + PLE(:, :, LBOUND(PLE, 3) + 1:))
+         RH = Q / GEOS_QSAT(T, PL, PASCALS=.true.)
 
          ! make a copy of 'FCLD' so can optionally change it without changing import state
          FCLD = FCLD_IN
@@ -889,14 +891,14 @@ contains
          call MAPL_GridCompGetResource(gc, "CO2", CO2_FIXED, _RC)
 
          ! <<>> MSL
-         if(CO2_FIXED.eq.-2.0) then ! 3D CO2
+         if (CO2_FIXED == -2.0) then ! 3D CO2
             if (USE_CHOU) then ! No 3D CO2 if USE_CHOU
                CO2_FIXED = -1.0
             else
                call MAPL_StateGetPointer(import, CO2_3d, 'CO2', _RC)
                call ESMF_ClockGet(clock, currTIME=current_time, _RC)
-               call ESMF_TimeGet (current_time, YY=YY, DayOfYear=DOY, _RC)
-               CO2_FIXED = GETCO2(YY,DOY)
+               call ESMF_TimeGet(current_time, YY=YY, DayOfYear=DOY, _RC)
+               CO2_FIXED = getco2(YY, DOY)
                ! 'CO2_FIXED' export is only added to the state when nRATS != 0 (see
                ! SetServices); MAPL_StateGetPointer has no NotFoundOK equivalent and
                ! would hard-fail via the RC-verifying macro if the item is missing
@@ -908,15 +910,15 @@ contains
                if (associated(tmp_3d)) then
                   tmp_3d = CO2_FIXED
                   tmp_3d => null()
-               endif
-            endif
-         endif
+               end if
+            end if
+         end if
 
-         if(CO2_FIXED.eq.-1.0) then
+         if (CO2_FIXED == -1.0) then
             call ESMF_ClockGet(clock, currTIME=current_time, _RC)
-            call ESMF_TimeGet (current_time, YY=YY, DayOfYear=DOY, _RC)
-            CO2_FIXED = GETCO2(YY,DOY)
-         endif
+            call ESMF_TimeGet(current_time, YY=YY, DayOfYear=DOY, _RC)
+            CO2_FIXED = getco2(YY, DOY)
+         end if
 
          call MAPL_GridCompGetResource(gc, "PRS_LOW_MID_CLOUDS", PRS_LOW_MID, default=70000., _RC)
          call MAPL_GridCompGetResource(gc, "PRS_MID_HIGH_CLOUDS", PRS_MID_HIGH, default=40000., _RC)
@@ -929,18 +931,18 @@ contains
          ! -- This is done every call to Run(), when it really only needs to be done once
          if (first) then
 
-            nameRATS = ESMF_HConfigAsStringSeq(HCONFIG, keyString='RATS_DIAGNOSTICS', stringLen=128, _RC)
+            nameRATS = ESMF_HConfigAsStringSeq(hconfig, keyString='RATS_DIAGNOSTICS', stringLen=128, _RC)
 
             nRATS = 0 ! Default, no RAT diags
             if (allocated(nameRATS)) nRATS = size(nameRATS)
 
             ! No error thrown. Just go around this if nothing learnable from config.
-            if (nRATS .ne. 0) then ! if the label was found...
+            if (nRATS /= 0) then ! if the label was found...
                ! Only allocate this if needed
-               allocate(TMP_R(IM*JM,LM),_STAT)
-            endif
+               allocate(TMP_R(IM * JM, LM), _STAT)
+            end if
             first = .false. ! Don't repeat this.
-         endif ! first
+         end if ! first
 
          ! Prepare for aerosol optics calculations
 
@@ -956,58 +958,58 @@ contains
          ! For now, use the same emissivity for all bands
 
          do K = 1, 10
-            EG(:,:,1,K)   = EMIS(:,:)
+            EG(:, :, 1, K) = EMIS(:, :)
          end do
 
          ! For now, hardwire vegetation and aerosol parameters
 
-         FS                  = 1.0
-         TG(:,:,1)           = TS
-         TV(:,:,1)           = TS
-         EV                  = 0.0
-         RV                  = 0.0
+         FS = 1.0
+         TG(:, :, 1) = TS
+         TV(:, :, 1) = TS
+         EV = 0.0
+         RV = 0.0
 
          ! Copy cloud constituent properties into contiguous buffers
 
          ! In-cloud water contents
-         CWC (:,:,:,KICE    ) = QI
-         CWC (:,:,:,KLIQUID ) = QL
-         CWC (:,:,:,KRAIN   ) = QR
-         CWC (:,:,:,KSNOW   ) = QS
-         CWC (:,:,:,KGRAUPEL) = QG
+         CWC(:, :, :, KICE) = QI
+         CWC(:, :, :, KLIQUID) = QL
+         CWC(:, :, :, KRAIN) = QR
+         CWC(:, :, :, KSNOW) = QS
+         CWC(:, :, :, KGRAUPEL) = QG
 
          ! Effective radii [microns]
-         REFF(:,:,:,KICE    ) = RI * 1.0e6
-         REFF(:,:,:,KLIQUID ) = RL * 1.0e6
-         REFF(:,:,:,KRAIN   ) = RR * 1.0e6
-         REFF(:,:,:,KSNOW   ) = RS * 1.0e6
-         REFF(:,:,:,KGRAUPEL) = RG * 1.0e6
-         where (RI == MAPL_UNDEF) REFF(:,:,:,KICE    ) = 36.
-         where (RL == MAPL_UNDEF) REFF(:,:,:,KLIQUID ) = 14.
-         where (RR == MAPL_UNDEF) REFF(:,:,:,KRAIN   ) = 50.
-         where (RS == MAPL_UNDEF) REFF(:,:,:,KSNOW   ) = 50.
-         where (RG == MAPL_UNDEF) REFF(:,:,:,KGRAUPEL) = 50.
+         REFF(:, :, :, KICE) = RI * 1.0e6
+         REFF(:, :, :, KLIQUID) = RL * 1.0e6
+         REFF(:, :, :, KRAIN) = RR * 1.0e6
+         REFF(:, :, :, KSNOW) = RS * 1.0e6
+         REFF(:, :, :, KGRAUPEL) = RG * 1.0e6
+         where (RI == MAPL_UNDEF) REFF(:, :, :, KICE) = 36.
+         where (RL == MAPL_UNDEF) REFF(:, :, :, KLIQUID) = 14.
+         where (RR == MAPL_UNDEF) REFF(:, :, :, KRAIN) = 50.
+         where (RS == MAPL_UNDEF) REFF(:, :, :, KSNOW) = 50.
+         where (RG == MAPL_UNDEF) REFF(:, :, :, KGRAUPEL) = 50.
 
          ! Determine the model level separating high-middle and low-middle clouds
 
-         _ASSERT(PRS_MID_HIGH > PREF(1)     , 'mid-high pressure band boundary too high!')
-         _ASSERT(PRS_LOW_MID  > PRS_MID_HIGH, 'pressure band misordering!')
-         _ASSERT(PRS_LOW_MID  < PREF(LM)    , 'low-mid pressure band boundary too low!')
+         _ASSERT(PRS_MID_HIGH > PREF(1), 'mid-high pressure band boundary too high!')
+         _ASSERT(PRS_LOW_MID > PRS_MID_HIGH, 'pressure band misordering!')
+         _ASSERT(PRS_LOW_MID < PREF(LM), 'low-mid pressure band boundary too low!')
 
          ! find mid-high interface level
-         k = 1
-         do while ( PREF(k) < PRS_MID_HIGH )
-            k=k+1
+         K = 1
+         do while (PREF(K) < PRS_MID_HIGH)
+            K = K + 1
          end do
-         LCLDMH = k
+         LCLDMH = K
          ! Guaranteed that LCLDMH > 1 (by first ASSERT above)
          !    and that PREF(LCLDMH) >= PRS_MID_HIGH (by while loop)
 
          ! find low-mid interface level
-         do while ( PREF(k) < PRS_LOW_MID )
-            k=k+1
+         do while (PREF(K) < PRS_LOW_MID)
+            K = K + 1
          end do
-         LCLDLM = k
+         LCLDLM = K
          ! Guaranteed that LCLDLM <= LM (by third assert above)
          !    and that PREF(LCLDLM) >= PRS_LOW_MID (by while loop)
 
@@ -1030,12 +1032,12 @@ contains
 
          ! Allocate per-band aerosol arrays
 
-         allocate (TAUA(IM,JM,LM,NB_IRRAD),_STAT)
-         allocate (SSAA(IM,JM,LM,NB_IRRAD),_STAT)
-         allocate (ASYA(IM,JM,LM,NB_IRRAD),_STAT)
+         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
 
          ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
-         NA   = 0
+         NA = 0
 
          TAUA = 0.
          SSAA = 0.
@@ -1073,9 +1075,9 @@ contains
             end if
 
             ! allocate memory for total aerosol ext, ssa and asy at all solar bands
-            allocate(AEROSOL_EXT(IM,JM,LM,NB_IRRAD), _STAT)
-            allocate(AEROSOL_SSA(IM,JM,LM,NB_IRRAD), _STAT)
-            allocate(AEROSOL_ASY(IM,JM,LM,NB_IRRAD), _STAT)
+            allocate(AEROSOL_EXT(IM, JM, LM, NB_IRRAD), _STAT)
+            allocate(AEROSOL_SSA(IM, JM, LM, NB_IRRAD), _STAT)
+            allocate(AEROSOL_ASY(IM, JM, LM, NB_IRRAD), _STAT)
 
             AEROSOL_EXT = 0.
             AEROSOL_SSA = 0.
@@ -1083,7 +1085,7 @@ contains
 
             ! compute aerosol optics at all solar bands
             IR_BANDS: do band = 1, NB_IRRAD
-               call ESMF_InfoSet(aero_info, key='band_for_aerosol_optics', value=(OFFSET+band), _RC)
+               call ESMF_InfoSet(aero_info, key='band_for_aerosol_optics', value=(OFFSET + band), _RC)
 
                ! execute the aero provider's optics method
                call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
@@ -1094,7 +1096,7 @@ contains
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) then
-                     AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
+                     AEROSOL_EXT(:, :, :, band) = MAX(AS_PTR_3D, 0.0)
                   end if
                end if
 
@@ -1104,7 +1106,7 @@ contains
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) then
-                     AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
+                     AEROSOL_SSA(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), SSA_MAX)
                   end if
                end if
 
@@ -1114,7 +1116,7 @@ contains
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) then
-                     AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
+                     AEROSOL_ASY(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), ASY_MAX)
                   end if
                end if
             end do IR_BANDS
@@ -1145,22 +1147,22 @@ contains
             ! except O3, which must be in mass mixing ratio.
 
             call MAPL_GridCompTimerStart(gc, "IRRAD_RUN", _RC)
-            call IRRAD( IM*JM, LM,       PLE,                           &
-                 T,        Q,      O3,    TS,     CO2_FIXED,                &
-                 TRACE,    N2O,   CH4,    CFC11,     CFC12, HCFC22,         &
-                 CWC,    FCLD,  LCLDMH, LCLDLM,    REFF,                    &
-                 NS,       FS,     TG,    EG,     TV,        EV,    RV,     &
-                 NA, NB_CHOU, TAUA, SSAA, ASYA,                             &
-                 FLXU_INT,  FLCU_INT, FLAU_INT, FLXAU_INT,                  &
-                 FLXD_INT,  FLCD_INT, FLAD_INT, FLXAD_INT,                  &
-                 DFDTS, SFCEM_INT, TAUDIAG                                  )
+            call IRRAD(IM * JM, LM, PLE, &
+                 T, Q, O3, TS, CO2_FIXED, &
+                 TRACE, N2O, CH4, CFC11, CFC12, HCFC22, &
+                 CWC, FCLD, LCLDMH, LCLDLM, REFF, &
+                 NS, FS, TG, EG, TV, EV, RV, &
+                 NA, NB_CHOU, TAUA, SSAA, ASYA, &
+                 FLXU_INT, FLCU_INT, FLAU_INT, FLXAU_INT, &
+                 FLXD_INT, FLCD_INT, FLAD_INT, FLXAD_INT, &
+                 DFDTS, SFCEM_INT, TAUDIAG)
             call MAPL_GridCompTimerStop(gc, "IRRAD_RUN", _RC)
 
             ! pmn:
             ! Chou-Suarez does not provide these derivatives
             ! so clear is set to zero, no-aerosol to aerosol
             DFDTSC = 0.
-            DFDTSNA  = DFDTS
+            DFDTSNA = DFDTS
             DFDTSCNA = DFDTSC
 
             call MAPL_GridCompTimerStop(gc, "IRRAD", _RC)
@@ -1170,60 +1172,56 @@ contains
             call MAPL_GridCompTimerStart(gc, "RRTMGP", _RC)
 
             ! columns are independent so collapse horizontal to 1D
-            ncol = IM*JM
+            ncol = IM * JM
 
             ! absorbing gas names
             error_msg = gas_concs%init([character(3) :: &
-                 'h2o','co2','o3','n2o','co','ch4','o2','n2'])
-            TEST_(error_msg)
+                 'h2o', 'co2', 'o3', 'n2o', 'co', 'ch4', 'o2', 'n2'])
+TEST_(error_msg)
 
-            if (associated(  CO2_3d)) &
-                 allocate(CO2_R(IM*JM,LM),_STAT)
-            allocate(  Q_R(IM*JM,LM),_STAT)
-            allocate( O3_R(IM*JM,LM),_STAT)
-            allocate(N2O_R(IM*JM,LM),_STAT)
-            allocate(CH4_R(IM*JM,LM),_STAT)
+            if (associated(CO2_3d)) allocate(CO2_R(IM * JM, LM), _STAT)
+            allocate(Q_R(IM * JM, LM), _STAT)
+            allocate(O3_R(IM * JM, LM), _STAT)
+            allocate(N2O_R(IM * JM, LM), _STAT)
+            allocate(CH4_R(IM * JM, LM), _STAT)
 
-            if (associated(  CO2_3d)) &
-                 CO2_R = reshape( CO2_3d                          ,(/ncol,LM/))
-            Q_R = reshape( Q/(1.-Q)*(MAPL_AIRMW/MAPL_H2OMW),(/ncol,LM/))
-            O3_R = reshape( O3      *(MAPL_AIRMW/MAPL_O3MW ),(/ncol,LM/))
-            N2O_R = reshape( N2O                             ,(/ncol,LM/))
-            CH4_R = reshape( CH4                             ,(/ncol,LM/))
+            if (associated(CO2_3d)) CO2_R = reshape(CO2_3d, [ncol, LM])
+            Q_R = reshape(Q / (1. - Q) * (MAPL_AIRMW / MAPL_H2OMW), [ncol, LM])
+            O3_R = reshape(O3 * (MAPL_AIRMW / MAPL_O3MW), [ncol, LM])
+            N2O_R = reshape(N2O, [ncol, LM])
+            CH4_R = reshape(CH4, [ncol, LM])
 
             ! Clean up negatives
-            if (associated(  CO2_3d)) &
-                 where ( CO2_R < 0.) CO2_R = 0.
-            where (   Q_R < 0.)   Q_R = 0.
-            where (  O3_R < 0.)  O3_R = 0.
-            where ( N2O_R < 0.) N2O_R = 0.
-            where ( CH4_R < 0.) CH4_R = 0.
+            if (associated(CO2_3d)) where (CO2_R < 0.) CO2_R = 0.
+            where (Q_R < 0.) Q_R = 0.
+            where (O3_R < 0.) O3_R = 0.
+            where (N2O_R < 0.) N2O_R = 0.
+            where (CH4_R < 0.) CH4_R = 0.
 
             ! load gas concentrations (volume mixing ratios)
             ! "constant" gases
-            TEST_(gas_concs%set_vmr('n2' , real(N2 ,kind=wp)))
-            TEST_(gas_concs%set_vmr('o2' , real(O2 ,kind=wp)))
-            if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
-            TEST_(gas_concs%set_vmr('co' , real(CO ,kind=wp)))
+TEST_(gas_concs%set_vmr('n2', real(N2, kind=wp)))
+TEST_(gas_concs%set_vmr('o2', real(O2, kind=wp)))
+            if (.not. associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED, kind=wp))) ! <<>> MSL
+TEST_(gas_concs%set_vmr('co', real(CO, kind=wp)))
             ! variable gases
             ! (ozone converted from mass mixing ratio, water vapor from specific humidity)
-            if (associated(  CO2_3d)) then
-               TEST_(gas_concs%set_vmr('co2', real(CO2_R,kind=wp)))
+            if (associated(CO2_3d)) then
+TEST_(gas_concs%set_vmr('co2', real(CO2_R, kind=wp)))
             else
-               TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED,kind=wp))) ! <<>> MSL
-            endif
-            TEST_(gas_concs%set_vmr('h2o', real(  Q_R,kind=wp)))
-            TEST_(gas_concs%set_vmr('o3' , real( O3_R,kind=wp)))
-            TEST_(gas_concs%set_vmr('n2o', real(N2O_R,kind=wp)))
-            TEST_(gas_concs%set_vmr('ch4', real(CH4_R,kind=wp)))
-            if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d  ,(/ncol,LM/)),kind=wp))) !<<>> MSL
+TEST_(gas_concs%set_vmr('co2', real(CO2_FIXED, kind=wp))) ! <<>> MSL
+            end if
+TEST_(gas_concs%set_vmr('h2o', real(Q_R, kind=wp)))
+TEST_(gas_concs%set_vmr('o3', real(O3_R, kind=wp)))
+TEST_(gas_concs%set_vmr('n2o', real(N2O_R, kind=wp)))
+TEST_(gas_concs%set_vmr('ch4', real(CH4_R, kind=wp)))
+            if (associated(CO2_3d)) TEST_(gas_concs%set_vmr('co2', real(reshape(CO2_3d, [ncol, LM]), kind=wp))) !<<>> MSL
 
-            if (associated(  CO2_3d)) &
-                 deallocate( CO2_R,_STAT)
-            deallocate(   Q_R,_STAT)
-            deallocate(  O3_R,_STAT)
-            deallocate( N2O_R,_STAT)
-            deallocate( CH4_R,_STAT)
+            if (associated(CO2_3d)) deallocate(CO2_R, _STAT)
+            deallocate(Q_R, _STAT)
+            deallocate(O3_R, _STAT)
+            deallocate(N2O_R, _STAT)
+            deallocate(CH4_R, _STAT)
 
             ! access RRTMGP internal state from the gc
             _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
@@ -1236,10 +1234,10 @@ contains
                call load_and_init(rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
                call MAPL_GridCompTimerStop(gc, "RRTMGP_IO_GAS", _RC)
                if (.not. rrtmgp_state%k_dist%source_is_internal()) then
-                  TEST_("RRTMGP-LW: does not seem to be LW")
-               endif
+TEST_("RRTMGP-LW: does not seem to be LW")
+               end if
                rrtmgp_state%initialized = .true.
-            endif
+            end if
 
             ! access by shorter name
             k_dist => rrtmgp_state%k_dist
@@ -1262,16 +1260,16 @@ contains
             ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
             ! allocate input arrays
-            allocate(t_sfc(ncol), emis_sfc(nbnd,ncol), _STAT)
-            allocate(p_lay(ncol,LM), t_lay(ncol,LM), dp_wp(ncol,LM), cf_wp(ncol,LM), _STAT)
-            allocate(p_lev(ncol,LM+1), t_lev(ncol,LM+1), _STAT)
-            allocate(dzmid(ncol,LM-1), _STAT)
+            allocate(t_sfc(ncol), emis_sfc(nbnd, ncol), _STAT)
+            allocate(p_lay(ncol, LM), t_lay(ncol, LM), dp_wp(ncol, LM), cf_wp(ncol, LM), _STAT)
+            allocate(p_lev(ncol, LM + 1), t_lev(ncol, LM + 1), _STAT)
+            allocate(dzmid(ncol, LM - 1), _STAT)
 
             ! load input arrays ...
             ! surface properties
             ! for now, use the same emissivity for all bands
-            t_sfc    = real(       reshape(TS  ,(/ncol/))        ,kind=wp)
-            emis_sfc = real(spread(reshape(EMIS,(/ncol/)),1,nbnd),kind=wp)
+            t_sfc = real(reshape(TS, [ncol]), kind=wp)
+            emis_sfc = real(spread(reshape(EMIS, [ncol]), 1, nbnd), kind=wp)
 
             ! Currently k_dist%temp_ref_max = 355K ~ 82C, but GEOS-5 seems to
             ! sometimes exceed the maximum temperature. See more comments under
@@ -1281,10 +1279,10 @@ contains
             where (t_sfc > temp_ref_max) t_sfc = temp_ref_max
 
             ! basic profiles
-            p_lay = real(reshape(PL  ,(/ncol,LM  /)), kind=wp)
-            t_lay = real(reshape(T   ,(/ncol,LM  /)), kind=wp)
-            p_lev = real(reshape(PLE ,(/ncol,LM+1/)), kind=wp)
-            cf_wp = real(reshape(FCLD,(/ncol,LM  /)), kind=wp)
+            p_lay = real(reshape(PL, [ncol, LM ]), kind=wp)
+            t_lay = real(reshape(T, [ncol, LM ]), kind=wp)
+            p_lev = real(reshape(PLE, [ncol, LM + 1]), kind=wp)
+            cf_wp = real(reshape(FCLD, [ncol, LM ]), kind=wp)
 
             ! RRTMGP's rte_lw takes a vertical ordering flag
             ! (no need to flip columns as with RRTMG)
@@ -1294,14 +1292,14 @@ contains
             ! layer pressure thicknesses used for cloud water path calculations
             ! (do before any KLUGE to top pressure so optical paths wont be affected)
             ! (also better to use these unKLUGED pressure intervals in t_lev calculation)
-            dp_wp = p_lev(:,2:LM+1) - p_lev(:,1:LM)
+            dp_wp = p_lev(:, 2:LM + 1) - p_lev(:, 1:LM)
 
             ! Because currently k_dist%press_ref_min ~ 1.005 > GEOS-5 ptop of 1.0 Pa.
             ! Find better solution, perhaps getting AER to add a higher top.
             press_ref_min = k_dist%get_press_min()
-            where (p_lev(:,1) < press_ref_min) p_lev(:,1) = press_ref_min
+            where (p_lev(:, 1) < press_ref_min) p_lev(:, 1) = press_ref_min
             ! make sure no pressure ordering issues were created
-            _ASSERT(all(p_lev(:,1) < p_lay(:,1)), 'pressure kluge causes misordering')
+            _ASSERT(all(p_lev(:, 1) < p_lay(:, 1)), 'pressure kluge causes misordering')
 
             ! pmn: temperature KLUGE
             ! Find better solution, perhaps getting AER to produce a table with a
@@ -1322,13 +1320,15 @@ contains
             ! dzmid(k) is separation [m] between midpoints of layers k and k+1 (sign not important, positive
             !   here). dz ~ RT/g x dp/p by hydrostatic eqn and ideal gas eqn. The jump from LAYER k to k+1
             !   is centered on LEVEL k+1 since the LEVEL indices are one-based.
-            do k = 1,LM-1
+            do K = 1, LM - 1
                ! t_lev interpolated between neighboring t_lay
-               t_lev(:,k+1) = (t_lay(:,k) * dp_wp(:,k+1) + t_lay(:,k+1) * dp_wp(:,k)) / (dp_wp(:,k+1) + dp_wp(:,k))
-               dzmid(:,k) = t_lev(:,k+1) * real(MAPL_RGAS/MAPL_GRAV,kind=wp) * (p_lay(:,k+1) - p_lay(:,k)) / p_lev(:,k+1)
+               t_lev(:, K + 1) = (t_lay(:, K) * dp_wp(:, K + 1) + t_lay(:, K + 1) * dp_wp(:, K)) &
+                    / (dp_wp(:, K + 1) + dp_wp(:, K))
+               dzmid(:, K) = t_lev(:, K + 1) * real(MAPL_RGAS / MAPL_GRAV, kind=wp) * (p_lay(:, K + 1) - p_lay(:, K)) &
+                    / p_lev(:, K + 1)
             end do
-            t_lev(:,1) = t_lev(:,2)                              ! assume isotropic at TOA
-            t_lev(:,LM+1) = real(reshape(TS,(/ncol/)),kind=wp)  ! ~surface air temperature
+            t_lev(:, 1) = t_lev(:, 2) ! assume isotropic at TOA
+            t_lev(:, LM + 1) = real(reshape(TS, [ncol]), kind=wp) ! ~surface air temperature
 
             ! =================================================================
             ! for efficiency sake, we try to calculate only what we export ...
@@ -1341,9 +1341,9 @@ contains
             call string_vec%push_back('FLAD')
             call string_vec%push_back('FLAU')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr3d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr3d, string_pointer, _RC)
                export_clrnoa = (export_clrnoa .or. associated(ptr3d))
                call string_vec_iter%next()
             end do
@@ -1353,9 +1353,9 @@ contains
             call string_vec%push_back('FLNSA')
             call string_vec%push_back('LAS')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr2d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr2d, string_pointer, _RC)
                export_clrnoa = (export_clrnoa .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -1368,9 +1368,9 @@ contains
             call string_vec%push_back('FLCD')
             call string_vec%push_back('FLCU')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr3d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr3d, string_pointer, _RC)
                export_clrsky = (export_clrsky .or. associated(ptr3d))
                call string_vec_iter%next()
             end do
@@ -1382,9 +1382,9 @@ contains
             call string_vec%push_back('LCS')
             call string_vec%push_back('LCSC5')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr2d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr2d, string_pointer, _RC)
                export_clrsky = (export_clrsky .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -1397,9 +1397,9 @@ contains
             call string_vec%push_back('FLXAD')
             call string_vec%push_back('FLXAU')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr3d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr3d, string_pointer, _RC)
                export_allnoa = (export_allnoa .or. associated(ptr3d))
                call string_vec_iter%next()
             end do
@@ -1409,9 +1409,9 @@ contains
             call string_vec%push_back('FLNSNA')
             call string_vec%push_back('LWSA')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr2d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr2d, string_pointer, _RC)
                export_allnoa = (export_allnoa .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -1424,9 +1424,9 @@ contains
             call string_vec%push_back('FLXD')
             call string_vec%push_back('FLXU')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr3d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr3d, string_pointer, _RC)
                export_allsky = (export_allsky .or. associated(ptr3d))
                call string_vec_iter%next()
             end do
@@ -1437,9 +1437,9 @@ contains
             call string_vec%push_back('FLNS')
             call string_vec%push_back('LWS')
             string_vec_iter = string_vec%begin()
-            do while ( string_vec_iter /= string_vec%end() )
+            do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_StateGetPointer( export, ptr2d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr2d, string_pointer, _RC)
                export_allsky = (export_allsky .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -1449,15 +1449,15 @@ contains
 
             ! which fluxes to calculate?
             ! the clean fluxes are also used for "dirty" fluxes if no aerosols
-            calc_clrnoa = (export_clrnoa .or. (export_clrsky .and. .not.implements_aerosol_optics))
-            calc_allnoa = (export_allnoa .or. (export_allsky .and. .not.implements_aerosol_optics))
-            calc_clrsky =  export_clrsky
-            calc_allsky =  export_allsky
+            calc_clrnoa = (export_clrnoa .or. (export_clrsky .and. .not. implements_aerosol_optics))
+            calc_allnoa = (export_allnoa .or. (export_allsky .and. .not. implements_aerosol_optics))
+            calc_clrsky = export_clrsky
+            calc_allsky = export_allsky
 
             ! handle allnoa -> allsky band output when aerosols not implemented
             !   (band output currently only available for all-sky case)
             allnoa_to_allsky_band_xfer_needed = &
-                 export_allsky .and. any_band_output .and. .not.implements_aerosol_optics
+                 export_allsky .and. any_band_output .and. .not. implements_aerosol_optics
 
             ! do we actually need dirty optical properties?
             need_dirty_optical_props = &
@@ -1468,31 +1468,31 @@ contains
 
             ! allocation of output arrays
             if (calc_clrnoa) then
-               allocate(flux_up_clrnoa(ncol,LM+1), &
-                    flux_dn_clrnoa(ncol,LM+1), &
-                    dfupdts_clrnoa(ncol,LM+1), _STAT)
+               allocate(flux_up_clrnoa(ncol, LM + 1), &
+                    flux_dn_clrnoa(ncol, LM + 1), &
+                    dfupdts_clrnoa(ncol, LM + 1), _STAT)
             end if
             if (calc_allnoa) then
-               allocate(flux_up_allnoa(ncol,LM+1), &
-                    flux_dn_allnoa(ncol,LM+1), &
-                    dfupdts_allnoa(ncol,LM+1), _STAT)
+               allocate(flux_up_allnoa(ncol, LM + 1), &
+                    flux_dn_allnoa(ncol, LM + 1), &
+                    dfupdts_allnoa(ncol, LM + 1), _STAT)
                if (allnoa_to_allsky_band_xfer_needed) then
-                  allocate(bnd_flux_up_allnoa(ncol,LM+1,nbnd), &
-                       bnd_dfupdts_allnoa(ncol,LM+1,nbnd), _STAT)
+                  allocate(bnd_flux_up_allnoa(ncol, LM + 1, nbnd), &
+                       bnd_dfupdts_allnoa(ncol, LM + 1, nbnd), _STAT)
                end if
             end if
             if (calc_clrsky) then
-               allocate(flux_up_clrsky(ncol,LM+1), &
-                    flux_dn_clrsky(ncol,LM+1), &
-                    dfupdts_clrsky(ncol,LM+1), _STAT)
+               allocate(flux_up_clrsky(ncol, LM + 1), &
+                    flux_dn_clrsky(ncol, LM + 1), &
+                    dfupdts_clrsky(ncol, LM + 1), _STAT)
             end if
             if (calc_allsky) then
-               allocate(flux_up_allsky(ncol,LM+1), &
-                    flux_dn_allsky(ncol,LM+1), &
-                    dfupdts_allsky(ncol,LM+1), _STAT)
+               allocate(flux_up_allsky(ncol, LM + 1), &
+                    flux_dn_allsky(ncol, LM + 1), &
+                    dfupdts_allsky(ncol, LM + 1), _STAT)
                if (any_band_output) then
-                  allocate(bnd_flux_up_allsky(ncol,LM+1,nbnd), &
-                       bnd_dfupdts_allsky(ncol,LM+1,nbnd), _STAT)
+                  allocate(bnd_flux_up_allsky(ncol, LM + 1, nbnd), &
+                       bnd_dfupdts_allsky(ncol, LM + 1, nbnd), _STAT)
                end if
             end if
 
@@ -1515,11 +1515,11 @@ contains
 
             ! LW uses ty_optical_props_2str (see PROCESS_RRTMGP_LW_BLOCK).
             ! nga, nmom, u2s are determined here once and passed to each block call.
-            nga  = 1    ! used when not u2s; must be >= 1
-            nmom = 2    ! used only if nstr; must be >= 2
-            u2s  = .false.
+            nga = 1  ! used when not u2s; must be >= 1
+            nmom = 2 ! used only if nstr; must be >= 2
+            u2s = .false.
             call MAPL_GridCompGetResource(gc, "RRTMGP_LW_USE_2STREAM", u2s, default=u2s, _RC)
-            _ASSERT(.not.u2s,'lw_solver_2stream() does not currently support Jacobians')
+            _ASSERT(.not. u2s, 'lw_solver_2stream() does not currently support Jacobians')
             call MAPL_GridCompGetResource(gc, "RRTMGP_LW_N_GAUSS_ANGLES", nga, default=nga, _RC)
 
             ! get cloud optical properties (band-only)
@@ -1534,12 +1534,12 @@ contains
                call MAPL_GridCompGetResource(gc, "RRTMGP_CLOUD_OPTICS_TYPE_LW", cloud_optics_type, &
                     default='LUT', _RC)
                call MAPL_GridCompTimerStart(gc, "RRTMGP_IO_CLOUDS", _RC)
-               if (trim(cloud_optics_type)=='LUT') then
-                  call load_cld_lutcoeff (cloud_optics, cloud_optics_file)
-               elseif (trim(cloud_optics_type)=='PADE') then
+               if (trim(cloud_optics_type) == 'LUT') then
+                  call load_cld_lutcoeff(cloud_optics, cloud_optics_file)
+               elseif (trim(cloud_optics_type) == 'PADE') then
                   call load_cld_padecoeff(cloud_optics, cloud_optics_file)
                else
-                  TEST_('unknown cloud_optics_type: '//trim(cloud_optics_file))
+TEST_('unknown cloud_optics_type: ' // trim(cloud_optics_file))
                end if
                call MAPL_GridCompTimerStop(gc, "RRTMGP_IO_CLOUDS", _RC)
 
@@ -1547,7 +1547,7 @@ contains
                ! icergh: 1 = none, 2 = medium, 3 = high
                call MAPL_GridCompGetResource(gc, "RRTMGP_ICE_ROUGHNESS_LW", icergh, &
                     default=2, _RC)
-               TEST_(cloud_optics%set_ice_roughness(icergh))
+TEST_(cloud_optics%set_ice_roughness(icergh))
 
                ! cloud optics file is currently two-stream; cloud_props_bnd/gpt
                ! are allocated/init'd per-block inside PROCESS_RRTMGP_LW_BLOCK.
@@ -1567,14 +1567,14 @@ contains
                   cond_inhomo = condensate_inhomogeneous()
 
                   ! Compute decorrelation length scales [m]
-                  allocate(adl(ncol),_STAT)
-                  call correlation_length_cloud_fraction(ncol, ncol, doy, reshape(lats,(/ncol/)), adl)
+                  allocate(adl(ncol), _STAT)
+                  call correlation_length_cloud_fraction(ncol, ncol, DOY, reshape(lats, [ncol]), adl)
                   if (cond_inhomo) then
-                     allocate(rdl(ncol),_STAT)
-                     call correlation_length_condensate(ncol, ncol, doy, reshape(lats,(/ncol/)), rdl)
-                  endif
+                     allocate(rdl(ncol), _STAT)
+                     call correlation_length_condensate(ncol, ncol, DOY, reshape(lats, [ncol]), rdl)
+                  end if
 
-               endif
+               end if
 
                ! ===============================================================================
                ! Random number setup:
@@ -1624,18 +1624,22 @@ contains
                ! LM * ngpt <~ 132 * 256 = 33,792 < 2^16 = 65,536
                ! ===============================================================================
 
-               allocate(seeds(3),_STAT) ! 2-word key plus word1 of counter
+               allocate(seeds(3), _STAT) ! 2-word key plus word1 of counter
 
                ! seed(1), the column part (word1) of key is set later
                ! but get required global indicies of local rectangular grid here
-               call MAPL_GridGetGlobalCellCountPerDim(ESMFGRID, globalCellCountPerDim=Gdims, _RC)
-               IM_World = Gdims(1); JM_World = Gdims(2)
-               call MAPL_GridGet(ESMFGRID, interior=interior, _RC)
-               iBeg = interior(1); iEnd = interior(2); jBeg = interior(3); jEnd = interior(4)
+               call MAPL_GridGetGlobalCellCountPerDim(esmfgrid, globalCellCountPerDim=Gdims, _RC)
+               IM_World = Gdims(1)
+               JM_World = Gdims(2)
+               call MAPL_GridGet(esmfgrid, interior=interior, _RC)
+               iBeg = interior(1)
+               iEnd = interior(2)
+               jBeg = interior(3)
+               jEnd = interior(4)
 
                ! get time part (word2) of key
                call ESMF_ClockGet(clock, currTIME=current_time, _RC)
-               call ESMF_TimeSet (reference_time, yy=2000, mm=1, dd=1, _RC)
+               call ESMF_TimeSet(reference_time, YY=2000, mm=1, dd=1, _RC)
                ! call ESMF_AlarmGet(alarm, RINGINTERVAL=refresh_interval, _RC)
                call ESMF_ClockGet(clock, timeStep=refresh_interval, _RC)
                seeds(2) = int((current_time - reference_time) / refresh_interval)
@@ -1644,8 +1648,8 @@ contains
                seeds(3) = 0
 
                ! get a view of cloud inputs with collapsed horizontal dimensions
-               call c_f_pointer(c_loc(CWC), CWC_3d, [IM*JM,LM,5])
-               call c_f_pointer(c_loc(REFF),REFF_3d,[IM*JM,LM,5])
+               call c_f_pointer(c_loc(CWC), CWC_3d, [IM * JM, LM, 5])
+               call c_f_pointer(c_loc(REFF), REFF_3d, [IM * JM, LM, 5])
 
             end if ! need_cloud_optical_props
 
@@ -1656,9 +1660,9 @@ contains
                ! aer_props alloc+init handled per-block in PROCESS_RRTMGP_LW_BLOCK.
                ! get a view of aerosol system inputs with collapsed horizontal dimensions
                ! (aer_props is always ty_optical_props_2str for LW)
-               call c_f_pointer(c_loc(TAUA),TAUA_3d,[IM*JM,LM,NB_IRRAD])
-               call c_f_pointer(c_loc(SSAA),SSAA_3d,[IM*JM,LM,NB_IRRAD])
-               call c_f_pointer(c_loc(ASYA),ASYA_3d,[IM*JM,LM,NB_IRRAD])
+               call c_f_pointer(c_loc(TAUA), TAUA_3d, [IM * JM, LM, NB_IRRAD])
+               call c_f_pointer(c_loc(SSAA), SSAA_3d, [IM * JM, LM, NB_IRRAD])
+               call c_f_pointer(c_loc(ASYA), ASYA_3d, [IM * JM, LM, NB_IRRAD])
 
             end if
 
@@ -1670,7 +1674,7 @@ contains
             !-------------------------------------------------------!
 
             call MAPL_GridCompGetResource(gc, "RRTMGP_LW_BLOCKSIZE", rrtmgp_blockSize, default=4, _RC)
-            _ASSERT(rrtmgp_blockSize >= 1,'invalid RRTMGP_LW_BLOCKSIZE')
+            _ASSERT(rrtmgp_blockSize >= 1, 'invalid RRTMGP_LW_BLOCKSIZE')
 
             ! Total number of blocks including any final partial block
             nBlocks = (ncol + rrtmgp_blockSize - 1) / rrtmgp_blockSize
@@ -1712,17 +1716,17 @@ contains
                     bnd_flux_up_allsky=bnd_flux_up_allsky, &
                     bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
                     rc=status)
-               if (STATUS /= ESMF_SUCCESS) then
+               if (status /= ESMF_SUCCESS) then
                   !$OMP ATOMIC WRITE
-                  loop_status = STATUS
+                  loop_status = status
                end if
             end do ! loop over blocks
             !$OMP END PARALLEL DO
             _VERIFY(loop_status)
 
             ! tidy up
-            if (need_dirty_optical_props) nullify(TAUA_3d,SSAA_3d,ASYA_3d)
-            if (need_cloud_optical_props) nullify(CWC_3d,REFF_3d)
+            if (need_dirty_optical_props) nullify(TAUA_3d, SSAA_3d, ASYA_3d)
+            if (need_cloud_optical_props) nullify(CWC_3d, REFF_3d)
 
             call MAPL_GridCompTimerStart(gc, "RRTMGP_POST", _RC)
 
@@ -1730,58 +1734,58 @@ contains
             ! note: the upward fluxes must be NEGATED for the downward +ve conventionS
             ! likewise, the DFDTS* are the derivatives of the NEGATED upward fluxes wrt TS
             if (export_clrnoa) then
-               FLAU_INT = real(reshape(-flux_up_clrnoa, (/IM,JM,LM+1/)))
-               FLAD_INT = real(reshape( flux_dn_clrnoa, (/IM,JM,LM+1/)))
-               DFDTSCNA = real(reshape(-dfupdts_clrnoa, (/IM,JM,LM+1/)))
+               FLAU_INT = real(reshape(-flux_up_clrnoa, [IM, JM, LM + 1]))
+               FLAD_INT = real(reshape(flux_dn_clrnoa, [IM, JM, LM + 1]))
+               DFDTSCNA = real(reshape(-dfupdts_clrnoa, [IM, JM, LM + 1]))
             end if
             if (export_allnoa) then
-               FLXAU_INT = real(reshape(-flux_up_allnoa, (/IM,JM,LM+1/)))
-               FLXAD_INT = real(reshape( flux_dn_allnoa, (/IM,JM,LM+1/)))
-               DFDTSNA   = real(reshape(-dfupdts_allnoa, (/IM,JM,LM+1/)))
+               FLXAU_INT = real(reshape(-flux_up_allnoa, [IM, JM, LM + 1]))
+               FLXAD_INT = real(reshape(flux_dn_allnoa, [IM, JM, LM + 1]))
+               DFDTSNA = real(reshape(-dfupdts_allnoa, [IM, JM, LM + 1]))
             end if
             if (export_clrsky) then
-               FLCU_INT = real(reshape(-flux_up_clrsky, (/IM,JM,LM+1/)))
-               FLCD_INT = real(reshape( flux_dn_clrsky, (/IM,JM,LM+1/)))
-               DFDTSC   = real(reshape(-dfupdts_clrsky, (/IM,JM,LM+1/)))
+               FLCU_INT = real(reshape(-flux_up_clrsky, [IM, JM, LM + 1]))
+               FLCD_INT = real(reshape(flux_dn_clrsky, [IM, JM, LM + 1]))
+               DFDTSC = real(reshape(-dfupdts_clrsky, [IM, JM, LM + 1]))
             end if
             if (export_allsky) then
-               FLXU_INT = real(reshape(-flux_up_allsky, (/IM,JM,LM+1/)))
-               FLXD_INT = real(reshape( flux_dn_allsky, (/IM,JM,LM+1/)))
-               DFDTS    = real(reshape(-dfupdts_allsky, (/IM,JM,LM+1/)))
+               FLXU_INT = real(reshape(-flux_up_allsky, [IM, JM, LM + 1]))
+               FLXD_INT = real(reshape(flux_dn_allsky, [IM, JM, LM + 1]))
+               DFDTS = real(reshape(-dfupdts_allsky, [IM, JM, LM + 1]))
             end if
 
             !mjs: Corrected emitted at the surface to remove reflected
             !     from upward. Note that emiss is the same for all bands,
             !     so we use band 1 for the total flux.
             SFCEM_INT = real(reshape( &
-                 -flux_up_allsky(:,LM+1) + flux_dn_allsky(:,LM+1) * (1._wp - emis_sfc(1,:)), &
-                 (/IM,JM/)))
+                 -flux_up_allsky(:, LM + 1) + flux_dn_allsky(:, LM + 1) * (1._wp - emis_sfc(1, :)), &
+                 [IM, JM]))
 
             ! band OLR and Tsfc Jacobian
             ! These are direct internals and do not need the above negation for upward fluxes
             if (export_allsky) then
-               do ib = 1,nbnd
-                  if (band_output(ib)) then
-                     write(bb,'(I0.2)') ib
-                     call MAPL_StateGetPointer(internal, ptr2d, 'OLRB'//bb//'RG', _RC)
-                     ptr2d = real(reshape(bnd_flux_up_allsky(:,1,ib), [IM,JM]))
-                     call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB'//bb//'RGDT', _RC)
-                     ptr2d = real(reshape(bnd_dfupdts_allsky(:,1,ib), [IM,JM]))
+               do IB = 1, nbnd
+                  if (band_output(IB)) then
+                     write(bb, '(I0.2)') IB
+                     call MAPL_StateGetPointer(internal, ptr2d, 'OLRB' // bb // 'RG', _RC)
+                     ptr2d = real(reshape(bnd_flux_up_allsky(:, 1, IB), [IM, JM]))
+                     call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB' // bb // 'RGDT', _RC)
+                     ptr2d = real(reshape(bnd_dfupdts_allsky(:, 1, IB), [IM, JM]))
                   end if
                end do
             end if
 
             ! clean up
-            deallocate(t_sfc,emis_sfc,_STAT)
-            deallocate(p_lay,t_lay,p_lev,t_lev,dp_wp,cf_wp,dzmid,_STAT)
+            deallocate(t_sfc, emis_sfc, _STAT)
+            deallocate(p_lay, t_lay, p_lev, t_lev, dp_wp, cf_wp, dzmid, _STAT)
             if (need_cloud_optical_props) then
-               deallocate(seeds,_STAT)
+               deallocate(seeds, _STAT)
                if (gen_mro) then
-                  deallocate(adl,_STAT)
+                  deallocate(adl, _STAT)
                   if (cond_inhomo) then
-                     deallocate(rdl,_STAT)
-                  endif
-               endif
+                     deallocate(rdl, _STAT)
+                  end if
+               end if
                call cloud_optics%finalize()
             end if
             if (calc_clrnoa) then
@@ -1812,53 +1816,55 @@ contains
             call MAPL_GridCompTimerStart(gc, "RRTMG", _RC)
 
             if (LM > 72) then
-               call MAPL_GridCompGetResource(gc, "RRTMGLW_USE_PRECIP_IN_RADIATION", USE_PRECIP_IN_RADIATION, default=.TRUE., _RC)
+               call MAPL_GridCompGetResource(gc, "RRTMGLW_USE_PRECIP_IN_RADIATION", USE_PRECIP_IN_RADIATION, default=&
+                    .true., _RC)
             else
-               call MAPL_GridCompGetResource(gc, "RRTMGLW_USE_PRECIP_IN_RADIATION", USE_PRECIP_IN_RADIATION, default=.FALSE., _RC)
-            endif
+               call MAPL_GridCompGetResource(gc, "RRTMGLW_USE_PRECIP_IN_RADIATION", USE_PRECIP_IN_RADIATION, default=&
+                    .false., _RC)
+            end if
 
             call MAPL_GridCompGetResource(gc, "RRTMGLW_PARTITION_SIZE", PARTITION_SIZE, default=4, _RC)
 
             ! reversed profiles for RRTMG (1=bottom layer)
             ! note 0:LM indexing for [PT]LEV_R
             ! but 1:LM+1 for [UD]FLX[C] and DUFLX[C]_DTS
-            allocate(FCLD_R(IM*JM,LM),_STAT)
-            allocate(TLEV_R(IM*JM,0:LM),_STAT)
-            allocate(PLE_R(IM*JM,0:LM),_STAT)
-            allocate(ZM_R(IM*JM,LM),_STAT)
-            allocate(EMISS(IM*JM,NB_RRTMG),_STAT)
-            allocate(CLIQWP(IM*JM,LM),_STAT)
-            allocate(CICEWP(IM*JM,LM),_STAT)
-            allocate(RELIQ(IM*JM,LM),_STAT)
-            allocate(REICE(IM*JM,LM),_STAT)
-            allocate(TAUAER(IM*JM,LM,NB_RRTMG),_STAT)
-            allocate(PL_R(IM*JM,LM),_STAT)
-            allocate(T_R(IM*JM,LM),_STAT)
-            allocate(Q_R(IM*JM,LM),_STAT)
-            allocate(O2_R(IM*JM,LM),_STAT)
-            allocate(O3_R(IM*JM,LM),_STAT)
-            allocate(CO2_R(IM*JM,LM),_STAT)
-            allocate(CH4_R(IM*JM,LM),_STAT)
-            allocate(N2O_R(IM*JM,LM),_STAT)
-            allocate(CFC11_R(IM*JM,LM),_STAT)
-            allocate(CFC12_R(IM*JM,LM),_STAT)
-            allocate(CFC22_R(IM*JM,LM),_STAT)
-            allocate(CCL4_R(IM*JM,LM),_STAT)
-            allocate(TSFC(IM*JM),_STAT)
-            allocate(UFLX(IM*JM,LM+1),_STAT)
-            allocate(DFLX(IM*JM,LM+1),_STAT)
-            allocate(UFLXC(IM*JM,LM+1),_STAT)
-            allocate(DFLXC(IM*JM,LM+1),_STAT)
-            allocate(DUFLX_DTS(IM*JM,LM+1),_STAT)
-            allocate(DUFLXC_DTS(IM*JM,LM+1),_STAT)
-            allocate(CLEARCOUNTS(IM*JM,4),_STAT)
-            allocate(ALAT(IM*JM),_STAT)
-            allocate(OLRBRG      (nbndlw,IM*JM),_STAT)
-            allocate(DOLRBRG_DTS (nbndlw,IM*JM),_STAT)
+            allocate(FCLD_R(IM * JM, LM), _STAT)
+            allocate(TLEV_R(IM * JM, 0:LM), _STAT)
+            allocate(PLE_R(IM * JM, 0:LM), _STAT)
+            allocate(ZM_R(IM * JM, LM), _STAT)
+            allocate(EMISS(IM * JM, NB_RRTMG), _STAT)
+            allocate(CLIQWP(IM * JM, LM), _STAT)
+            allocate(CICEWP(IM * JM, LM), _STAT)
+            allocate(RELIQ(IM * JM, LM), _STAT)
+            allocate(REICE(IM * JM, LM), _STAT)
+            allocate(TAUAER(IM * JM, LM, NB_RRTMG), _STAT)
+            allocate(PL_R(IM * JM, LM), _STAT)
+            allocate(T_R(IM * JM, LM), _STAT)
+            allocate(Q_R(IM * JM, LM), _STAT)
+            allocate(O2_R(IM * JM, LM), _STAT)
+            allocate(O3_R(IM * JM, LM), _STAT)
+            allocate(CO2_R(IM * JM, LM), _STAT)
+            allocate(CH4_R(IM * JM, LM), _STAT)
+            allocate(N2O_R(IM * JM, LM), _STAT)
+            allocate(CFC11_R(IM * JM, LM), _STAT)
+            allocate(CFC12_R(IM * JM, LM), _STAT)
+            allocate(CFC22_R(IM * JM, LM), _STAT)
+            allocate(CCL4_R(IM * JM, LM), _STAT)
+            allocate(TSFC(IM * JM), _STAT)
+            allocate(UFLX(IM * JM, LM + 1), _STAT)
+            allocate(DFLX(IM * JM, LM + 1), _STAT)
+            allocate(UFLXC(IM * JM, LM + 1), _STAT)
+            allocate(DFLXC(IM * JM, LM + 1), _STAT)
+            allocate(DUFLX_DTS(IM * JM, LM + 1), _STAT)
+            allocate(DUFLXC_DTS(IM * JM, LM + 1), _STAT)
+            allocate(CLEARCOUNTS(IM * JM, 4), _STAT)
+            allocate(ALAT(IM * JM), _STAT)
+            allocate(OLRBRG(nbndlw, IM * JM), _STAT)
+            allocate(DOLRBRG_DTS(nbndlw, IM * JM), _STAT)
 
             ! choices for cloud physical to optical conversion
-            call MAPL_GridCompGetResource(gc, "RRTMG_ICEFLG", ICEFLGLW, default=3, _RC)
-            call MAPL_GridCompGetResource(gc, "RRTMG_LIQFLG", LIQFLGLW, default=1, _RC)
+            call MAPL_GridCompGetResource(gc, "RRTMG_ICEFLG", iceflglw, default=3, _RC)
+            call MAPL_GridCompGetResource(gc, "RRTMG_LIQFLG", liqflglw, default=1, _RC)
 
             ! calculate derivatives of upward flux with Tsurf
             Ts_derivs = .true.
@@ -1872,141 +1878,141 @@ contains
             ! collapse horizontal indicies and flip in vertical
             !   (RRTMG indexed bottom to top)
             IJ = 0
-            do J = 1,JM
-            do I = 1,IM
-               IJ = IJ + 1
+            do j = 1, JM
+               do i = 1, IM
+                  IJ = IJ + 1
 
-               TSFC (IJ)   = TS  (I,J)
-               EMISS(IJ,:) = EMIS(I,J) ! all bands get same emissivity
-               ALAT (IJ)   = lats(I,J)
+                  TSFC(IJ) = TS(i, j)
+                  EMISS(IJ, :) = EMIS(i, j) ! all bands get same emissivity
+                  ALAT(IJ) = lats(i, j)
 
-               ! calculation of level temperature (still in model ordering)
-               ! note: PLE(0:LM) but TLEV(1:LM+1)
-               DP(1) = PLE(I,J,1)-PLE(I,J,0)
-               do K = 2,LM
-                  DP(K) = (PLE(I,J,K)-PLE(I,J,K-1) )
-                  TLEV(K) = (T(I,J,K-1) * DP(K) + T(I,J,K) * DP(K-1)) &
-                       / (DP(K-1) + DP(K))
-               enddo
-               TLEV(LM+1) =  TS(I,J) ! 'surface'
-               TLEV(   1) = TLEV(2)  ! model top
+                  ! calculation of level temperature (still in model ordering)
+                  ! note: PLE(0:LM) but TLEV(1:LM+1)
+                  DP(1) = PLE(i, j, 1) - PLE(i, j, 0)
+                  do K = 2, LM
+                     DP(K) = (PLE(i, j, K) - PLE(i, j, K - 1))
+                     TLEV(K) = (T(i, j, K - 1) * DP(K) + T(i, j, K) * DP(K - 1)) &
+                          / (DP(K - 1) + DP(K))
+                  end do
+                  TLEV(LM + 1) = TS(i, j) ! 'surface'
+                  TLEV(1) = TLEV(2) ! model top
 
-               !  Flip in vertical
-               do K = 1,LM
-                  LV = LM-K+1  ! LM --> 1
+                  !  Flip in vertical
+                  do K = 1, LM
+                     LV = LM - K + 1 ! LM --> 1
 
-                  ! Convert content [kg/kg] to path [g/m2]
-                  ! using hydrostatic eqn dp/g ~ rho*dz,
-                  ! so conversion factor is 1000*dp/g ~ 1.02*100*dp.
-                  ! pmn: why not use MAPL_GRAV explicitly?
-                  xx = 1.02*100*DP(LV)
-                  if (USE_PRECIP_IN_RADIATION) then
-                     LWT = CWC(I,J,LV,KLIQUID)+CWC(I,J,LV,KRAIN)
-                     CLIQWP(IJ,K) = xx*(LWT)
-                     if (LWT > 0.0) then
-                        RELIQ (IJ,K) = ( REFF(I,J,LV,KLIQUID)*CWC(I,J,LV,KLIQUID) + &
-                             REFF(I,J,LV,KRAIN  )*CWC(I,J,LV,KRAIN  ) ) / LWT
+                     ! Convert content [kg/kg] to path [g/m2]
+                     ! using hydrostatic eqn dp/g ~ rho*dz,
+                     ! so conversion factor is 1000*dp/g ~ 1.02*100*dp.
+                     ! pmn: why not use MAPL_GRAV explicitly?
+                     xx = 1.02 * 100 * DP(LV)
+                     if (USE_PRECIP_IN_RADIATION) then
+                        LWT = CWC(i, j, LV, KLIQUID) + CWC(i, j, LV, KRAIN)
+                        CLIQWP(IJ, K) = xx * (LWT)
+                        if (LWT > 0.0) then
+                           RELIQ(IJ, K) = (REFF(i, j, LV, KLIQUID) * CWC(i, j, LV, KLIQUID) + &
+                                REFF(i, j, LV, KRAIN) * CWC(i, j, LV, KRAIN)) / LWT
+                        else
+                           RELIQ(IJ, K) = 14.0
+                        end if
+                        IWT = CWC(i, j, LV, KICE) + CWC(i, j, LV, KSNOW) + CWC(i, j, LV, KGRAUPEL)
+                        CICEWP(IJ, K) = xx * (IWT)
+                        if (IWT > 0.0) then
+                           REICE(IJ, K) = (REFF(i, j, LV, KICE) * CWC(i, j, LV, KICE) + &
+                                REFF(i, j, LV, KSNOW) * CWC(i, j, LV, KSNOW) + &
+                                REFF(i, j, LV, KGRAUPEL) * CWC(i, j, LV, KGRAUPEL)) / IWT
+                        else
+                           REICE(IJ, K) = 36.0
+                        end if
                      else
-                        RELIQ (IJ,K) = 14.0
-                     endif
-                     IWT = CWC(I,J,LV,KICE)+CWC(I,J,LV,KSNOW)+CWC(I,J,LV,KGRAUPEL)
-                     CICEWP(IJ,K) = xx*(IWT)
-                     if (IWT > 0.0) then
-                        REICE (IJ,K) = ( REFF(I,J,LV,KICE    )*CWC(I,J,LV,KICE    ) + &
-                             REFF(I,J,LV,KSNOW   )*CWC(I,J,LV,KSNOW   ) + &
-                             REFF(I,J,LV,KGRAUPEL)*CWC(I,J,LV,KGRAUPEL) ) / IWT
+                        CLIQWP(IJ, K) = xx * CWC(i, j, LV, KLIQUID)
+                        CICEWP(IJ, K) = xx * CWC(i, j, LV, KICE)
+                        RELIQ(IJ, K) = REFF(i, j, LV, KLIQUID)
+                        REICE(IJ, K) = REFF(i, j, LV, KICE)
+                     end if
+
+                     ! impose RRTMG re_liq limits
+                     if (liqflglw == 0) then
+                        ! pmn: this one not available inside RRTMG_LW
+                        RELIQ(IJ, K) = MIN(MAX(RELIQ(IJ, K), 5.0), 10.0)
+                     elseif (liqflglw == 1) then
+                        RELIQ(IJ, K) = MIN(MAX(RELIQ(IJ, K), 2.5), 60.0)
+                     end if
+
+                     ! impose RRTMG re_ice limits
+                     if (iceflglw == 0) then
+                        REICE(IJ, K) = MIN(MAX(REICE(IJ, K), 10.0), 30.0)
+                     elseif (iceflglw == 1) then
+                        REICE(IJ, K) = MIN(MAX(REICE(IJ, K), 13.0), 130.0)
+                     elseif (iceflglw == 2) then
+                        REICE(IJ, K) = MIN(MAX(REICE(IJ, K), 5.0), 131.0)
+                     elseif (iceflglw == 3) then
+                        REICE(IJ, K) = MIN(MAX(REICE(IJ, K), 5.0), 140.0)
+                     elseif (iceflglw == 4) then
+                        REICE(IJ, K) = MIN(MAX(REICE(IJ, K) * 2., 1.0), 200.0)
+                     end if
+
+                     ! flipping for LEVEL quantities
+                     ! PLE_R(0:LM) = PLE(LM:0)
+                     ! TLEV_R(0:LM) = TLEV(LM+1:1)
+                     ! top-of-model LEVEL (RRTMG LM) done later
+                     PLE_R(IJ, K - 1) = PLE(i, j, LV) / 100. ! [hPa]
+                     TLEV_R(IJ, K - 1) = TLEV(LV + 1)
+
+                     ! more flipping for layer quantities
+                     ! Q [specific humidity] --> Q_R [volume mixing ratio]
+                     ! O3 [mass mixing ratio] --> O3_R [volume mixing ratio]
+                     PL_R(IJ, K) = PL(i, j, LV) / 100. ! [hPa]
+                     T_R(IJ, K) = T(i, j, LV)
+                     Q_R(IJ, K) = Q(i, j, LV) / (1. - Q(i, j, LV)) * (MAPL_AIRMW / MAPL_H2OMW)
+                     O3_R(IJ, K) = O3(i, j, LV) * (MAPL_AIRMW / MAPL_O3MW)
+                     CH4_R(IJ, K) = CH4(i, j, LV)
+                     N2O_R(IJ, K) = N2O(i, j, LV)
+                     if (associated(CO2_3d)) then ! <<>> MSL
+                        CO2_R(IJ, K) = CO2_3d(i, j, LV)
                      else
-                        REICE (IJ,K) = 36.0
-                     endif
-                  else
-                     CLIQWP(IJ,K) = xx*CWC(I,J,LV,KLIQUID)
-                     CICEWP(IJ,K) = xx*CWC(I,J,LV,KICE)
-                     RELIQ (IJ,K) =   REFF(I,J,LV,KLIQUID)
-                     REICE (IJ,K) =   REFF(I,J,LV,KICE   )
-                  endif
+                        CO2_R(IJ, K) = CO2_FIXED
+                     end if
+                     O2_R(IJ, K) = O2
+                     CCL4_R(IJ, K) = CCL4
+                     CFC11_R(IJ, K) = CFC11(i, j, LV)
+                     CFC12_R(IJ, K) = CFC12(i, j, LV)
+                     CFC22_R(IJ, K) = HCFC22(i, j, LV)
+                     FCLD_R(IJ, K) = FCLD(i, j, LV)
 
-                  ! impose RRTMG re_liq limits
-                  if    (LIQFLGLW.eq.0) then
-                     ! pmn: this one not available inside RRTMG_LW
-                     RELIQ(IJ,K) = min(max(RELIQ(IJ,K),5.0),10.0)
-                  elseif (LIQFLGLW.eq.1) then
-                     RELIQ(IJ,K) = min(max(RELIQ(IJ,K),2.5),60.0)
-                  endif
+                     ! RRTMG_LW does not scatter, so pass ABSORPTION aerosol
+                     ! optical thickness to RRTMG. Remember that SSAA is the
+                     ! aerosol system's *un*-normalized single scattering albedo,
+                     ! which is actually tau_ext * omega0 = tau_scat, and TAUA
+                     ! is the aerosol extinction optical thickness.
+                     ! PMN 2022-01-19 Added max(,0.) ... it shouldn't happen
+                     !   that tau_ext < tau_scat, but since these TAUA and SSAA
+                     !   come directly from the radiatively active aerosols
+                     !   system, we provide a simple mitigation here.
+                     TAUAER(IJ, K, :) = MAX(TAUA(i, j, LV, :) - SSAA(i, j, LV, :), 0.)
 
-                  ! impose RRTMG re_ice limits
-                  if     (ICEFLGLW.eq.0) then
-                     REICE(IJ,K) = min(max(REICE(IJ,K),10.0),30.0)
-                  elseif (ICEFLGLW.eq.1) then
-                     REICE(IJ,K) = min(max(REICE(IJ,K),13.0),130.0)
-                  elseif (ICEFLGLW.eq.2) then
-                     REICE(IJ,K) = min(max(REICE(IJ,K), 5.0),131.0)
-                  elseif (ICEFLGLW.eq.3) then
-                     REICE(IJ,K) = min(max(REICE(IJ,K), 5.0),140.0)
-                  elseif (ICEFLGLW.eq.4) then
-                     REICE(IJ,K) = min(max(REICE(IJ,K)*2.,1.0),200.0)
-                  endif
+                  end do
 
-                  ! flipping for LEVEL quantities
-                  ! PLE_R(0:LM) = PLE(LM:0)
-                  ! TLEV_R(0:LM) = TLEV(LM+1:1)
-                  ! top-of-model LEVEL (RRTMG LM) done later
-                  PLE_R  (IJ,K-1) = PLE(I,J,LV)/100. ! [hPa]
-                  TLEV_R (IJ,K-1) = TLEV(LV+1)
+                  ! finish off top-of-model LEVEL
+                  PLE_R(IJ, LM) = PLE(i, j, 0) / 100. ! [hPa]
+                  TLEV_R(IJ, LM) = TLEV(1)
 
-                  ! more flipping for layer quantities
-                  ! Q [specific humidity] --> Q_R [volume mixing ratio]
-                  ! O3 [mass mixing ratio] --> O3_R [volume mixing ratio]
-                  PL_R   (IJ,K) = PL(I,J,LV)/100.  ! [hPa]
-                  T_R    (IJ,K) = T(I,J,LV)
-                  Q_R    (IJ,K) = Q(I,J,LV) / (1.-Q(I,J,LV)) * (MAPL_AIRMW/MAPL_H2OMW)
-                  O3_R   (IJ,K) = O3(I,J,LV) * (MAPL_AIRMW/MAPL_O3MW)
-                  CH4_R  (IJ,K) = CH4(I,J,LV)
-                  N2O_R  (IJ,K) = N2O(I,J,LV)
-                  if (associated(CO2_3d)) then ! <<>> MSL
-                     CO2_R  (IJ,k) = CO2_3d(I,J,LV)
-                  else
-                     CO2_R  (IJ,k) = CO2_FIXED
-                  endif
-                  O2_R   (IJ,K) = O2
-                  CCL4_R (IJ,K) = CCL4
-                  CFC11_R(IJ,K) = CFC11(I,J,LV)
-                  CFC12_R(IJ,K) = CFC12(I,J,LV)
-                  CFC22_R(IJ,K) = HCFC22(I,J,LV)
-                  FCLD_R (IJ,K) = FCLD(I,J,LV)
+                  ! Calculate the LAYER (mid-point) heights.
+                  ! The interlayer distances are needed for the calculations
+                  ! of inter-layer correlation for cloud overlapping in RRTMG.
+                  ! Only *relative* distances matter, so wolog set ZM_R(1) = 0.
+                  ! pmn: 2021-04-21 this calculation was wrong in earlier revisions.
+                  ZM_R(IJ, 1) = 0.
+                  do K = 2, LM
+                     ! dz ~ RT/g x dp/p by hysrostatic eqn and ideal gas eqn.
+                     ! The jump from LAYER k-1 to k is centered on LEVEL k-1
+                     !   since the RRTMG LEVEL (LE[V]_R) indices are zero-based
+                     ZM_R(IJ, K) = ZM_R(IJ, K - 1) + MAPL_RGAS * TLEV_R(IJ, K - 1) / MAPL_GRAV &
+                          * (PL_R(IJ, K - 1) - PL_R(IJ, K)) / PLE_R(IJ, K - 1)
+                  end do
 
-                  ! RRTMG_LW does not scatter, so pass ABSORPTION aerosol
-                  ! optical thickness to RRTMG. Remember that SSAA is the
-                  ! aerosol system's *un*-normalized single scattering albedo,
-                  ! which is actually tau_ext * omega0 = tau_scat, and TAUA
-                  ! is the aerosol extinction optical thickness.
-                  ! PMN 2022-01-19 Added max(,0.) ... it shouldn't happen
-                  !   that tau_ext < tau_scat, but since these TAUA and SSAA
-                  !   come directly from the radiatively active aerosols
-                  !   system, we provide a simple mitigation here.
-                  TAUAER(IJ,K,:) = max(TAUA(I,J,LV,:) - SSAA(I,J,LV,:), 0.)
-
-               enddo
-
-               ! finish off top-of-model LEVEL
-               PLE_R (IJ,LM) = PLE(I,J,0)/100. ! [hPa]
-               TLEV_R(IJ,LM) = TLEV(1)
-
-               ! Calculate the LAYER (mid-point) heights.
-               ! The interlayer distances are needed for the calculations
-               ! of inter-layer correlation for cloud overlapping in RRTMG.
-               ! Only *relative* distances matter, so wolog set ZM_R(1) = 0.
-               ! pmn: 2021-04-21 this calculation was wrong in earlier revisions.
-               ZM_R(IJ,1) = 0.
-               do K=2,LM
-                  ! dz ~ RT/g x dp/p by hysrostatic eqn and ideal gas eqn.
-                  ! The jump from LAYER k-1 to k is centered on LEVEL k-1
-                  !   since the RRTMG LEVEL (LE[V]_R) indices are zero-based
-                  ZM_R(IJ,K) = ZM_R(IJ,K-1) + MAPL_RGAS*TLEV_R(IJ,K-1)/MAPL_GRAV &
-                       * (PL_R(IJ,K-1)-PL_R(IJ,K))/PLE_R(IJ,K-1)
-               enddo
-
-            enddo ! IM
-            enddo ! JM
+               end do ! IM
+            end do ! JM
 
             ! Clean up negatives
             where (Q_R < 0.) Q_R = 0.
@@ -2027,109 +2033,113 @@ contains
 
             ! pmn: consider putting futher up calling tree?
             ! pmn: only needs to be done once per run, but does consume memory
-            call RRTMG_LW_INI
+            call rrtmg_lw_ini
 
             call MAPL_GridCompTimerStop(gc, "RRTMG_INIT", _RC)
 
             call MAPL_GridCompTimerStart(gc, "RRTMG_RUN", _RC)
 
-            if (nRATS .gt. 0) then !<<>> MSL
-               allocate(UFLXRAT(IM*JM,LM+1,nRATS),      _STAT)
-               allocate(DFLXRAT(IM*JM,LM+1,nRATS),      _STAT)
-               allocate(DUFLX_DT_RAT(IM*JM,LM+1,nRATS), _STAT)
+            if (nRATS > 0) then !<<>> MSL
+               allocate(UFLXRAT(IM * JM, LM + 1, nRATS), _STAT)
+               allocate(DFLXRAT(IM * JM, LM + 1, nRATS), _STAT)
+               allocate(DUFLX_DT_RAT(IM * JM, LM + 1, nRATS), _STAT)
                ! allocate(DFDTS_RAT(IM,JM,LM+1,nRATS),    _STAT)
                ! allocate(FLXU_INT_RAT(IM,JM,LM+1,nRATS),    _STAT)
                ! allocate(FLXD_INT_RAT(IM,JM,LM+1,nRATS),    _STAT)
                ! allocate(FLX_INT_RAT(IM,JM,LM+1,nRATS) ,    _STAT)
-               call MAPL_StateGetPointer(internal, DFDTS_RAT,     'DFDTS_RAT', _RC)
-               call MAPL_StateGetPointer(internal, FLX_INT_RAT,   'FLX_RAT',   _RC)
-               call MAPL_StateGetPointer(internal, FLXU_INT_RAT,  'FLXU_RAT',  _RC)
-               call MAPL_StateGetPointer(internal, FLXD_INT_RAT,  'FLXD_RAT',  _RC)
+               call MAPL_StateGetPointer(internal, DFDTS_RAT, 'DFDTS_RAT', _RC)
+               call MAPL_StateGetPointer(internal, FLX_INT_RAT, 'FLX_RAT', _RC)
+               call MAPL_StateGetPointer(internal, FLXU_INT_RAT, 'FLXU_RAT', _RC)
+               call MAPL_StateGetPointer(internal, FLXD_INT_RAT, 'FLXD_RAT', _RC)
                call MAPL_StateGetPointer(internal, SFCEM_INT_RAT, 'SFCEM_RAT', _RC)
 
                ! Edge (vertical dim 3 of 4): remap to 0:LM, same reason as
                ! the other Edge pointers (see Run's remap block).
-               p4d => DFDTS_RAT;     DFDTS_RAT(1:IM,1:JM,0:LM,1:nRATS)     => p4d
-               p4d => FLX_INT_RAT;   FLX_INT_RAT(1:IM,1:JM,0:LM,1:nRATS)   => p4d
-               p4d => FLXU_INT_RAT;  FLXU_INT_RAT(1:IM,1:JM,0:LM,1:nRATS)  => p4d
-               p4d => FLXD_INT_RAT;  FLXD_INT_RAT(1:IM,1:JM,0:LM,1:nRATS)  => p4d
-            endif
+               p4d => DFDTS_RAT
+               DFDTS_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+               p4d => FLX_INT_RAT
+               FLX_INT_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+               p4d => FLXU_INT_RAT
+               FLXU_INT_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+               p4d => FLXD_INT_RAT
+               FLXD_INT_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+            end if
 
             ! Begin analysis for RATS-specific rad diagnostics
-            do n = 1,nRATS !<<>> MSL
+            do n = 1, nRATS !<<>> MSL
 
                ! Zero out the correct RAT gas field
                ! O3 CO2 CH4 N2O CFC11 CFC12 CFC22 CCl4
-               select case(nameRATS(n))
-               case('H2O')
+               select case (nameRATS(n))
+               case ('H2O')
                   TMP_R = Q_R
                   Q_R = 0.e0
-               case('O3')
+               case ('O3')
                   TMP_R = O3_R
                   O3_R = 0.e0
-               case('CO2')
+               case ('CO2')
                   TMP_R = CO2_R
                   !            CO2_R = CO2_FIXED! Testing
                   CO2_R = 0.e0
                   !            CO2_R = CO2_R*0.99e0
-               case('CH4')
+               case ('CH4')
                   TMP_R = CH4_R
                   CH4_R = 0.e0
-               case('N2O')
+               case ('N2O')
                   TMP_R = N2O_R
                   N2O_R = 0.e0
-               case('CFC11')
+               case ('CFC11')
                   TMP_R = CFC11_R
                   CFC11_R = 0.e0
-               case('CFC12')
+               case ('CFC12')
                   TMP_R = CFC12_R
                   CFC12_R = 0.e0
-               case('HCFC22_R')
+               case ('HCFC22_R')
                   TMP_R = CFC22_R
                   CFC22_R = 0.e0
                end select
 
                ! Call the long wave code with a given RAT set to zero
-               call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
+               call rrtmg_lw(IM * JM, LM, PARTITION_SIZE, Ts_derivs, &
                     PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
                     Q_R, O3_R, CO2_R, CH4_R, N2O_R, O2_R, &
                     CFC11_R, CFC12_R, CFC22_R, CCL4_R, &
-                    FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, ICEFLGLW, LIQFLGLW, &
+                    FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, iceflglw, liqflglw, &
                     TAUAER, ZM_R, ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
-                    UFLXRAT(:,:,n), DFLXRAT(:,:,n), UFLXC, DFLXC, DUFLX_DT_RAT(:,:,n), DUFLXC_DTS, &
-                    BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+                    UFLXRAT(:, :, n), DFLXRAT(:, :, n), UFLXC, DFLXC, DUFLX_DT_RAT(:, :, n), DUFLXC_DTS, &
+                    band_output, OLRBRG, DOLRBRG_DTS)
 
                ! Make sure to set the RAT gas column back to correct vals
-               select case(nameRATS(n))
-               case('H2O')
+               select case (nameRATS(n))
+               case ('H2O')
                   Q_R = TMP_R
-               case('O3')
+               case ('O3')
                   O3_R = TMP_R
-               case('CO2')
+               case ('CO2')
                   CO2_R = TMP_R
-               case('CH4')
+               case ('CH4')
                   CH4_R = TMP_R
-               case('N2O')
+               case ('N2O')
                   N2O_R = TMP_R
-               case('CFC11')
+               case ('CFC11')
                   CFC11_R = TMP_R
-               case('CFC12')
+               case ('CFC12')
                   CFC12_R = TMP_R
-               case('HCFC22')
+               case ('HCFC22')
                   CFC22_R = TMP_R
                end select
 
-            enddo
+            end do
             ! <<>> end RATS analysis
 
-            call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
+            call rrtmg_lw(IM * JM, LM, PARTITION_SIZE, Ts_derivs, &
                  PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
                  Q_R, O3_R, CO2_R, CH4_R, N2O_R, O2_R, &
                  CFC11_R, CFC12_R, CFC22_R, CCL4_R, &
-                 FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, ICEFLGLW, LIQFLGLW, &
+                 FCLD_R, CICEWP, CLIQWP, REICE, RELIQ, iceflglw, liqflglw, &
                  TAUAER, ZM_R, ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
                  UFLX, DFLX, UFLXC, DFLXC, DUFLX_DTS, DUFLXC_DTS, &
-                 BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+                 band_output, OLRBRG, DOLRBRG_DTS)
 
             call MAPL_GridCompTimerStop(gc, "RRTMG_RUN", _RC)
 
@@ -2137,63 +2147,63 @@ contains
 
             ! for outputs, unpack flattened horizontal and flip back vertical
             IJ = 0
-            do J = 1,JM
-            do I = 1,IM
-               IJ = IJ + 1
+            do j = 1, JM
+               do i = 1, IM
+                  IJ = IJ + 1
 
-               ! convert super-layer clearCounts to cloud fractions
-               if(associated(CLDTTLW)) then
-                  CLDTTLW(I,J) = 1.0 - CLEARCOUNTS(IJ,1)/float(NGPTLW)
-               endif
-               if(associated(CLDHILW)) then
-                  CLDHILW(I,J) = 1.0 - CLEARCOUNTS(IJ,2)/float(NGPTLW)
-               endif
-               if(associated(CLDMDLW)) then
-                  CLDMDLW(I,J) = 1.0 - CLEARCOUNTS(IJ,3)/float(NGPTLW)
-               endif
-               if(associated(CLDLOLW)) then
-                  CLDLOLW(I,J) = 1.0 - CLEARCOUNTS(IJ,4)/float(NGPTLW)
-               endif
+                  ! convert super-layer clearCounts to cloud fractions
+                  if (associated(CLDTTLW)) then
+                     CLDTTLW(i, j) = 1.0 - CLEARCOUNTS(IJ, 1) / float(ngptlw)
+                  end if
+                  if (associated(CLDHILW)) then
+                     CLDHILW(i, j) = 1.0 - CLEARCOUNTS(IJ, 2) / float(ngptlw)
+                  end if
+                  if (associated(CLDMDLW)) then
+                     CLDMDLW(i, j) = 1.0 - CLEARCOUNTS(IJ, 3) / float(ngptlw)
+                  end if
+                  if (associated(CLDLOLW)) then
+                     CLDLOLW(i, j) = 1.0 - CLEARCOUNTS(IJ, 4) / float(ngptlw)
+                  end if
 
-               ! upward negative in GEOS-5 convention
-               do K = 0,LM
-                  LV = LM-K+1
-                  FLXU_INT(I,J,K) =-UFLX      (IJ,LV)
-                  FLXD_INT(I,J,K) = DFLX      (IJ,LV)
-                  FLCU_INT(I,J,K) =-UFLXC     (IJ,LV)
-                  FLCD_INT(I,J,K) = DFLXC     (IJ,LV)
-                  DFDTS   (I,J,K) =-DUFLX_DTS (IJ,LV)
-                  DFDTSC  (I,J,K) =-DUFLXC_DTS(IJ,LV)
-               enddo
+                  ! upward negative in GEOS-5 convention
+                  do K = 0, LM
+                     LV = LM - K + 1
+                     FLXU_INT(i, j, K) = -UFLX(IJ, LV)
+                     FLXD_INT(i, j, K) = DFLX(IJ, LV)
+                     FLCU_INT(i, j, K) = -UFLXC(IJ, LV)
+                     FLCD_INT(i, j, K) = DFLXC(IJ, LV)
+                     DFDTS(i, j, K) = -DUFLX_DTS(IJ, LV)
+                     DFDTSC(i, j, K) = -DUFLXC_DTS(IJ, LV)
+                  end do
 
-               ! Reflected LW is not counted in surface emitted. Also, for now,
-               ! surface emitted is positive downwards consistent with Chou-Suarez.
-               ! (Note: All bands use the same emissivity)
-               SFCEM_INT(I,J) = -( UFLX(IJ,1) - DFLX(IJ,1)*(1.-EMIS(I,J)) )
+                  ! Reflected LW is not counted in surface emitted. Also, for now,
+                  ! surface emitted is positive downwards consistent with Chou-Suarez.
+                  ! (Note: All bands use the same emissivity)
+                  SFCEM_INT(i, j) = -(UFLX(IJ, 1) - DFLX(IJ, 1) * (1. - EMIS(i, j)))
 
-               if (nRATS .gt. 0) then !<<>> MSL
-                  do k=0,LM
-                     LV = LM-k+1
-                     FLXU_INT_RAT(i,j,k,:) =-UFLXRAT     (IJ,LV,:)
-                     FLXD_INT_RAT(i,j,k,:) = DFLXRAT     (IJ,LV,:)
-                     DFDTS_RAT   (i,j,k,:) =-DUFLX_DT_RAT(IJ,LV,:)
-                  enddo
-                  SFCEM_INT_RAT(i,j,:) = UFLXRAT(IJ,1,:) - DFLXRAT(IJ,1,:)*(1.0-EMISS(IJ,1))
-               endif
+                  if (nRATS > 0) then !<<>> MSL
+                     do K = 0, LM
+                        LV = LM - K + 1
+                        FLXU_INT_RAT(i, j, K, :) = -UFLXRAT(IJ, LV, :)
+                        FLXD_INT_RAT(i, j, K, :) = DFLXRAT(IJ, LV, :)
+                        DFDTS_RAT(i, j, K, :) = -DUFLX_DT_RAT(IJ, LV, :)
+                     end do
+                     SFCEM_INT_RAT(i, j, :) = UFLXRAT(IJ, 1, :) - DFLXRAT(IJ, 1, :) * (1.0 - EMISS(IJ, 1))
+                  end if
 
-            enddo ! IM
-            enddo ! JM
+               end do ! IM
+            end do ! JM
 
             ! band OLR and brightness temperatures
-            do ibnd = 1,nbndlw
+            do ibnd = 1, nbndlw
                if (band_output(ibnd)) then
-                  write(bb,'(I0.2)') ibnd
+                  write(bb, '(I0.2)') ibnd
 
-                  call MAPL_StateGetPointer(internal, ptr2d, 'OLRB'//bb//'RG', _RC)
-                  ptr2d = reshape(OLRBRG (ibnd,:), [IM,JM])
+                  call MAPL_StateGetPointer(internal, ptr2d, 'OLRB' // bb // 'RG', _RC)
+                  ptr2d = reshape(OLRBRG(ibnd, :), [IM, JM])
 
-                  call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB'//bb//'RGDT', _RC)
-                  ptr2d = reshape(DOLRBRG_DTS (ibnd,:), [IM,JM])
+                  call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB' // bb // 'RGDT', _RC)
+                  ptr2d = reshape(DOLRBRG_DTS(ibnd, :), [IM, JM])
 
                end if
             end do
@@ -2203,42 +2213,42 @@ contains
             ! pmn:
             ! RRTMG does not provide no-aerosol derivatives
             ! so set no-aerosol to aerosol derivatives
-            DFDTSNA  = DFDTS
+            DFDTSNA = DFDTS
             DFDTSCNA = DFDTSC
 
-            deallocate(FCLD_R,_STAT)
-            deallocate(TLEV_R,_STAT)
-            deallocate(PLE_R,_STAT)
-            deallocate(ZM_R,_STAT)
-            deallocate(EMISS,_STAT)
-            deallocate(CLIQWP,_STAT)
-            deallocate(CICEWP,_STAT)
-            deallocate(RELIQ,_STAT)
-            deallocate(REICE,_STAT)
-            deallocate(TAUAER,_STAT)
-            deallocate(PL_R,_STAT)
-            deallocate(T_R,_STAT)
-            deallocate(Q_R,_STAT)
-            deallocate(O2_R,_STAT)
-            deallocate(O3_R,_STAT)
-            deallocate(CO2_R,_STAT)
-            deallocate(CH4_R,_STAT)
-            deallocate(N2O_R,_STAT)
-            deallocate(CFC11_R,_STAT)
-            deallocate(CFC12_R,_STAT)
-            deallocate(CFC22_R,_STAT)
-            deallocate(CCL4_R,_STAT)
-            deallocate(TSFC,_STAT)
-            deallocate(UFLX,_STAT)
-            deallocate(DFLX,_STAT)
-            deallocate(UFLXC,_STAT)
-            deallocate(DFLXC,_STAT)
-            deallocate(DUFLX_DTS,_STAT)
-            deallocate(DUFLXC_DTS,_STAT)
-            deallocate(CLEARCOUNTS,_STAT)
-            deallocate(ALAT,_STAT)
-            deallocate(OLRBRG,_STAT)
-            deallocate(DOLRBRG_DTS,_STAT)
+            deallocate(FCLD_R, _STAT)
+            deallocate(TLEV_R, _STAT)
+            deallocate(PLE_R, _STAT)
+            deallocate(ZM_R, _STAT)
+            deallocate(EMISS, _STAT)
+            deallocate(CLIQWP, _STAT)
+            deallocate(CICEWP, _STAT)
+            deallocate(RELIQ, _STAT)
+            deallocate(REICE, _STAT)
+            deallocate(TAUAER, _STAT)
+            deallocate(PL_R, _STAT)
+            deallocate(T_R, _STAT)
+            deallocate(Q_R, _STAT)
+            deallocate(O2_R, _STAT)
+            deallocate(O3_R, _STAT)
+            deallocate(CO2_R, _STAT)
+            deallocate(CH4_R, _STAT)
+            deallocate(N2O_R, _STAT)
+            deallocate(CFC11_R, _STAT)
+            deallocate(CFC12_R, _STAT)
+            deallocate(CFC22_R, _STAT)
+            deallocate(CCL4_R, _STAT)
+            deallocate(TSFC, _STAT)
+            deallocate(UFLX, _STAT)
+            deallocate(DFLX, _STAT)
+            deallocate(UFLXC, _STAT)
+            deallocate(DFLXC, _STAT)
+            deallocate(DUFLX_DTS, _STAT)
+            deallocate(DUFLXC_DTS, _STAT)
+            deallocate(CLEARCOUNTS, _STAT)
+            deallocate(ALAT, _STAT)
+            deallocate(OLRBRG, _STAT)
+            deallocate(DOLRBRG_DTS, _STAT)
 
             call MAPL_GridCompTimerStop(gc, "RRTMG", _RC)
 
@@ -2251,49 +2261,49 @@ contains
 
          ! Sum up the U and D fluxes to get net downward
 
-         FLX_INT  = FLXD_INT  + FLXU_INT
+         FLX_INT = FLXD_INT + FLXU_INT
          FLXA_INT = FLXAD_INT + FLXAU_INT
-         FLC_INT  = FLCD_INT  + FLCU_INT
-         FLA_INT  = FLAD_INT  + FLAU_INT
+         FLC_INT = FLCD_INT + FLCU_INT
+         FLA_INT = FLAD_INT + FLAU_INT
 
          ! Revert to SFCEM to a positive quantity.
          ! Earlier surface emitted positive downwards per Chou-Suarez.
          SFCEM_INT = -SFCEM_INT
 
          ! RATS Diagnostic <<>> MSL
-         if (nRATS .gt. 0) FLX_INT_RAT = FLXD_INT_RAT + FLXU_INT_RAT
+         if (nRATS > 0) FLX_INT_RAT = FLXD_INT_RAT + FLXU_INT_RAT
 
          ! Save surface temperature in internal state
 
-         TS_INT    = TS
+         TS_INT = TS
 
          ! Export some cloud properties in the infrared
 
          call MAPL_GridCompTimerStart(gc, "MISC", _RC)
 
          call MAPL_GridCompGetResource(gc, "TAUCRIT", TAUCRIT, default=0.30, _RC)
-         TAUCRIT   = TAUCRIT/2.13
+         TAUCRIT = TAUCRIT / 2.13
 
          call MAPL_StateGetPointer(export, CLDPRS, 'CLDPRS', _RC)
          call MAPL_StateGetPointer(export, CLDTMP, 'CLDTMP', _RC)
-         call MAPL_StateGetPointer(export, TAUIR,  'TAUIR',  _RC)
+         call MAPL_StateGetPointer(export, TAUIR, 'TAUIR', _RC)
 
          ! TAUDIAG is only filled by the IRRAD() call in the USE_CHOU branch
          ! above; under RRTMG/RRTMGP it is left uninitialized, so guard every
          ! read of it here behind USE_CHOU to avoid an FPE on garbage stack
          ! values.
          if (USE_CHOU) then
-            if(associated(TAUIR)) TAUIR = 0.5*(TAUDIAG(:,:,:,3)+TAUDIAG(:,:,:,4))
+            if (associated(TAUIR)) TAUIR = 0.5 * (TAUDIAG(:, :, :, 3) + TAUDIAG(:, :, :, 4))
 
-            if(associated(CLDTMP).or.associated(CLDPRS)) then
-               if(associated(CLDTMP)) CLDTMP = MAPL_UNDEF
-               if(associated(CLDPRS)) CLDPRS = MAPL_UNDEF
-               do j=1,jm
-                  do i=1,im
-                     do l=1,lm
-                        if(0.5*(TAUDIAG(I,J,L,3)+TAUDIAG(I,J,L,4))>TAUCRIT) then
-                           if(associated(CLDTMP)) CLDTMP(I,J) = T  (I,J,L)
-                           if(associated(CLDPRS)) CLDPRS(I,J) = PLE(I,J,L-1)
+            if (associated(CLDTMP) .or. associated(CLDPRS)) then
+               if (associated(CLDTMP)) CLDTMP = MAPL_UNDEF
+               if (associated(CLDPRS)) CLDPRS = MAPL_UNDEF
+               do j = 1, JM
+                  do i = 1, IM
+                     do L = 1, LM
+                        if (0.5 * (TAUDIAG(i, j, L, 3) + TAUDIAG(i, j, L, 4)) > TAUCRIT) then
+                           if (associated(CLDTMP)) CLDTMP(i, j) = T(i, j, L)
+                           if (associated(CLDPRS)) CLDPRS(i, j) = PLE(i, j, L - 1)
                            exit
                         end if
                      end do
@@ -2304,16 +2314,16 @@ contains
 
          ! Correcting the timing of the alw and blw (mjs)
 
-         call MAPL_StateGetPointer(export, TSREFF, 'TSREFF',  _RC)
-         call MAPL_StateGetPointer(export, SFCEM,  'SFCEM0',  _RC)
+         call MAPL_StateGetPointer(export, TSREFF, 'TSREFF', _RC)
+         call MAPL_StateGetPointer(export, SFCEM, 'SFCEM0', _RC)
          call MAPL_StateGetPointer(export, DSFDTS, 'DSFDTS0', _RC)
-         call MAPL_StateGetPointer(export, LWS0,   'LWS0',    _RC)
+         call MAPL_StateGetPointer(export, LWS0, 'LWS0', _RC)
 
-         if(associated(TSREFF)) TSREFF = TS             ! reference TS for linearization
-         if(associated(DSFDTS)) DSFDTS =-DFDTS(:,:,LM)  ! d(non-negated upward sfc flux) / dTS
-         if(associated(SFCEM )) SFCEM  = SFCEM_INT      ! sfc emitted flux (+ve)
-         if(associated(LWS0  )) LWS0   = &              ! absorbed (not reflected)
-              FLX_INT(:,:,LM) + SFCEM_INT                  !   downward sfc flux (+ve)
+         if (associated(TSREFF)) TSREFF = TS ! reference TS for linearization
+         if (associated(DSFDTS)) DSFDTS = -DFDTS(:, :, LM) ! d(non-negated upward sfc flux) / dTS
+         if (associated(SFCEM)) SFCEM = SFCEM_INT ! sfc emitted flux (+ve)
+         if (associated(LWS0)) LWS0 = & ! absorbed (not reflected)
+              FLX_INT(:, :, LM) + SFCEM_INT !   downward sfc flux (+ve)
 
          ! Deallocate per-band aerosol arrays
 
@@ -2335,13 +2345,13 @@ contains
          integer :: status
          real, dimension(IM, JM) :: DELT
          integer :: K, LEV_LOW_MID, LEV_MID_HIGH
-         integer :: N !<<>> MSL
+         integer :: n !<<>> MSL
 
          ! scratch pointers to satisfy Fortran's rank-remapping rule for
          ! the Edge-array remaps below (self-remap alone isn't enough,
          ! see the fuller explanation in Run's own scratch-pointer block)
-         real, pointer, contiguous, dimension(:,:,:) :: p3d
-         real, pointer, contiguous, dimension(:,:,:,:) :: p4d
+         real, pointer, contiguous, dimension(:, :, :) :: p3d
+         real, pointer, contiguous, dimension(:, :, :, :) :: p4d
          real :: PRS_LOW_MID ! pressure separating low and middle clouds
          real :: PRS_MID_HIGH ! pressure separating low and high   clouds
 
@@ -2349,37 +2359,37 @@ contains
          real :: wn1, wn2
 
          ! pointer to import
-         real, pointer, dimension(:,:) :: TSINST
+         real, pointer, dimension(:, :) :: TSINST
 
          ! pointers to export
-         real, pointer, dimension(:,:,:) :: FLX, FLXA, FLC, FLA, FLXU, FLXAU, FLCU, FLAU, FLXD, FLXAD, FLCD, FLAD
-         real, pointer, dimension(:,:) :: TSREFF, SFCEM, DSFDTS, SFCEM0, DSFDTS0, OLR, OLRA, OLC, OLCC5, OLA
-         real, pointer, dimension(:,:) :: FLNS, FLNSNA, FLNSC, FLNSA, LWS, LWSA, LCS, LCSC5, LAS, CLDTT_ptr, ptr2d
-         real, allocatable, dimension(:,:) :: CLDTT
-         real, pointer, dimension(:,:,:) :: FCLD
+         real, pointer, dimension(:, :, :) :: FLX, FLXA, FLC, FLA, FLXU, FLXAU, FLCU, FLAU, FLXD, FLXAD, FLCD, FLAD
+         real, pointer, dimension(:, :) :: TSREFF, SFCEM, DSFDTS, SFCEM0, DSFDTS0, OLR, OLRA, OLC, OLCC5, OLA
+         real, pointer, dimension(:, :) :: FLNS, FLNSNA, FLNSC, FLNSA, LWS, LWSA, LCS, LCSC5, LAS, CLDTT_ptr, ptr2d
+         real, allocatable, dimension(:, :) :: CLDTT
+         real, pointer, dimension(:, :, :) :: FCLD
          real, pointer, dimension(:) :: PREF
-         real, allocatable, dimension(:,:) :: DUMTT, OLRB
+         real, allocatable, dimension(:, :) :: DUMTT, OLRB
 
          ! RATS diagnostics <<>> MSL
-         real, pointer, dimension(:,:) :: RAT_2D, EMIS
-         real, pointer, dimension(:,:,:) :: RAT_3D
+         real, pointer, dimension(:, :) :: RAT_2D, EMIS
+         real, pointer, dimension(:, :, :) :: RAT_3D
 
          ! access to RRTMGP wavenumber limits
-         real(wp) :: band_lims_wvn(2,nbndlw)
+         real(kind=wp) :: band_lims_wvn(2, nbndlw)
 
          ! Pointers to Exports
-         call MAPL_StateGetPointer(export, FLX,     'FLX', _RC)
-         call MAPL_StateGetPointer(export, FLXA,    'FLXA', _RC)
-         call MAPL_StateGetPointer(export, FLC,     'FLC', _RC)
-         call MAPL_StateGetPointer(export, FLA,     'FLA', _RC)
-         call MAPL_StateGetPointer(export, FLXU,    'FLXU', _RC)
-         call MAPL_StateGetPointer(export, FLXAU,   'FLXAU', _RC)
-         call MAPL_StateGetPointer(export, FLCU,    'FLCU', _RC)
-         call MAPL_StateGetPointer(export, FLAU,    'FLAU', _RC)
-         call MAPL_StateGetPointer(export, FLXD,    'FLXD', _RC)
-         call MAPL_StateGetPointer(export, FLXAD,   'FLXAD', _RC)
-         call MAPL_StateGetPointer(export, FLCD,    'FLCD', _RC)
-         call MAPL_StateGetPointer(export, FLAD,    'FLAD', _RC)
+         call MAPL_StateGetPointer(export, FLX, 'FLX', _RC)
+         call MAPL_StateGetPointer(export, FLXA, 'FLXA', _RC)
+         call MAPL_StateGetPointer(export, FLC, 'FLC', _RC)
+         call MAPL_StateGetPointer(export, FLA, 'FLA', _RC)
+         call MAPL_StateGetPointer(export, FLXU, 'FLXU', _RC)
+         call MAPL_StateGetPointer(export, FLXAU, 'FLXAU', _RC)
+         call MAPL_StateGetPointer(export, FLCU, 'FLCU', _RC)
+         call MAPL_StateGetPointer(export, FLAU, 'FLAU', _RC)
+         call MAPL_StateGetPointer(export, FLXD, 'FLXD', _RC)
+         call MAPL_StateGetPointer(export, FLXAD, 'FLXAD', _RC)
+         call MAPL_StateGetPointer(export, FLCD, 'FLCD', _RC)
+         call MAPL_StateGetPointer(export, FLAD, 'FLAD', _RC)
 
          ! Edge exports: remap to the 0:LM layer-interface convention this
          ! routine uses (see the matching remap + explanation in Run, right
@@ -2399,25 +2409,25 @@ contains
          if (associated(FLCD))  then; p3d => FLCD;  FLCD (1:IM,1:JM,0:LM) => p3d; end if
          if (associated(FLAD))  then; p3d => FLAD;  FLAD (1:IM,1:JM,0:LM) => p3d; end if
 
-         call MAPL_StateGetPointer(export, TSREFF,  'TSREFF', _RC)
-         call MAPL_StateGetPointer(export, SFCEM,   'SFCEM', _RC)
-         call MAPL_StateGetPointer(export, DSFDTS,  'DSFDTS', _RC)
-         call MAPL_StateGetPointer(export, SFCEM0,  'SFCEM0', _RC)
+         call MAPL_StateGetPointer(export, TSREFF, 'TSREFF', _RC)
+         call MAPL_StateGetPointer(export, SFCEM, 'SFCEM', _RC)
+         call MAPL_StateGetPointer(export, DSFDTS, 'DSFDTS', _RC)
+         call MAPL_StateGetPointer(export, SFCEM0, 'SFCEM0', _RC)
          call MAPL_StateGetPointer(export, DSFDTS0, 'DSFDTS0', _RC)
-         call MAPL_StateGetPointer(export, OLR,     'OLR', _RC)
-         call MAPL_StateGetPointer(export, OLRA,    'OLRA', _RC)
-         call MAPL_StateGetPointer(export, OLC,     'OLC', _RC)
-         call MAPL_StateGetPointer(export, OLCC5,   'OLCC5', _RC)
-         call MAPL_StateGetPointer(export, OLA,     'OLA', _RC)
-         call MAPL_StateGetPointer(export, LWS,     'LWS', _RC)
-         call MAPL_StateGetPointer(export, LWSA,    'LWSA', _RC)
-         call MAPL_StateGetPointer(export, LCS,     'LCS', _RC)
-         call MAPL_StateGetPointer(export, LCSC5,   'LCSC5', _RC)
-         call MAPL_StateGetPointer(export, LAS,     'LAS', _RC)
-         call MAPL_StateGetPointer(export, FLNS,    'FLNS', _RC)
-         call MAPL_StateGetPointer(export, FLNSNA,  'FLNSNA', _RC)
-         call MAPL_StateGetPointer(export, FLNSC,   'FLNSC', _RC)
-         call MAPL_StateGetPointer(export, FLNSA,   'FLNSA', _RC)
+         call MAPL_StateGetPointer(export, OLR, 'OLR', _RC)
+         call MAPL_StateGetPointer(export, OLRA, 'OLRA', _RC)
+         call MAPL_StateGetPointer(export, OLC, 'OLC', _RC)
+         call MAPL_StateGetPointer(export, OLCC5, 'OLCC5', _RC)
+         call MAPL_StateGetPointer(export, OLA, 'OLA', _RC)
+         call MAPL_StateGetPointer(export, LWS, 'LWS', _RC)
+         call MAPL_StateGetPointer(export, LWSA, 'LWSA', _RC)
+         call MAPL_StateGetPointer(export, LCS, 'LCS', _RC)
+         call MAPL_StateGetPointer(export, LCSC5, 'LCSC5', _RC)
+         call MAPL_StateGetPointer(export, LAS, 'LAS', _RC)
+         call MAPL_StateGetPointer(export, FLNS, 'FLNS', _RC)
+         call MAPL_StateGetPointer(export, FLNSNA, 'FLNSNA', _RC)
+         call MAPL_StateGetPointer(export, FLNSC, 'FLNSC', _RC)
+         call MAPL_StateGetPointer(export, FLNSA, 'FLNSA', _RC)
 
          ! MAPL_StateGetPointer has no ALLOC equivalent (it only returns a pointer to
          ! data already backing the field); CLDTT is used internally as scratch even
@@ -2431,15 +2441,15 @@ contains
          call MAPL_GridCompGetResource(gc, "PRS_LOW_MID_CLOUDS", PRS_LOW_MID, default=70000., _RC)
          call MAPL_GridCompGetResource(gc, "PRS_MID_HIGH_CLOUDS", PRS_MID_HIGH, default=40000., _RC)
 
-         call MAPL_StateGetPointer( import, FCLD, 'FCLD', _RC)
-         call MAPL_StateGetPointer( import, PREF, 'PREF', _RC)
+         call MAPL_StateGetPointer(import, FCLD, 'FCLD', _RC)
+         call MAPL_StateGetPointer(import, PREF, 'PREF', _RC)
 
          allocate(DUMTT(IM, JM), _STAT)
 
          ! Determine the model level separating mid and high clouds
          LEV_MID_HIGH = 1
          do K = 1, LM
-            if( PREF(K) >= PRS_MID_HIGH ) then
+            if (PREF(K) >= PRS_MID_HIGH) then
                LEV_MID_HIGH = K
                exit
             end if
@@ -2448,27 +2458,27 @@ contains
          ! Determine the model level seperating low and middle clouds
          LEV_LOW_MID = LM
          do K = 1, LM
-            if( PREF(K) >= PRS_LOW_MID  ) then
+            if (PREF(K) >= PRS_LOW_MID) then
                LEV_LOW_MID = K
                exit
             end if
          end do
 
          DUMTT = 0.
-         do K=1,LEV_MID_HIGH-1
-            DUMTT = max(DUMTT,FCLD(:,:,K))
+         do K = 1, LEV_MID_HIGH - 1
+            DUMTT = MAX(DUMTT, FCLD(:, :, K))
          end do
-         CLDTT = (1-DUMTT)
+         CLDTT = (1 - DUMTT)
          DUMTT = 0.
-         do K= LEV_MID_HIGH,LEV_LOW_MID-1
-            DUMTT = max(DUMTT,FCLD(:,:,K))
+         do K = LEV_MID_HIGH, LEV_LOW_MID - 1
+            DUMTT = MAX(DUMTT, FCLD(:, :, K))
          end do
-         CLDTT = CLDTT*(1-DUMTT)
+         CLDTT = CLDTT * (1 - DUMTT)
          DUMTT = 0.
-         do K=LEV_LOW_MID,LM
-            DUMTT = max(DUMTT,FCLD(:,:,K))
+         do K = LEV_LOW_MID, LM
+            DUMTT = MAX(DUMTT, FCLD(:, :, K))
          end do
-         CLDTT = 1.0 - CLDTT*(1-DUMTT)
+         CLDTT = 1.0 - CLDTT * (1 - DUMTT)
 
          ! Pointers to Imports
          call MAPL_StateGetPointer(import, TSINST, 'TSINST', _RC)
@@ -2483,143 +2493,143 @@ contains
          ! surface temperature change since refresh for linearization
          DELT = TSINST - TS_INT
 
-         if( USE_CHOU .or. USE_RRTMGP ) then
+         if (USE_CHOU .or. USE_RRTMGP) then
 
             ! fill 3D fluxes
             do K = 0, LM
                ! net downward (downward plus negated upward) fluxes
-               if(associated(FLX))    FLX (:,:,K) =   FLX_INT(:,:,K) + DFDTS   (:,:,K) * DELT ! all-sky
-               if(associated(FLXA))  FLXA (:,:,K) =  FLXA_INT(:,:,K) + DFDTSNA (:,:,K) * DELT ! all-sky no-aerosol
-               if(associated(FLC))    FLC (:,:,K) =   FLC_INT(:,:,K) + DFDTSC  (:,:,K) * DELT ! clr-sky
-               if(associated(FLA))    FLA (:,:,K) =   FLA_INT(:,:,K) + DFDTSCNA(:,:,K) * DELT ! clr-sky no-aerosol
+               if (associated(FLX)) FLX(:, :, K) = FLX_INT(:, :, K) + DFDTS(:, :, K) * DELT ! all-sky
+               if (associated(FLXA)) FLXA(:, :, K) = FLXA_INT(:, :, K) + DFDTSNA(:, :, K) * DELT ! all-sky no-aerosol
+               if (associated(FLC)) FLC(:, :, K) = FLC_INT(:, :, K) + DFDTSC(:, :, K) * DELT ! clr-sky
+               if (associated(FLA)) FLA(:, :, K) = FLA_INT(:, :, K) + DFDTSCNA(:, :, K) * DELT ! clr-sky no-aerosol
                ! negated upward fluxes
-               if(associated(FLXU))   FLXU(:,:,K) =  FLXU_INT(:,:,K) + DFDTS   (:,:,K) * DELT
-               if(associated(FLXAU)) FLXAU(:,:,K) = FLXAU_INT(:,:,K) + DFDTSNA (:,:,K) * DELT
-               if(associated(FLCU))   FLCU(:,:,K) =  FLCU_INT(:,:,K) + DFDTSC  (:,:,K) * DELT
-               if(associated(FLAU))   FLAU(:,:,K) =  FLAU_INT(:,:,K) + DFDTSCNA(:,:,K) * DELT
+               if (associated(FLXU)) FLXU(:, :, K) = FLXU_INT(:, :, K) + DFDTS(:, :, K) * DELT
+               if (associated(FLXAU)) FLXAU(:, :, K) = FLXAU_INT(:, :, K) + DFDTSNA(:, :, K) * DELT
+               if (associated(FLCU)) FLCU(:, :, K) = FLCU_INT(:, :, K) + DFDTSC(:, :, K) * DELT
+               if (associated(FLAU)) FLAU(:, :, K) = FLAU_INT(:, :, K) + DFDTSCNA(:, :, K) * DELT
                ! downward fluxes
-               if(associated(FLXD))   FLXD(:,:,K) =  FLXD_INT(:,:,K)
-               if(associated(FLXAD)) FLXAD(:,:,K) = FLXAD_INT(:,:,K)
-               if(associated(FLCD))   FLCD(:,:,K) =  FLCD_INT(:,:,K)
-               if(associated(FLAD))   FLAD(:,:,K) =  FLAD_INT(:,:,K)
+               if (associated(FLXD)) FLXD(:, :, K) = FLXD_INT(:, :, K)
+               if (associated(FLXAD)) FLXAD(:, :, K) = FLXAD_INT(:, :, K)
+               if (associated(FLCD)) FLCD(:, :, K) = FLCD_INT(:, :, K)
+               if (associated(FLAD)) FLAD(:, :, K) = FLAD_INT(:, :, K)
             end do
 
             ! fill TOA exports
             ! outgoing longwave radiation
             ! pmn: using FLXU_INT, etc. would be better ... here assuming down at TOA is zero
-            if(associated(OLR  )) OLR   = -( FLX_INT(:,:, 0) + DFDTS   (:,:, 0) * DELT)
-            if(associated(OLRA )) OLRA  = -(FLXA_INT(:,:, 0) + DFDTSNA (:,:, 0) * DELT)
-            if(associated(OLC  )) OLC   = -( FLC_INT(:,:, 0) + DFDTSC  (:,:, 0) * DELT)
-            if(associated(OLA  )) OLA   = -( FLA_INT(:,:, 0) + DFDTSCNA(:,:, 0) * DELT)
-            if(associated(OLCC5)) then
-               where(CLDTT <= 0.05 )
-                  OLCC5 = -( FLC_INT(:,:, 0) + DFDTSC  (:,:, 0) * DELT)
-               elsewhere
+            if (associated(OLR)) OLR = -(FLX_INT(:, :, 0) + DFDTS(:, :, 0) * DELT)
+            if (associated(OLRA)) OLRA = -(FLXA_INT(:, :, 0) + DFDTSNA(:, :, 0) * DELT)
+            if (associated(OLC)) OLC = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
+            if (associated(OLA)) OLA = -(FLA_INT(:, :, 0) + DFDTSCNA(:, :, 0) * DELT)
+            if (associated(OLCC5)) then
+               where (CLDTT <= 0.05)
+                  OLCC5 = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
+                  elsewhere
                   OLCC5 = MAPL_UNDEF
-               endwhere
-            endif
+               end where
+            end if
 
             ! fill surface exports
 
             ! current surface emitted flux derivative wrt surface temperature (+ve)
             ! pmn: should be deprecated ... same as DSFDTS0
-            if(associated(DSFDTS)) DSFDTS = -DFDTS(:,:,LM)
+            if (associated(DSFDTS)) DSFDTS = -DFDTS(:, :, LM)
 
             ! surface emitted flux (+ve)
-            if(associated(SFCEM)) SFCEM = SFCEM_INT - DFDTS(:,:,LM) * DELT
+            if (associated(SFCEM)) SFCEM = SFCEM_INT - DFDTS(:, :, LM) * DELT
 
             ! absorbed (non-reflected) downward surface fluxes
             ! (remember: downward fluxes are not not linearized)
-            if(associated(LWS  )) LWS   =  FLX_INT(:,:,LM) + SFCEM_INT
-            if(associated(LWSA )) LWSA  = FLXA_INT(:,:,LM) + SFCEM_INT
-            if(associated(LCS  )) LCS   =  FLC_INT(:,:,LM) + SFCEM_INT
-            if(associated(LAS  )) LAS   =  FLA_INT(:,:,LM) + SFCEM_INT
-            if(associated(LCSC5)) then
-               where(CLDTT <= 0.05 )
-                  LCSC5 =  FLC_INT(:,:,LM) + SFCEM_INT
-               elsewhere
+            if (associated(LWS)) LWS = FLX_INT(:, :, LM) + SFCEM_INT
+            if (associated(LWSA)) LWSA = FLXA_INT(:, :, LM) + SFCEM_INT
+            if (associated(LCS)) LCS = FLC_INT(:, :, LM) + SFCEM_INT
+            if (associated(LAS)) LAS = FLA_INT(:, :, LM) + SFCEM_INT
+            if (associated(LCSC5)) then
+               where (CLDTT <= 0.05)
+                  LCSC5 = FLC_INT(:, :, LM) + SFCEM_INT
+                  elsewhere
                   LCSC5 = MAPL_UNDEF
-               endwhere
-            endif
+               end where
+            end if
 
             ! surface net downward fluxes
-            if(associated(FLNS  )) FLNS   =  FLX_INT(:,:,LM) + DFDTS   (:,:,LM) * DELT
-            if(associated(FLNSNA)) FLNSNA = FLXA_INT(:,:,LM) + DFDTSNA (:,:,LM) * DELT
-            if(associated(FLNSC )) FLNSC  =  FLC_INT(:,:,LM) + DFDTSC  (:,:,LM) * DELT
-            if(associated(FLNSA )) FLNSA  =  FLA_INT(:,:,LM) + DFDTSCNA(:,:,LM) * DELT
+            if (associated(FLNS)) FLNS = FLX_INT(:, :, LM) + DFDTS(:, :, LM) * DELT
+            if (associated(FLNSNA)) FLNSNA = FLXA_INT(:, :, LM) + DFDTSNA(:, :, LM) * DELT
+            if (associated(FLNSC)) FLNSC = FLC_INT(:, :, LM) + DFDTSC(:, :, LM) * DELT
+            if (associated(FLNSA)) FLNSA = FLA_INT(:, :, LM) + DFDTSCNA(:, :, LM) * DELT
 
             ! RRTMG is a special case because its no-aerosol cases are missing
-         else if( USE_RRTMG ) then
+         else if (USE_RRTMG) then
 
             ! fill 3D fluxes
             do K = 0, LM
                ! net downward (downward plus negated upward) fluxes
-               if(associated(FLX))    FLX (:,:,K) =  FLX_INT(:,:,K) + DFDTS (:,:,K) * DELT ! all-sky
-               if(associated(FLXA))  FLXA (:,:,K) = MAPL_UNDEF                             ! all-sky no-aerosol
-               if(associated(FLC))    FLC (:,:,K) =  FLC_INT(:,:,K) + DFDTSC(:,:,K) * DELT ! clr-sky
-               if(associated(FLA))    FLA (:,:,K) = MAPL_UNDEF                             ! clr-sky no-aerosol
+               if (associated(FLX)) FLX(:, :, K) = FLX_INT(:, :, K) + DFDTS(:, :, K) * DELT ! all-sky
+               if (associated(FLXA)) FLXA(:, :, K) = MAPL_UNDEF ! all-sky no-aerosol
+               if (associated(FLC)) FLC(:, :, K) = FLC_INT(:, :, K) + DFDTSC(:, :, K) * DELT ! clr-sky
+               if (associated(FLA)) FLA(:, :, K) = MAPL_UNDEF ! clr-sky no-aerosol
                ! negated upward fluxes
-               if(associated(FLXU))   FLXU(:,:,K) = FLXU_INT(:,:,K) + DFDTS (:,:,K) * DELT
-               if(associated(FLXAU)) FLXAU(:,:,K) = MAPL_UNDEF
-               if(associated(FLCU))   FLCU(:,:,K) = FLCU_INT(:,:,K) + DFDTSC(:,:,K) * DELT
-               if(associated(FLAU))   FLAU(:,:,K) = MAPL_UNDEF
+               if (associated(FLXU)) FLXU(:, :, K) = FLXU_INT(:, :, K) + DFDTS(:, :, K) * DELT
+               if (associated(FLXAU)) FLXAU(:, :, K) = MAPL_UNDEF
+               if (associated(FLCU)) FLCU(:, :, K) = FLCU_INT(:, :, K) + DFDTSC(:, :, K) * DELT
+               if (associated(FLAU)) FLAU(:, :, K) = MAPL_UNDEF
                ! downward fluxes
-               if(associated(FLXD))   FLXD(:,:,K) = FLXD_INT(:,:,K)
-               if(associated(FLXAD)) FLXAD(:,:,K) = MAPL_UNDEF
-               if(associated(FLCD))   FLCD(:,:,K) = FLCD_INT(:,:,K)
-               if(associated(FLAD))   FLAD(:,:,K) = MAPL_UNDEF
+               if (associated(FLXD)) FLXD(:, :, K) = FLXD_INT(:, :, K)
+               if (associated(FLXAD)) FLXAD(:, :, K) = MAPL_UNDEF
+               if (associated(FLCD)) FLCD(:, :, K) = FLCD_INT(:, :, K)
+               if (associated(FLAD)) FLAD(:, :, K) = MAPL_UNDEF
             end do
 
             ! fill TOA exports
             ! outgoing longwave radiation
             ! pmn: using FLXU_INT, etc. would be better ... here assuming down at TOA is zero
-            if(associated(OLR  )) OLR   = -( FLX_INT(:,:, 0) + DFDTS (:,:, 0) * DELT)
-            if(associated(OLRA )) OLRA  = MAPL_UNDEF
-            if(associated(OLC  )) OLC   = -( FLC_INT(:,:, 0) + DFDTSC(:,:, 0) * DELT)
-            if(associated(OLA  )) OLA   = MAPL_UNDEF
-            if(associated(OLCC5)) then
-               where(CLDTT <= 0.05 )
-                  OLCC5 = -( FLC_INT(:,:, 0) + DFDTSC(:,:, 0) * DELT)
-               elsewhere
+            if (associated(OLR)) OLR = -(FLX_INT(:, :, 0) + DFDTS(:, :, 0) * DELT)
+            if (associated(OLRA)) OLRA = MAPL_UNDEF
+            if (associated(OLC)) OLC = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
+            if (associated(OLA)) OLA = MAPL_UNDEF
+            if (associated(OLCC5)) then
+               where (CLDTT <= 0.05)
+                  OLCC5 = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
+                  elsewhere
                   OLCC5 = MAPL_UNDEF
-               endwhere
-            endif
+               end where
+            end if
 
             ! fill surface exports
 
             ! current surface emitted flux derivative wrt surface temperature (+ve)
             ! pmn: should be deprecated ... same as DSFDTS0
-            if(associated(DSFDTS)) DSFDTS = -DFDTS(:,:,LM)
+            if (associated(DSFDTS)) DSFDTS = -DFDTS(:, :, LM)
 
             ! surface emitted flux (+ve)
-            if(associated(SFCEM)) SFCEM = SFCEM_INT - DFDTS(:,:,LM) * DELT
+            if (associated(SFCEM)) SFCEM = SFCEM_INT - DFDTS(:, :, LM) * DELT
 
             ! absorbed (non-reflected) downward surface fluxes
             ! (remember: downward fluxes are not not linearized)
-            if(associated(LWS  )) LWS   = FLX_INT(:,:,LM) + SFCEM_INT
-            if(associated(LWSA )) LWSA  = MAPL_UNDEF
-            if(associated(LCS  )) LCS   = FLC_INT(:,:,LM) + SFCEM_INT
-            if(associated(LAS  )) LAS   = MAPL_UNDEF
-            if(associated(LCSC5)) then
-               where(CLDTT <= 0.05 )
-                  LCSC5 = FLC_INT(:,:,LM) + SFCEM_INT
-               elsewhere
+            if (associated(LWS)) LWS = FLX_INT(:, :, LM) + SFCEM_INT
+            if (associated(LWSA)) LWSA = MAPL_UNDEF
+            if (associated(LCS)) LCS = FLC_INT(:, :, LM) + SFCEM_INT
+            if (associated(LAS)) LAS = MAPL_UNDEF
+            if (associated(LCSC5)) then
+               where (CLDTT <= 0.05)
+                  LCSC5 = FLC_INT(:, :, LM) + SFCEM_INT
+                  elsewhere
                   LCSC5 = MAPL_UNDEF
-               endwhere
-            endif
+               end where
+            end if
 
             ! surface net downward fluxes
-            if(associated(FLNS  )) FLNS   = FLX_INT(:,:,LM) + DFDTS (:,:,LM) * DELT
-            if(associated(FLNSNA)) FLNSNA = MAPL_UNDEF
-            if(associated(FLNSC )) FLNSC  = FLC_INT(:,:,LM) + DFDTSC(:,:,LM) * DELT
-            if(associated(FLNSA )) FLNSA  = MAPL_UNDEF
+            if (associated(FLNS)) FLNS = FLX_INT(:, :, LM) + DFDTS(:, :, LM) * DELT
+            if (associated(FLNSNA)) FLNSNA = MAPL_UNDEF
+            if (associated(FLNSC)) FLNSC = FLC_INT(:, :, LM) + DFDTSC(:, :, LM) * DELT
+            if (associated(FLNSA)) FLNSA = MAPL_UNDEF
 
-         end if  ! RRTMG
+         end if ! RRTMG
 
          ! band OLR and/or TBR output
          if ((USE_RRTMG .or. USE_RRTMGP) .and. any_band_output) then
 
-            allocate(OLRB(IM,JM),_STAT)
+            allocate(OLRB(IM, JM), _STAT)
 
             if (USE_RRTMGP) then
                _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
@@ -2627,20 +2637,20 @@ contains
                     band_lims_wvn = rrtmgp_state%k_dist%get_band_lims_wavenumber()
             end if
 
-            do ibnd = 1,nbndlw
+            do ibnd = 1, nbndlw
                if (band_output(ibnd)) then
-                  write(bb,'(I0.2)') ibnd
+                  write(bb, '(I0.2)') ibnd
 
                   ! get last full calculation
-                  call MAPL_StateGetPointer(internal, ptr2d, 'OLRB'//bb//'RG', _RC)
+                  call MAPL_StateGetPointer(internal, ptr2d, 'OLRB' // bb // 'RG', _RC)
                   OLRB = ptr2d
 
                   ! update for surface temperature on heartbeat
-                  call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB'//bb//'RGDT', _RC)
+                  call MAPL_StateGetPointer(internal, ptr2d, 'DOLRB' // bb // 'RGDT', _RC)
                   OLRB = OLRB + ptr2d * DELT
 
                   ! fill OLRBbbRG if requested
-                  call MAPL_StateGetPointer(export, ptr2d, 'OLRB'//bb//'RG', _RC)
+                  call MAPL_StateGetPointer(export, ptr2d, 'OLRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (all(OLRB == 0.)) then
                         ! handles pre-first-full-calc case
@@ -2651,14 +2661,16 @@ contains
                   end if
 
                   ! calculate TBRBbbRG if requested
-                  call MAPL_StateGetPointer(export, ptr2d, 'TBRB'//bb//'RG', _RC)
+                  call MAPL_StateGetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (USE_RRTMG) then
-                        wn1 = wavenum1(ibnd)*100.; wn2 = wavenum2(ibnd)*100.  ! [m-1]
+                        wn1 = wavenum1(ibnd) * 100.
+                        wn2 = wavenum2(ibnd) * 100. ! [m-1]
                         call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, _RC)
                      else ! RRTMGP
                         if (rrtmgp_state%initialized) then
-                           wn1 = band_lims_wvn(1,ibnd)*100.; wn2 = band_lims_wvn(2,ibnd)*100.  ! [m-1]
+                           wn1 = band_lims_wvn(1, ibnd) * 100.
+                           wn2 = band_lims_wvn(2, ibnd) * 100. ! [m-1]
                            call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, _RC)
                         else
                            ptr2d = MAPL_UNDEF
@@ -2669,7 +2681,7 @@ contains
                end if
             end do
 
-            deallocate(OLRB,_STAT)
+            deallocate(OLRB, _STAT)
          end if
 
          ! update reference linearization to current temperature
@@ -2677,106 +2689,111 @@ contains
          !   through point (TS_INT, SFCEM_INT) with slope -DFDTS (:,:,LM) that
          !   was defined only in the last REFRESH(). Better to just stick with
          !   the exports set in REFRESH() alone.
-         if(associated(DSFDTS0)) DSFDTS0 =           - DFDTS(:,:,LM)
-         if(associated(SFCEM0 )) SFCEM0  = SFCEM_INT - DFDTS(:,:,LM) * DELT
-         if(associated(TSREFF )) TSREFF  = TSINST
+         if (associated(DSFDTS0)) DSFDTS0 = -DFDTS(:, :, LM)
+         if (associated(SFCEM0)) SFCEM0 = SFCEM_INT - DFDTS(:, :, LM) * DELT
+         if (associated(TSREFF)) TSREFF = TSINST
 
          ! Process RAT diagnostics <<>> MSL
-         if (nRATS .gt. 0) then
-            call MAPL_StateGetPointer(internal, DFDTS_RAT,     'DFDTS_RAT', _RC)
-            call MAPL_StateGetPointer(internal, FLX_INT_RAT,   'FLX_RAT', _RC)
+         if (nRATS > 0) then
+            call MAPL_StateGetPointer(internal, DFDTS_RAT, 'DFDTS_RAT', _RC)
+            call MAPL_StateGetPointer(internal, FLX_INT_RAT, 'FLX_RAT', _RC)
             call MAPL_StateGetPointer(internal, SFCEM_INT_RAT, 'SFCEM_RAT', _RC)
-            call MAPL_StateGetPointer(internal, FLXU_INT_RAT,  'FLXU_RAT', _RC)
+            call MAPL_StateGetPointer(internal, FLXU_INT_RAT, 'FLXU_RAT', _RC)
             call MAPL_StateGetPointer(import, EMIS, 'EMIS', _RC)
 
             ! Edge (vertical dim 3 of 4): remap to 0:LM, same reason as
             ! the other Edge pointers (see Run's remap block).
-            p4d => DFDTS_RAT;    DFDTS_RAT(1:IM,1:JM,0:LM,1:nRATS)    => p4d
-            p4d => FLX_INT_RAT;  FLX_INT_RAT(1:IM,1:JM,0:LM,1:nRATS)  => p4d
-            p4d => FLXU_INT_RAT; FLXU_INT_RAT(1:IM,1:JM,0:LM,1:nRATS) => p4d
-            do n=1,nRATS
+            p4d => DFDTS_RAT
+            DFDTS_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+            p4d => FLX_INT_RAT
+            FLX_INT_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+            p4d => FLXU_INT_RAT
+            FLXU_INT_RAT(1:IM, 1:JM, 0:LM, 1:nRATS) => p4d
+            do n = 1, nRATS
                ! OLR
                !<<>>         if (MAPL_am_I_root()) then
                !<<>>            write(*,*) '<<>> alloc? ', allocated(nameRATS), ' n: ', n, ' nRATS: ', nRATS
                !<<>>            if (allocated(nameRATS)) write(*,*) '<<>> nameRATS: ', trim(nameRATS(n))
                !<<>>         endif
-               gen_str = 'dOLR_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d = -( FLX_INT_RAT(:,:,0,n) )
-                  RAT_2d = (-( FLX_INT(:,:, 0))) - RAT_2d
-                  RAT_2d => null()
-               endif
-               gen_str = 'dLWS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d   = (FLX_INT(:,:,LM) + SFCEM_INT)-(FLX_INT_RAT(:,:,LM,n) + SFCEM_INT_RAT(:,:,n))
-                  RAT_2d => null()
-               endif
-               gen_str = 'dFLNS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d = (FLX_INT(:,:,LM)) - (FLX_INT_RAT(:,:,LM,n))
-                  RAT_2d => null()
-               endif
-               gen_str = 'dSFCEM_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d = SFCEM_INT! - DFDTS(:,:,LM) * DELT
-                  RAT_2d = RAT_2d - (SFCEM_INT_RAT(:,:,n))! - DFDTS_RAT(:,:,LM,n) * DELT)
-                  RAT_2d => null()
-               endif
-               gen_str = 'NETTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d = (FLX_INT(:,:,LM)) - &  ! Net DOWNWARD flux
-                       (FLX_INT(:,:, 0))
-                  RAT_2d = RAT_2d - &
-                       ((FLX_INT_RAT(:,:,LM,n)) - & ! Net DOWNWARD flux without RAT at index "n"
-                       (FLX_INT_RAT(:,:, 0,n)))
-                  RAT_2d => null()
-               endif
-               gen_str = 'COLTRAP_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               !         call MAPL_StateGetPointer(import, AREA,   'AREA',   rc=status); VERIFY_(STATUS) ! Uncomment for AREA
-               call MAPL_StateGetPointer(export,   RAT_3d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_3d)) then
+               gen_str = 'dOLR_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = -(FLX_INT_RAT(:, :, 0, n))
+                  RAT_2D = (-(FLX_INT(:, :, 0))) - RAT_2D
+                  RAT_2D => null()
+               end if
+               gen_str = 'dLWS_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = (FLX_INT(:, :, LM) + SFCEM_INT) - (FLX_INT_RAT(:, :, LM, n) + SFCEM_INT_RAT(:, :, n))
+                  RAT_2D => null()
+               end if
+               gen_str = 'dFLNS_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = (FLX_INT(:, :, LM)) - (FLX_INT_RAT(:, :, LM, n))
+                  RAT_2D => null()
+               end if
+               gen_str = 'dSFCEM_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = SFCEM_INT! - DFDTS(:,:,LM) * DELT
+                  RAT_2D = RAT_2D - (SFCEM_INT_RAT(:, :, n))! - DFDTS_RAT(:,:,LM,n) * DELT)
+                  RAT_2D => null()
+               end if
+               gen_str = 'NETTRAP_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = (FLX_INT(:, :, LM)) - & ! Net DOWNWARD flux
+                       (FLX_INT(:, :, 0))
+                  RAT_2D = RAT_2D - &
+                       ((FLX_INT_RAT(:, :, LM, n)) - & ! Net DOWNWARD flux without RAT at index "n"
+                       (FLX_INT_RAT(:, :, 0, n)))
+                  RAT_2D => null()
+               end if
+               gen_str = 'COLTRAP_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               !         call MAPL_StateGetPointer(import, AREA,   'AREA',   rc=status); VERIFY_(STATUS) ! Uncomment for
+               ! AREA
+               call MAPL_StateGetPointer(export, RAT_3D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_3D)) then
                   do K = 1, LM
-                     RAT_3d(:,:,K) = &
-                          (FLX_INT(:,:,K  )) - &
-                          (FLX_INT(:,:,K-1))
-                     !               RAT_3d(:,:,K) = AREA(:,:) * ( & ! Uncomment this and comment the line below to multiply by area
-                     RAT_3d(:,:,K) = ( &    ! Comment this and uncomment the line above to multiply by area
-                          RAT_3d(:,:,K) - &
-                          ((FLX_INT_RAT(:,:,K  ,n)) - &
-                          (FLX_INT_RAT(:,:,K-1,n))))
-                  enddo
-                  RAT_3d => null()
+                     RAT_3D(:, :, K) = &
+                          (FLX_INT(:, :, K)) - &
+                          (FLX_INT(:, :, K - 1))
+                     !               RAT_3d(:,:,K) = AREA(:,:) * ( & ! Uncomment this and comment the line below to
+                     ! multiply by area
+                     RAT_3D(:, :, K) = ( & ! Comment this and uncomment the line above to multiply by area
+                          RAT_3D(:, :, K) - &
+                          ((FLX_INT_RAT(:, :, K, n)) - &
+                          (FLX_INT_RAT(:, :, K - 1, n))))
+                  end do
+                  RAT_3D => null()
                   !            AREA => null() ! Uncomment for AREA
-               endif
-               gen_str = 'FLX_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_3d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_3d)) then
-                  RAT_3d = FLX_INT(:,:,:) - FLX_INT_RAT(:,:,:,n)
-                  RAT_3d => null()
-               endif
-               gen_str = 'DFDTS_'//trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_3d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_3d)) then
-                  RAT_3d = DFDTS(:,:,:) - DFDTS_RAT(:,:,:,n)
-                  RAT_3d => null()
-               endif
+               end if
+               gen_str = 'FLX_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_3D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_3D)) then
+                  RAT_3D = FLX_INT(:, :, :) - FLX_INT_RAT(:, :, :, n)
+                  RAT_3D => null()
+               end if
+               gen_str = 'DFDTS_' // trim(nameRATS(n)) !nameRATS is the list of active RAT toggles read from AGCM.rc
+               call MAPL_StateGetPointer(export, RAT_3D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_3D)) then
+                  RAT_3D = DFDTS(:, :, :) - DFDTS_RAT(:, :, :, n)
+                  RAT_3D => null()
+               end if
                gen_str = 'DELT' !nameRATS is the list of active RAT toggles read from AGCM.rc
-               call MAPL_StateGetPointer(export,   RAT_2d, trim(gen_str),   rc=status) ! Don't verify.
-               if (associated(RAT_2d)) then
-                  RAT_2d = DELT
-                  RAT_2d => null()
-               endif
-            enddo
-         endif
+               call MAPL_StateGetPointer(export, RAT_2D, trim(gen_str), rc=status) ! Don't verify.
+               if (associated(RAT_2D)) then
+                  RAT_2D = DELT
+                  RAT_2D => null()
+               end if
+            end do
+         end if
 
          !  All done
          if (associated(CLDTT_ptr)) CLDTT_ptr = CLDTT
-         deallocate( DUMTT, CLDTT )
+         deallocate(DUMTT, CLDTT)
 
          _RETURN(_SUCCESS)
       end subroutine Update_Flx
@@ -2787,14 +2804,14 @@ contains
    !   for a column block into aer_props (ty_optical_props_2str).
    !   Called only when need_dirty_optical_props is .true., so aer_props
    !   is guaranteed to be allocated at the call site.
-   subroutine compute_lw_aer_optics(colS, colE, TAUA_3d, SSAA_3d, ASYA_3d, aer_props, RC)
+   subroutine compute_lw_aer_optics(colS, colE, TAUA_3d, SSAA_3d, ASYA_3d, aer_props, rc)
 
       use mo_rte_kind, only: wp
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
 
 #define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
       integer, intent(in) :: colS, colE
-      real, dimension(:,:,:), intent(in) :: TAUA_3d, SSAA_3d, ASYA_3d
+      real, dimension(:, :, :), intent(in) :: TAUA_3d, SSAA_3d, ASYA_3d
       class(ty_optical_props_arry), intent(inout) :: aer_props
       integer, optional, intent(out) :: rc
 
@@ -2803,17 +2820,17 @@ contains
       select type (aer_props)
       class is (ty_optical_props_2str)
          ! load unormalized optical properties from aerosol system
-         aer_props%tau = real(TAUA_3d(colS:colE,:,:),kind=wp)
-         aer_props%ssa = real(SSAA_3d(colS:colE,:,:),kind=wp)
-         aer_props%g   = real(ASYA_3d(colS:colE,:,:),kind=wp)
+         aer_props%tau = real(TAUA_3d(colS:colE, :, :), kind=wp)
+         aer_props%ssa = real(SSAA_3d(colS:colE, :, :), kind=wp)
+         aer_props%g = real(ASYA_3d(colS:colE, :, :), kind=wp)
          ! renormalize
-         where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp )
-            aer_props%g   = aer_props%g   / aer_props%ssa
+         where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
+            aer_props%g = aer_props%g / aer_props%ssa
             aer_props%ssa = aer_props%ssa / aer_props%tau
-         elsewhere
+            elsewhere
             aer_props%tau = 0._wp
             aer_props%ssa = 0._wp
-            aer_props%g   = 0._wp
+            aer_props%g = 0._wp
          end where
 
          ! Because RRTMGP is (currently) compiled at R8,
@@ -2828,15 +2845,15 @@ contains
          ! so just slightly above one.
 
          ! tau must be greater than 0.0
-         aer_props%tau = max(aer_props%tau, 0._wp)
+         aer_props%tau = MAX(aer_props%tau, 0._wp)
          ! ssa must be between 0.0 and 1.0
-         aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
+         aer_props%ssa = MAX(MIN(aer_props%ssa, 1._wp), 0._wp)
          ! g must be between -1.0 and 1.0
-         aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
+         aer_props%g = MAX(MIN(aer_props%g, 1._wp), -1._wp)
 
       class default
-         STATUS = 1
-         TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
+         status = 1
+TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
       end select
 
       _RETURN(_SUCCESS)
@@ -2857,7 +2874,7 @@ contains
         alpha, rcorr, zcw, &
         adl, rdl, &
         cld_mask, &
-        RC)
+        rc)
 
       use mo_rte_kind, only: wp
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
@@ -2879,25 +2896,25 @@ contains
       character(len=*), intent(in) :: cloud_overlap_type
       integer, intent(in) :: IM, IM_World, iBeg, jBeg
       integer, intent(in) :: seeds_time_key, seeds_ctr_key
-      real, dimension(:,:,:), intent(in) :: CWC_3d, REFF_3d
-      real(wp), dimension(:,:), intent(in) :: dp_wp, cf_wp, dzmid
+      real, dimension(:, :, :), intent(in) :: CWC_3d, REFF_3d
+      real(kind=wp), dimension(:, :), intent(in) :: dp_wp, cf_wp, dzmid
       real, dimension(:), intent(in), optional :: adl, rdl
-      real(wp), intent(in) :: cwp_fac_arg
+      real(kind=wp), intent(in) :: cwp_fac_arg
       type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
       class(ty_optical_props_arry), intent(inout) :: cloud_props_bnd, cloud_props_gpt
-      real(wp), dimension(:,:,:), intent(inout) :: urand
-      real(wp), dimension(:,:,:), intent(inout), optional :: urand_aux
-      real(wp), dimension(:,:,:), intent(inout), optional :: urand_cond, urand_cond_aux
-      real(wp), dimension(:,:), intent(inout), optional :: alpha, rcorr
-      real(wp), dimension(:,:,:), intent(inout), optional :: zcw
-      logical, dimension(:,:,:), intent(out) :: cld_mask
-      integer, optional, intent(out) :: RC
+      real(kind=wp), dimension(:, :, :), intent(inout) :: urand
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: urand_aux
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: urand_cond, urand_cond_aux
+      real(kind=wp), dimension(:, :), intent(inout), optional :: alpha, rcorr
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: zcw
+      logical, dimension(:, :, :), intent(out) :: cld_mask
+      integer, optional, intent(out) :: rc
 
-      integer :: STATUS
+      integer :: status
       character(len=256) :: error_msg
-      integer :: isub, icol, ilay, igpt, I, J
+      integer :: isub, icol, ilay, igpt, i, j
       integer :: seeds(3)
-      real(wp) :: cld_frac
+      real(kind=wp) :: cld_frac
       real :: sigma_qcw
       integer, parameter :: KLIQUID = 2
       integer, parameter :: KICE = 1
@@ -2913,46 +2930,46 @@ contains
 
       ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
       error_msg = cloud_optics%cloud_optics( &
-           real(CWC_3d(colS:colE,:,KLIQUID),kind=wp) * dp_wp(colS:colE,:) * cwp_fac_arg, &
-           real(CWC_3d(colS:colE,:,KICE),   kind=wp) * dp_wp(colS:colE,:) * cwp_fac_arg, &
-           min( max( real(REFF_3d(colS:colE,:,KLIQUID),kind=wp), &
+           real(CWC_3d(colS:colE, :, KLIQUID), kind=wp) * dp_wp(colS:colE, :) * cwp_fac_arg, &
+           real(CWC_3d(colS:colE, :, KICE), kind=wp) * dp_wp(colS:colE, :) * cwp_fac_arg, &
+           MIN(MAX(real(REFF_3d(colS:colE, :, KLIQUID), kind=wp), &
            cloud_optics%get_min_radius_liq()), cloud_optics%get_max_radius_liq()), &
-           min( max( real(REFF_3d(colS:colE,:,KICE),   kind=wp), &
+           MIN(MAX(real(REFF_3d(colS:colE, :, KICE), kind=wp), &
            cloud_optics%get_min_radius_ice()), cloud_optics%get_max_radius_ice()), &
            cloud_props_bnd)
-      TEST_(error_msg)
+TEST_(error_msg)
 
       ! exponential inter-layer correlations
       if (gen_mro) then
-         do ilay = 1,LM-1
-            alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
-         enddo
+         do ilay = 1, LM - 1
+            alpha(:, ilay) = exp(-abs(dzmid(colS:colE, ilay)) / real(adl(colS:colE), kind=wp))
+         end do
          if (cond_inhomo) then
-            do ilay = 1,LM-1
-               rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
-            enddo
-         endif
-      endif
+            do ilay = 1, LM - 1
+               rcorr(:, ilay) = exp(-abs(dzmid(colS:colE, ilay)) / real(rdl(colS:colE), kind=wp))
+            end do
+         end if
+      end if
 
       ! Generate McICA random numbers for block (Philox PRNG)
       do isub = 1, ncols_block
          icol = colS + isub - 1
-         J = (icol-1) / IM + 1
-         I = icol - (J-1) * IM
-         seeds(1) = (jBeg + J - 1) * IM_World + (iBeg + I - 1)
+         j = (icol - 1) / IM + 1
+         i = icol - (j - 1) * IM
+         seeds(1) = (jBeg + j - 1) * IM_World + (iBeg + i - 1)
 #ifdef HAVE_MKL
-         call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
+         call rng%init(VSL_BRNG_PHILOX4X32X10, seeds)
 #else
          call rng%init(seeds)
 #endif
-         urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+         urand(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
          if (gen_mro) then
-            urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
+            urand_aux(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
             if (cond_inhomo) then
-               urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-               urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            endif
-         endif
+               urand_cond(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+               urand_cond_aux(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+            end if
+         end if
          call rng%end()
       end do
 
@@ -2960,28 +2977,28 @@ contains
       select case (cloud_overlap_type)
       case ("MAX_RAN_OVERLAP")
          error_msg = sampled_mask_max_ran( &
-              urand(:,:,1:ncols_block), cf_wp(colS:colE,:), cld_mask)
-         TEST_(error_msg)
+              urand(:, :, 1:ncols_block), cf_wp(colS:colE, :), cld_mask)
+TEST_(error_msg)
       case ("EXP_RAN_OVERLAP")
-         STATUS = 1
-         TEST_('EXP_RAN_OVERLAP not implemented yet')
+         status = 1
+TEST_('EXP_RAN_OVERLAP not implemented yet')
       case ("GEN_MAX_RAN_OVERLAP")
          error_msg = sampled_urand_gen_max_ran(alpha, &
-              urand(:,:,1:ncols_block),urand_aux(:,:,1:ncols_block))
-         TEST_(error_msg)
+              urand(:, :, 1:ncols_block), urand_aux(:, :, 1:ncols_block))
+TEST_(error_msg)
          if (cond_inhomo) then
             error_msg = sampled_urand_gen_max_ran(rcorr, &
-                 urand_cond(:,:,1:ncols_block),urand_cond_aux(:,:,1:ncols_block))
-            TEST_(error_msg)
+                 urand_cond(:, :, 1:ncols_block), urand_cond_aux(:, :, 1:ncols_block))
+TEST_(error_msg)
          end if
-         do isub = 1,ncols_block
+         do isub = 1, ncols_block
             icol = colS + isub - 1
-            do ilay = 1,LM
-               cld_frac = cf_wp(icol,ilay)
+            do ilay = 1, LM
+               cld_frac = cf_wp(icol, ilay)
                if (cld_frac <= 0._wp) then
-                  cld_mask(isub,ilay,:) = .false.
+                  cld_mask(isub, ilay, :) = .false.
                else
-                  cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
+                  cld_mask(isub, ilay, :) = urand(:, ilay, isub) < cld_frac
                   if (cond_inhomo) then
                      if (cld_frac > 0.99_wp) then
                         sigma_qcw = 0.5
@@ -2989,22 +3006,22 @@ contains
                         sigma_qcw = 0.71
                      else
                         sigma_qcw = 1.0
-                     endif
-                     do igpt = 1,ngpt
-                        if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
-                             zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
+                     end if
+                     do igpt = 1, ngpt
+                        if (cld_mask(isub, ilay, igpt)) zcw(isub, ilay, igpt) = &
+                             zcw_lookup(real(urand_cond(igpt, ilay, isub)), sigma_qcw)
                      end do
                   end if
                end if
             end do
          end do
       case default
-         STATUS = 1
-         TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
+         status = 1
+TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
       end select
 
       ! draw McICA optical property samples (band->gpt)
-      TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
+TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
 
       ! Apply sub-gridscale condensate scaling
       if (gen_mro) then
@@ -3021,7 +3038,7 @@ contains
    subroutine compute_lw_gas_optics(colS, colE, &
         k_dist, p_lay, p_lev, t_lay, t_lev, t_sfc, &
         gas_concs_block, clean_optical_props, sources, &
-        RC)
+        rc)
 
       use mo_rte_kind, only: wp
       use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -3033,22 +3050,22 @@ contains
 
       integer, intent(in) :: colS, colE
       type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
-      real(wp), dimension(:,:), intent(in) :: p_lay, p_lev, t_lay, t_lev
-      real(wp), dimension(:), intent(in) :: t_sfc
+      real(kind=wp), dimension(:, :), intent(in) :: p_lay, p_lev, t_lay, t_lev
+      real(kind=wp), dimension(:), intent(in) :: t_sfc
       type(ty_gas_concs), intent(inout) :: gas_concs_block
       class(ty_optical_props_arry), intent(inout) :: clean_optical_props
       type(ty_source_func_lw), intent(inout) :: sources
-      integer, optional, intent(out) :: RC
+      integer, optional, intent(out) :: rc
 
-      integer :: STATUS
+      integer :: status
       character(len=256) :: error_msg
 
       ! get gas optical properties and Planck source functions
       error_msg = k_dist%gas_optics( &
-           p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
+           p_lay(colS:colE, :), p_lev(colS:colE, :), t_lay(colS:colE, :), &
            t_sfc(colS:colE), gas_concs_block, clean_optical_props, sources, &
-           tlev = t_lev(colS:colE,:))
-      TEST_(error_msg)
+           TLEV=t_lev(colS:colE, :))
+TEST_(error_msg)
 
       _RETURN(_SUCCESS)
 #undef TEST_
@@ -3072,7 +3089,7 @@ contains
         flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
         flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
         bnd_flux_up_allsky, bnd_dfupdts_allsky, &
-        RC)
+        rc)
 
       use mo_rte_kind, only: wp
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_1scl
@@ -3093,33 +3110,33 @@ contains
       logical, intent(in) :: implements_aerosol_optics, need_dirty_optical_props
       class(ty_optical_props_arry), intent(inout) :: clean_optical_props
       type(ty_source_func_lw), intent(inout) :: sources
-      real(wp), dimension(:,:), intent(in) :: emis_sfc
+      real(kind=wp), dimension(:, :), intent(in) :: emis_sfc
       class(ty_optical_props_arry), intent(inout), optional :: dirty_optical_props
       class(ty_optical_props_arry), intent(inout), optional :: aer_props
       class(ty_optical_props_arry), intent(inout), optional :: cloud_props_gpt
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
-      real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
-      real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
-      integer, optional, intent(out) :: RC
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
+      integer, optional, intent(out) :: rc
 
-      integer :: STATUS
+      integer :: status
       character(len=256) :: error_msg
       type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
       type(ty_fluxes_byband) :: fluxes_byband_allnoa, fluxes_byband_allsky
 
       ! clean clear-sky case
       if (calc_clrnoa) then
-         fluxes_clrnoa%flux_up     => flux_up_clrnoa(colS:colE,:)
-         fluxes_clrnoa%flux_dn     => flux_dn_clrnoa(colS:colE,:)
-         fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
+         fluxes_clrnoa%flux_up => flux_up_clrnoa(colS:colE, :)
+         fluxes_clrnoa%flux_dn => flux_dn_clrnoa(colS:colE, :)
+         fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE, :)
          error_msg = rte_lw( &
               clean_optical_props, &
-              top_at_1, sources, emis_sfc(:,colS:colE), &
+              top_at_1, sources, emis_sfc(:, colS:colE), &
               fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
-         TEST_(error_msg)
+TEST_(error_msg)
       end if
 
       if (present(dirty_optical_props)) then
@@ -3127,20 +3144,20 @@ contains
          !   starting point for later dirty calculations
          select type (dirty_optical_props)
          class is (ty_optical_props_1scl)
-            TEST_(dirty_optical_props%alloc_1scl(ncols_block, LM, clean_optical_props))
+TEST_(dirty_optical_props%alloc_1scl(ncols_block, LM, clean_optical_props))
          class is (ty_optical_props_2str)
-            TEST_(dirty_optical_props%alloc_2str(ncols_block, LM, clean_optical_props))
+TEST_(dirty_optical_props%alloc_2str(ncols_block, LM, clean_optical_props))
             select type (clean_optical_props)
             class is (ty_optical_props_2str)
                dirty_optical_props%ssa = clean_optical_props%ssa
-               dirty_optical_props%g   = clean_optical_props%g
+               dirty_optical_props%g = clean_optical_props%g
             end select
          class is (ty_optical_props_nstr)
-            TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_block, LM, clean_optical_props))
+TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_block, LM, clean_optical_props))
             select type (clean_optical_props)
             class is (ty_optical_props_nstr)
                dirty_optical_props%ssa = clean_optical_props%ssa
-               dirty_optical_props%p   = clean_optical_props%p
+               dirty_optical_props%p = clean_optical_props%p
             end select
          end select
          ! all streams have tau
@@ -3151,31 +3168,31 @@ contains
       if (calc_allnoa) then
 
          ! add in cloud optical properties
-         TEST_(cloud_props_gpt%increment(clean_optical_props))
+TEST_(cloud_props_gpt%increment(clean_optical_props))
 
          ! clean all-sky RT
          if (allnoa_to_allsky_band_xfer_needed) then
-            fluxes_byband_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
-            fluxes_byband_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
-            fluxes_byband_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
-            fluxes_byband_allnoa%bnd_flux_up     => bnd_flux_up_allnoa(colS:colE,:,:)
-            fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE,:,:)
+            fluxes_byband_allnoa%flux_up => flux_up_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%flux_dn => flux_dn_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%bnd_flux_up => bnd_flux_up_allnoa(colS:colE, :, :)
+            fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE, :, :)
             error_msg = rte_lw( &
                  clean_optical_props, &
-                 top_at_1, sources, emis_sfc(:,colS:colE), &
+                 top_at_1, sources, emis_sfc(:, colS:colE), &
                  fluxes_byband_allnoa, n_gauss_angles=nga, use_2stream=u2s)
-            TEST_(error_msg)
+TEST_(error_msg)
          else
             ! only broadband required
-            fluxes_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
-            fluxes_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
-            fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
+            fluxes_allnoa%flux_up => flux_up_allnoa(colS:colE, :)
+            fluxes_allnoa%flux_dn => flux_dn_allnoa(colS:colE, :)
+            fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE, :)
             error_msg = rte_lw( &
                  clean_optical_props, &
-                 top_at_1, sources, emis_sfc(:,colS:colE), &
+                 top_at_1, sources, emis_sfc(:, colS:colE), &
                  fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s)
-            TEST_(error_msg)
-         endif
+TEST_(error_msg)
+         end if
       end if
 
       if (export_clrsky .or. export_allsky) then
@@ -3185,48 +3202,48 @@ contains
 
             ! "dirty_optical_props" is currently just a copy of the clrnoa optical_props
             !   so must now add in aerosols to make it actually dirty
-            TEST_(aer_props%increment(dirty_optical_props))
+TEST_(aer_props%increment(dirty_optical_props))
 
             ! dirty clear-sky RT
             if (calc_clrsky) then
-               fluxes_clrsky%flux_up     => flux_up_clrsky(colS:colE,:)
-               fluxes_clrsky%flux_dn     => flux_dn_clrsky(colS:colE,:)
-               fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE,:)
+               fluxes_clrsky%flux_up => flux_up_clrsky(colS:colE, :)
+               fluxes_clrsky%flux_dn => flux_dn_clrsky(colS:colE, :)
+               fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE, :)
                error_msg = rte_lw( &
                     dirty_optical_props, &
-                    top_at_1, sources, emis_sfc(:,colS:colE), &
+                    top_at_1, sources, emis_sfc(:, colS:colE), &
                     fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s)
-               TEST_(error_msg)
+TEST_(error_msg)
             end if
 
             ! dirty all-sky case
             if (calc_allsky) then
 
                ! add in cloud optical properties
-               TEST_(cloud_props_gpt%increment(dirty_optical_props))
+TEST_(cloud_props_gpt%increment(dirty_optical_props))
 
                ! dirty all-sky RT
                ! (band output currently only available for all-sky case)
                if (any_band_output) then
-                  fluxes_byband_allsky%flux_up     => flux_up_allsky(colS:colE,:)
-                  fluxes_byband_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
-                  fluxes_byband_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
-                  fluxes_byband_allsky%bnd_flux_up     => bnd_flux_up_allsky(colS:colE,:,:)
-                  fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE,:,:)
+                  fluxes_byband_allsky%flux_up => flux_up_allsky(colS:colE, :)
+                  fluxes_byband_allsky%flux_dn => flux_dn_allsky(colS:colE, :)
+                  fluxes_byband_allsky%flux_up_Jac => dfupdts_allsky(colS:colE, :)
+                  fluxes_byband_allsky%bnd_flux_up => bnd_flux_up_allsky(colS:colE, :, :)
+                  fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE, :, :)
                   error_msg = rte_lw( &
                        dirty_optical_props, &
-                       top_at_1, sources, emis_sfc(:,colS:colE), &
+                       top_at_1, sources, emis_sfc(:, colS:colE), &
                        fluxes_byband_allsky, n_gauss_angles=nga, use_2stream=u2s)
-                  TEST_(error_msg)
+TEST_(error_msg)
                else
-                  fluxes_allsky%flux_up     => flux_up_allsky(colS:colE,:)
-                  fluxes_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
-                  fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
+                  fluxes_allsky%flux_up => flux_up_allsky(colS:colE, :)
+                  fluxes_allsky%flux_dn => flux_dn_allsky(colS:colE, :)
+                  fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE, :)
                   error_msg = rte_lw( &
                        dirty_optical_props, &
-                       top_at_1, sources, emis_sfc(:,colS:colE), &
+                       top_at_1, sources, emis_sfc(:, colS:colE), &
                        fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s)
-                  TEST_(error_msg)
+TEST_(error_msg)
                end if
             end if
 
@@ -3235,17 +3252,17 @@ contains
             ! there are no aerosols so we are done because the
             !   dirty cases are the same as the clean ones
             if (export_clrsky) then
-               flux_up_clrsky(colS:colE,:) = flux_up_clrnoa(colS:colE,:)
-               flux_dn_clrsky(colS:colE,:) = flux_dn_clrnoa(colS:colE,:)
-               dfupdts_clrsky(colS:colE,:) = dfupdts_clrnoa(colS:colE,:)
+               flux_up_clrsky(colS:colE, :) = flux_up_clrnoa(colS:colE, :)
+               flux_dn_clrsky(colS:colE, :) = flux_dn_clrnoa(colS:colE, :)
+               dfupdts_clrsky(colS:colE, :) = dfupdts_clrnoa(colS:colE, :)
             end if
             if (export_allsky) then
-               flux_up_allsky(colS:colE,:) = flux_up_allnoa(colS:colE,:)
-               flux_dn_allsky(colS:colE,:) = flux_dn_allnoa(colS:colE,:)
-               dfupdts_allsky(colS:colE,:) = dfupdts_allnoa(colS:colE,:)
+               flux_up_allsky(colS:colE, :) = flux_up_allnoa(colS:colE, :)
+               flux_dn_allsky(colS:colE, :) = flux_dn_allnoa(colS:colE, :)
+               dfupdts_allsky(colS:colE, :) = dfupdts_allnoa(colS:colE, :)
                if (any_band_output) then
-                  bnd_flux_up_allsky(colS:colE,:,:) = bnd_flux_up_allnoa(colS:colE,:,:)
-                  bnd_dfupdts_allsky(colS:colE,:,:) = bnd_dfupdts_allnoa(colS:colE,:,:)
+                  bnd_flux_up_allsky(colS:colE, :, :) = bnd_flux_up_allnoa(colS:colE, :, :)
+                  bnd_dfupdts_allsky(colS:colE, :, :) = bnd_dfupdts_allnoa(colS:colE, :, :)
                end if
             end if
 
@@ -3282,7 +3299,7 @@ contains
         flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
         flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
         bnd_flux_up_allsky, bnd_dfupdts_allsky, &
-        RC)
+        rc)
 
       use mo_rte_kind, only: wp
       use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -3297,7 +3314,7 @@ contains
       integer, intent(in) :: IM, IM_World, iBeg, jBeg
       logical, intent(in) :: top_at_1, u2s
       integer, intent(in) :: seeds_time_key, seeds_ctr_key
-      real(wp), intent(in) :: cwp_fac
+      real(kind=wp), intent(in) :: cwp_fac
       logical, intent(in) :: need_cloud_optical_props, need_dirty_optical_props
       logical, intent(in) :: gen_mro, cond_inhomo
       character(len=*), intent(in) :: cloud_overlap_type
@@ -3307,19 +3324,19 @@ contains
       type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
       type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
       type(ty_gas_concs), intent(inout) :: gas_concs
-      real(wp), dimension(:,:), intent(in) :: p_lay, p_lev, t_lay, t_lev
-      real(wp), dimension(:), intent(in) :: t_sfc
-      real(wp), dimension(:,:), intent(in) :: dp_wp, cf_wp, dzmid
-      real(wp), dimension(:,:), intent(in) :: emis_sfc
+      real(kind=wp), dimension(:, :), intent(in) :: p_lay, p_lev, t_lay, t_lev
+      real(kind=wp), dimension(:), intent(in) :: t_sfc
+      real(kind=wp), dimension(:, :), intent(in) :: dp_wp, cf_wp, dzmid
+      real(kind=wp), dimension(:, :), intent(in) :: emis_sfc
       real, dimension(:), intent(in), optional :: adl, rdl
-      real, dimension(:,:,:), pointer :: CWC_3d, REFF_3d
-      real, dimension(:,:,:), pointer :: TAUA_3d, SSAA_3d, ASYA_3d
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
-      real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
-      real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
-      real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
+      real, dimension(:, :, :), pointer :: CWC_3d, REFF_3d
+      real, dimension(:, :, :), pointer :: TAUA_3d, SSAA_3d, ASYA_3d
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
       integer, optional, intent(out) :: rc
 
       integer :: status
@@ -3334,48 +3351,48 @@ contains
       type(ty_gas_concs) :: gas_concs_block
 
       ! per-block scratch arrays
-      real(wp), dimension(:,:,:), allocatable :: urand, urand_aux, urand_cond, urand_cond_aux
-      real(wp), dimension(:,:,:), allocatable :: zcw
-      real(wp), dimension(:,:), allocatable :: alpha, rcorr
-      logical, dimension(:,:,:), allocatable :: cld_mask
+      real(kind=wp), dimension(:, :, :), allocatable :: urand, urand_aux, urand_cond, urand_cond_aux
+      real(kind=wp), dimension(:, :, :), allocatable :: zcw
+      real(kind=wp), dimension(:, :), allocatable :: alpha, rcorr
+      logical, dimension(:, :, :), allocatable :: cld_mask
 
       ! compute column range for this block (final block may be partial)
-      ncols_block = min(rrtmgp_blockSize, ncol - (b-1)*rrtmgp_blockSize)
-      colS = (b-1) * rrtmgp_blockSize + 1
+      ncols_block = MIN(rrtmgp_blockSize, ncol - (b - 1) * rrtmgp_blockSize)
+      colS = (b - 1) * rrtmgp_blockSize + 1
       colE = colS + ncols_block - 1
 
       ! spectral init + array allocation for gas optics and Planck sources
-      TEST_(clean_optical_props%init(k_dist))
-      TEST_(clean_optical_props%alloc_2str(ncols_block, LM))
-      TEST_(sources%init(k_dist))
-      TEST_(sources%alloc(ncols_block, LM))
+TEST_(clean_optical_props%init(k_dist))
+TEST_(clean_optical_props%alloc_2str(ncols_block, LM))
+TEST_(sources%init(k_dist))
+TEST_(sources%alloc(ncols_block, LM))
 
       ! subset gas concentrations for this block
-      TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
+TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
 
       ! aerosol optics objects (always 2-stream for LW)
       if (need_dirty_optical_props) then
-         TEST_(dirty_optical_props%init(k_dist))
-         TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
-         TEST_(aer_props%alloc_2str(ncols_block, LM))
+TEST_(dirty_optical_props%init(k_dist))
+TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
+TEST_(aer_props%alloc_2str(ncols_block, LM))
       end if
 
       ! cloud optics objects and scratch arrays
       if (need_cloud_optical_props) then
-         TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
-         TEST_(cloud_props_bnd%alloc_2str(ncols_block, LM))
-         TEST_(cloud_props_gpt%init(k_dist))
-         TEST_(cloud_props_gpt%alloc_2str(ncols_block, LM))
+TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
+TEST_(cloud_props_bnd%alloc_2str(ncols_block, LM))
+TEST_(cloud_props_gpt%init(k_dist))
+TEST_(cloud_props_gpt%alloc_2str(ncols_block, LM))
          allocate(urand(ngpt, LM, ncols_block), _STAT)
          allocate(cld_mask(ncols_block, LM, ngpt), _STAT)
          if (gen_mro) then
             allocate(urand_aux(ngpt, LM, ncols_block), _STAT)
-            allocate(alpha(ncols_block, LM-1), _STAT)
+            allocate(alpha(ncols_block, LM - 1), _STAT)
             if (cond_inhomo) then
-               allocate(urand_cond    (ngpt, LM, ncols_block), _STAT)
+               allocate(urand_cond(ngpt, LM, ncols_block), _STAT)
                allocate(urand_cond_aux(ngpt, LM, ncols_block), _STAT)
-               allocate(rcorr(ncols_block, LM-1), _STAT)
-               allocate(zcw  (ncols_block, LM, ngpt), _STAT)
+               allocate(rcorr(ncols_block, LM - 1), _STAT)
+               allocate(zcw(ncols_block, LM, ngpt), _STAT)
             end if
          end if
       end if
