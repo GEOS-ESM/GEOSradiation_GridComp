@@ -840,3 +840,79 @@ contiguous (unlikely - `CONTIGUOUS` only adds a compiler assertion/
 optimization hint, it doesn't restrict what the pointer can be assigned
 from, and MAPL_StateGetPointer's underlying ESMF field data is
 contiguous per-DE in every realistic case).
+
+## Built as a SHARED library (2026-07-22)
+Added `TYPE SHARED` to this component's `esma_add_library()` call in
+`CMakeLists.txt`, matching the convention used throughout MAPL3 (e.g.
+`src/Shared/@MAPL/mapl/CMakeLists.txt`'s own top-level `MAPL` target,
+`superstructure/CMakeLists.txt`, `udunits2f/CMakeLists.txt`). Same
+change applied to the sibling `GEOS_RadiationGridComp` container's
+`CMakeLists.txt`.
+
+## Committed (2026-07-22)
+This session's IRRAD work (the `Irrad_SetServices` standalone routine,
+the file/variable renames, the whitespace/keyword-case cleanups, the
+`Edge`-field 0-based bounds-remap fix, the `TYPE SHARED` build change,
+and this notes file) is committed on `feature/pchakrab/port-to-mapl3`
+in this repo (commit `bbc9dc1`, bundled together with the matching
+`GEOS_RadiationGridComp.F90` fixes in the same commit since both files
+live in this one git repo). Not pushed to `origin` yet.
+
+## LW_Driver refresh alarm restored via a real `Initialize` (2026-07-23)
+`Run`'s "refresh" block (the full LW transfer calc, `LW_Driver`) had a
+commented-out MAPL2-style gate:
+`! call MAPL_Get(MAPL, RunAlarm=alarm, _RC)` plus a commented-out
+`ESMF_AlarmIsRinging(alarm, ...)` check, with a note that "no MAPL3
+`MAPL_GridCompGet` equivalent exists yet for this" - so `LW_Driver` was
+running unconditionally every step instead of on its own `IRRAD_DT`
+cadence.
+
+`MAPL_GridCompGet`'s public signature (`superstructure/generic/
+MAPL_Generic.F90:310-364`, `gridcomp_get`) confirmed there really is no
+`clock`/`RunAlarm` output - that part of the old comment was correct.
+But MAPL3 doesn't need one: this component didn't have a custom
+`Initialize` at all (`SetServices` only registered `Run`, relying on
+the generic default for `Initialize`/`Finalize`). Added one, matching
+the already-established idiom used throughout this MAPL3 tree for a
+component-owned alarm with no natural persistent-state home (see
+`DynCore_GridCompMod.F90`'s `replay_shutoff_alarm`, and the `alarm`
+lookups in `GEOS_GigatrajGridComp.F90`, `mom_cap.F90`,
+`ice_comp_nuopc.F90`): create the alarm **once**, in `Initialize`,
+attached to the real `clock` dummy arg (`ESMF_AlarmCreate(name=
+"IRRAD_LW_ALARM", clock=clock, ringInterval=..., sticky=.true.,
+_RC)`), then in `Run`, just look it up **by name** off the same clock
+each call - `ESMF_ClockGetAlarm(clock, alarmname="IRRAD_LW_ALARM",
+alarm=lw_alarm, _RC)`. The clock itself is what persists the alarm
+across calls; no module-level/`SAVE` Fortran variable or private-state
+slot needed for it (unlike the RATS-toggle `first`/`nameRATS` state a
+few lines below, which genuinely has nowhere else to live since this
+file still has no other one-time-init hook - the new `Initialize` was
+deliberately left to do only the alarm setup, not touch that).
+
+Ring interval comes from the `IRRAD_DT` resource (seconds) via
+`MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, _RC)` - no
+`default=` given, so it's mandatory, matching how `NUM_BANDS`/`CO2` are
+treated elsewhere in this file. Confirmed `IRRAD_DT` is a real,
+already-configured key (not something new invented for this) - it
+shows up as `IRRAD_DT: 3600` in the example `AGCM.rc` configs under
+`src/Applications/@UMD_Etc/UMD_rc/` and the MIT-plug instructions dir.
+
+`Run`'s refresh block itself is now just the originally-commented-out
+code with the comment markers stripped and `alarm` renamed `lw_alarm`
+(declared as a plain, non-`SAVE` local - it's re-fetched from the clock
+every call, so no `SAVE` is needed here either):
+```fortran
+if (ESMF_AlarmIsRinging(lw_alarm, _RC)) then
+   call ESMF_AlarmRingerOff(lw_alarm, _RC)
+   call MAPL_GridCompTimerStart(gc, "LW_DRIVER", _RC)
+   call LW_Driver(IM, JM, LM, lats, lons, _RC)
+   call MAPL_GridCompTimerStop(gc, "LW_DRIVER", _RC)
+endif
+```
+
+**Not build-verified** - this session had no way to compile the file in
+isolation (the full dependency chain is heavy); build it before
+trusting it compiles/links. Also not yet committed (left unstaged
+alongside an unrelated, pre-existing `NUM_BANDS` error-message refactor
+already sitting in this file's working tree - see git history/status,
+not this session's alarm work).

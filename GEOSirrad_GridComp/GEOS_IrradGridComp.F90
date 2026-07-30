@@ -59,7 +59,6 @@ module GEOS_IrradGridCompMod
    use MAPL
    use GEOS_UtilsMod
    use gFTL_StringVector
-   use pflogger, only: logger_t => logger
 
    use rrtmg_lw_rad, only: rrtmg_lw
    use rrtmg_lw_init, only: rrtmg_lw_ini
@@ -173,7 +172,7 @@ contains
 
       integer :: status
       type(ESMF_HConfig) :: hconfig
-      logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+      logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU, USE_CO2_3D
       real :: CO2_RESOURCE
 
       ! for RATS-specific radiation diagnostics
@@ -197,9 +196,7 @@ contains
       call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
 
       call MAPL_GridCompGetResource(gc, "CO2", CO2_RESOURCE, default=-1.0, _RC)
-
       USE_CO2_3D = (CO2_RESOURCE .eq. -2.0)
-
       ! If using 3-D CO2, validate that a CO2_PROVIDER was also given
       if (USE_CO2_3D) then
          call MAPL_GridCompGetResource(gc, "CO2_PROVIDER", gen_str, default='none', _RC)
@@ -211,8 +208,11 @@ contains
          _ASSERT(ESMF_UtilStringLowerCase(trim(gen_str)) .ne. 'none', 'In AGCM.rc, cannot set CO2: to -2 and not give a valid CO2_PROVIDER')
       endif
 
-      ! Set the state variable specs generated from Irrad_StateSpecs.rc
+      ! Set entry points (Finalize uses MAPL generic default)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, phase_name="run", _RC)
 
+      ! Set the state variable specs generated from Irrad_StateSpecs.rc
 #include "Irrad_Import___.h"
 #include "Irrad_Export___.h"
 #include "Irrad_Internal___.h"
@@ -224,152 +224,180 @@ contains
       ! runtime RATS_DIAGNOSTICS: configuration list) and so cannot be
       ! captured in the static YAML spec.
       nameRATS = ESMF_HConfigAsStringSeq(hconfig, keyString='RATS_DIAGNOSTICS', stringLen=ESMF_MAXSTR, _RC)
-
       n = 0
       if (allocated(nameRATS)) n = size(nameRATS)
 
-      ! No error thrown. Just go around this if nothing learnable from config.
-      if (n .ne. 0) then
+      ! No error thrown. Just return if nothing learnable from config.
+      _RETURN_UNLESS(n > 0)
 
-         do i = 1, n
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='dOLR_'//trim(nameRATS(i)), &
-                 standard_name='chg_in_upwell_LW_flx_at_toa_from_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xy', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+      ! Add necessary internal fields
+      ungrd_n = MAPL_UngriddedDim(n, name='nRATS', units='1')
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='dLWS_'//trim(nameRATS(i)), &
-                 standard_name='chg_in_surface_absorbed_LW_rad_from_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xy', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_INTERNAL, &
+           short_name='FLXU_RAT', &
+           standard_name='upward_longwave_flux_in_air', &
+           units='W m-2', &
+           dims='xyz', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
+           ungridded_dim_array=[ungrd_n], _RC)
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='dFLNS_'//trim(nameRATS(i)), &
-                 standard_name='chg_in_sfc_net_downward_LW_flux_from_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xy', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_INTERNAL, &
+           short_name='FLXD_RAT', &
+           standard_name='upward_longwave_flux_in_air', &
+           units='W m-2', &
+           dims='xyz', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
+           ungridded_dim_array=[ungrd_n], _RC)
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='dSFCEM_'//trim(nameRATS(i)), &
-                 standard_name='LW_flux_emitted_from_sfc_from_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xy', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_INTERNAL, &
+           short_name='FLX_RAT', &
+           standard_name='net_downward_longwave_flux_in_air', &
+           units='W m-2', &
+           dims='xyz', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
+           ungridded_dim_array=[ungrd_n], _RC)
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='NETTRAP_'//trim(nameRATS(i)), &
-                 standard_name='Net_Heat_trapping_due_to_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xy', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_INTERNAL, &
+           short_name='DFDTS_RAT', &
+           standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature', &
+           units='W m-2 K-1', &
+           dims='xyz', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
+           ungridded_dim_array=[ungrd_n], _RC)
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='COLTRAP_'//trim(nameRATS(i)), &
-                 standard_name='Heat_trapping_due_to_'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xyz', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_INTERNAL, &
+           short_name='SFCEM_RAT', &
+           standard_name='longwave_flux_emitted_from_surface', &
+           units='W m-2', &
+           dims='xy', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, &
+           ungridded_dim_array=[ungrd_n], _RC)
 
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_EXPORT, &
-                 short_name='FLX_'//trim(nameRATS(i)), &
-                 standard_name='net_downward_longwave_flux_in_air_due_to'//trim(nameRATS(i)), &
-                 units='W m-2', &
-                 dims='xyz', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, _RC)
-
-            call MAPL_GridCompAddSpec(gc, &
-                 state_intent=ESMF_STATEINTENT_INTERNAL, &
-                 short_name='DFDTS_'//trim(nameRATS(i)), &
-                 standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_due_to'//trim(nameRATS(i)), &
-                 units='W m-2 K-1', &
-                 dims='xyz', &
-                 vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
-                 add_to_export=.true., _RC)
-         end do
-
+      ! Add the RATS-specific exports
+      do i = 1, n
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='CO2_FIXED', &
-              standard_name='lol', &
-              units='mol/mol', &
-              dims='xyz', &
-              vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
-
-         call MAPL_GridCompAddSpec(gc, &
-              state_intent=ESMF_STATEINTENT_EXPORT, &
-              short_name='DELT', &
-              standard_name='change in surface temperature in RRTMG', &
-              units='K', &
+              short_name='dOLR_'//trim(nameRATS(i)), &
+              standard_name='chg_in_upwell_LW_flx_at_toa_from_'//trim(nameRATS(i)), &
+              units='W m-2', &
               dims='xy', &
+              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+
+         call MAPL_GridCompAddSpec(gc, &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='dLWS_'//trim(nameRATS(i)), &
+              standard_name='chg_in_surface_absorbed_LW_rad_from_'//trim(nameRATS(i)), &
+              units='W m-2', &
+              dims='xy', &
+              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+
+         call MAPL_GridCompAddSpec(gc, &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='dFLNS_'//trim(nameRATS(i)), &
+              standard_name='chg_in_sfc_net_downward_LW_flux_from_'//trim(nameRATS(i)), &
+              units='W m-2', &
+              dims='xy', &
+              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+
+         call MAPL_GridCompAddSpec(gc, &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='dSFCEM_'//trim(nameRATS(i)), &
+              standard_name='LW_flux_emitted_from_sfc_from_'//trim(nameRATS(i)), &
+              units='W m-2', &
+              dims='xy', &
+              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+
+         call MAPL_GridCompAddSpec(gc, &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='NETTRAP_'//trim(nameRATS(i)), &
+              standard_name='Net_Heat_trapping_due_to_'//trim(nameRATS(i)), &
+              units='W m-2', &
+              dims='xy', &
+              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, _RC)
+
+         call MAPL_GridCompAddSpec(gc, &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='COLTRAP_'//trim(nameRATS(i)), &
+              standard_name='Heat_trapping_due_to_'//trim(nameRATS(i)), &
+              units='W m-2', &
+              dims='xyz', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
 
-         if (allocated(nameRATS)) deallocate(nameRATS, _STAT)
-
-         ! Add necessary internal fields
-         ungrd_n = MAPL_UngriddedDim(n, name='nRATS', units='1')
-
          call MAPL_GridCompAddSpec(gc, &
-              state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='FLXU_RAT', &
-              standard_name='upward_longwave_flux_in_air', &
+              state_intent=ESMF_STATEINTENT_EXPORT, &
+              short_name='FLX_'//trim(nameRATS(i)), &
+              standard_name='net_downward_longwave_flux_in_air_due_to'//trim(nameRATS(i)), &
               units='W m-2', &
               dims='xyz', &
-              vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
-              ungridded_dim_array=[ungrd_n], _RC)
+              vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, _RC)
 
          call MAPL_GridCompAddSpec(gc, &
               state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='FLXD_RAT', &
-              standard_name='upward_longwave_flux_in_air', &
-              units='W m-2', &
-              dims='xyz', &
-              vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
-              ungridded_dim_array=[ungrd_n], _RC)
-
-         call MAPL_GridCompAddSpec(gc, &
-              state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='FLX_RAT', &
-              standard_name='net_downward_longwave_flux_in_air', &
-              units='W m-2', &
-              dims='xyz', &
-              vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
-              ungridded_dim_array=[ungrd_n], _RC)
-
-         call MAPL_GridCompAddSpec(gc, &
-              state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='DFDTS_RAT', &
-              standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature', &
+              short_name='DFDTS_'//trim(nameRATS(i)), &
+              standard_name='sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_due_to'//trim(nameRATS(i)), &
               units='W m-2 K-1', &
               dims='xyz', &
               vertical_stagger=MAPL_VERTICAL_STAGGER_EDGE, &
-              ungridded_dim_array=[ungrd_n], _RC)
+              add_to_export=.true., _RC)
+      end do
 
-         call MAPL_GridCompAddSpec(gc, &
-              state_intent=ESMF_STATEINTENT_INTERNAL, &
-              short_name='SFCEM_RAT', &
-              standard_name='longwave_flux_emitted_from_surface', &
-              units='W m-2', &
-              dims='xy', &
-              vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, &
-              ungridded_dim_array=[ungrd_n], _RC)
-      endif
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_EXPORT, &
+           short_name='CO2_FIXED', &
+           standard_name='lol', &
+           units='mol/mol', &
+           dims='xyz', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
 
-      ! Set entry point for Run (Initialize/Finalize use MAPL generic defaults)
-      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_EXPORT, &
+           short_name='DELT', &
+           standard_name='change in surface temperature in RRTMG', &
+           units='K', &
+           dims='xy', &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_CENTER, _RC)
 
       _RETURN(_SUCCESS)
    end subroutine SetServices
+
+   !BOP
+   !IROUTINE: Initialize -- Initialize method for the LW component
+   !INTERFACE:
+   subroutine Initialize(gc, import, export, clock, rc)
+
+      !ARGUMENTS:
+      type(ESMF_GridComp) :: gc
+      type(ESMF_State) :: import
+      type(ESMF_State) :: export
+      type(ESMF_Clock) :: clock
+      integer, intent(out) :: rc
+
+      !DESCRIPTION: Creates the alarm that controls how often Run() performs
+      ! the full LW transfer calculation (LW\_Driver), with ring interval
+      ! set by the IRRAD\_DT configuration resource (seconds). Run() later
+      ! retrieves this alarm from the clock by name via ESMF\_ClockGetAlarm.
+      !EOP
+
+      integer :: status
+      integer :: irrad_dt
+      type(ESMF_TimeInterval) :: lw_alarm_interval
+      type(ESMF_Alarm) :: lw_alarm
+
+      call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, _RC)
+      call ESMF_TimeIntervalSet(lw_alarm_interval, s=irrad_dt, _RC)
+      lw_alarm = ESMF_AlarmCreate(name="irrad_lw_alarm", clock=clock, ringInterval=lw_alarm_interval, sticky=.true., _RC)
+
+      
+      _RETURN(_SUCCESS)
+      _UNUSED_DUMMY(import)
+      _UNUSED_DUMMY(export)
+
+   end subroutine Initialize
 
    !BOP
    !IROUTINE: Run -- Run method for the LW component
@@ -395,9 +423,10 @@ contains
       ! type(MAPL_MetaComp), pointer  :: MAPL
       type(ESMF_Grid) :: esmfgrid
       type(ESMF_State) :: internal
-      ! type(ESMF_Alarm) :: alarm
+      type(ESMF_Alarm) :: lw_alarm
+      logical :: lw_alarm_ringing
       type(ESMF_HConfig) :: hconfig
-      class(logger_t), pointer :: logger
+      character(len=:), allocatable :: band_msg
 
       integer :: IM, JM, LM
       integer :: called_last
@@ -445,7 +474,6 @@ contains
       ! For RATS <<>> MSL
       logical, save :: first = .true.     ! I don't wanna do this, but there's no Initialize() method. This prevents repeating unneeded ops
       integer, save :: nRATS              ! Number of active RATs to toggle
-      character(len=6), dimension(8) :: RATNAMES = (/'O3    ','N2O   ','CFC11 ','CFC12 ','CH4   ','HCFC22','H2O   ','CO2   '/)
       character(len=128) :: gen_str
       character(len=128), allocatable, save :: nameRATS(:)  ! Current toggles read from AGCM.rc
       real, allocatable, dimension(:,:) :: TMP_R
@@ -454,7 +482,7 @@ contains
       real, pointer, contiguous, dimension(:,:,:,:) :: DFDTS_RAT, FLX_INT_RAT, FLXU_INT_RAT, FLXD_INT_RAT
 
       ! Get the target components grid.
-      call MAPL_GridCompGet(gc, grid=esmfgrid, hconfig=hconfig, logger=logger, num_levels=LM, _RC)
+      call MAPL_GridCompGet(gc, grid=esmfgrid, hconfig=hconfig, num_levels=LM, _RC)
       call MAPL_GridGet(esmfgrid, im=IM, jm=JM, _RC)
       call MAPL_GridGetCoordinates(esmfgrid, longitudes=lons, latitudes=lats, _RC)
 
@@ -462,11 +490,9 @@ contains
       ! call MAPL_GetObjectFromGC(gc, MAPL, _RC)
       call MAPL_GridCompGetInternalState(gc, internal, _RC)
 
-      ! The RUNALARM is used to control the calling of the full transfer
-      ! calculation - no MAPL3 MAPL_GridCompGet equivalent exists yet for
-      ! this, so it is still fetched via the (still-supported) MAPL_Get.
-      ! This is the ONLY reason a MAPL_MetaComp object is still needed here.
-      ! call MAPL_Get(MAPL, RunAlarm=alarm, _RC)
+      ! Retrieve the alarm (created once in Initialize) that controls when
+      ! the full transfer calculation, LW_Driver, is run below.
+      call ESMF_ClockGetAlarm(clock, alarmname="irrad_lw_alarm", alarm=lw_alarm, _RC)
 
       ! Decide which radiation to use:
       ! These USE_ flags are shared globally by contained LW_Driver() and Update_Flx()
@@ -494,15 +520,16 @@ contains
 
       call MAPL_GridCompGetResource(gc, "NUM_BANDS", NUM_BANDS, _RC)
       if (NUM_BANDS /= TOTAL_RAD_BANDS) then
-         call logger%info("NUM_BANDS is not set up correctly for the radiation combination selected:")
-         call logger%info("    IRRAD RRTMG: USE_RRTMGP="//merge('T','F',USE_RRTMGP)// &
+         band_msg = "Total number of radiation bands is inconsistent! " // &
+              "NUM_BANDS is not set up correctly for the radiation combination selected: " // &
+              "IRRAD RRTMG: USE_RRTMGP="//merge('T','F',USE_RRTMGP)// &
               " USE_RRTMG="//merge('T','F',USE_RRTMG)// &
-              " USE_CHOU="//merge('T','F',USE_CHOU))
-         call logger%info("    SOLAR RRTMG: USE_RRTMGP_SORAD="//merge('T','F',USE_RRTMGP_SORAD)// &
+              " USE_CHOU="//merge('T','F',USE_CHOU)// &
+              "; SOLAR RRTMG: USE_RRTMGP_SORAD="//merge('T','F',USE_RRTMGP_SORAD)// &
               " USE_RRTMG_SORAD="//merge('T','F',USE_RRTMG_SORAD)// &
-              " USE_CHOU_SORAD="//merge('T','F',USE_CHOU_SORAD))
-         call logger%info("Please check that your optics tables and NUM_BANDS are correct.")
-         _FAIL('Total number of radiation bands is inconsistent!')
+              " USE_CHOU_SORAD="//merge('T','F',USE_CHOU_SORAD)// &
+              "; please check that your optics tables and NUM_BANDS are correct."
+         _FAIL(band_msg)
       end if
 
       ! select which bands require OLRB output ...
@@ -570,17 +597,13 @@ contains
       endif
 
       ! If it is time, refresh internal state.
-      ! if (ESMF_AlarmIsRinging(alarm, _RC)) then
-      !    call ESMF_AlarmRingerOff(alarm, _RC)
-      !    call MAPL_GridCompTimerStart(gc, "LW_DRIVER", _RC)
-      !    call LW_Driver(IM, JM, LM, lats, lons, _RC)
-      !    call MAPL_GridCompTimerStop(gc, "LW_DRIVER", _RC)
-      ! endif
-
-      ! Run LW_Driver every step (alarm-based refresh gating disabled above).
-      call MAPL_GridCompTimerStart(gc, "LW_DRIVER", _RC)
-      call LW_Driver(IM, JM, LM, lats, lons, _RC)
-      call MAPL_GridCompTimerStop(gc, "LW_DRIVER", _RC)
+      lw_alarm_ringing = ESMF_AlarmIsRinging(lw_alarm, _RC)
+      if (lw_alarm_ringing) then
+         call ESMF_AlarmRingerOff(lw_alarm, _RC)
+         call MAPL_GridCompTimerStart(gc, "LW_DRIVER", _RC)
+         call LW_Driver(IM, JM, LM, lats, lons, _RC)
+         call MAPL_GridCompTimerStop(gc, "LW_DRIVER", _RC)
+      endif
 
       ! Fill exported fluxes based on latest Ts
       if (called_last==0) then
@@ -588,8 +611,6 @@ contains
          call Update_Flx(IM, JM, LM, _RC)
          call MAPL_GridCompTimerStop(gc, "UPDATE_FLX", _RC)
       endif
-
-      call MAPL_GridCompTimerStop(gc, "TOTAL", _RC)
 
       _RETURN(_SUCCESS)
 
@@ -615,21 +636,6 @@ contains
          ! used to avoid a reshaped copy of some arrays in RRTMGP blocking
          ! (Tom Clune's suggestion)
          use, intrinsic :: iso_c_binding, only: c_ptr, c_loc, c_f_pointer
-
-#ifdef HAVE_MKL
-         ! Type of MKL VSL Basic RNGs
-         ! (1) Mersenne Twister types
-         ! brng = VSL_BRNG_MT19937
-         ! Alternatives are VSL_BRNG_SFMT19937, maybe VSL_BRNG_MT2203?
-         ! (2) Counter based PRNGs (CBPRNGs)
-         ! brng = VSL_BRNG_PHILOX4X32X10  ! 10-round Philox 4x32 counter, 2x32 key
-         ! Alternatives are VSL_BRNG_ARS5 ! faster if AES-NI instructions hardware supported
-         !
-         use MKL_VSL_TYPE
-         use mo_rng_mklvsl_plus, only: ty_rng_mklvsl_plus
-#else
-         use mo_rng_mt19937, only: ty_rng_mt
-#endif
 
          ! for RRTMGP (use implicit inside RRTMG)
          use cloud_condensate_inhomogeneity, only: condensate_inhomogeneous, zcw_lookup
@@ -663,8 +669,6 @@ contains
          integer :: LCLDMH ! model level separating high and middle clouds
          integer :: LCLDLM ! model level separating low  and middle clouds
 
-         character(len=ESMF_MAXSTR), pointer :: AEROSOLS(:)
-
          integer :: i, j, K, L, YY, DOY, ibinary
          integer :: N !<<>> MSL
 
@@ -691,21 +695,15 @@ contains
 
          ! type(C_PTR) :: cptr  ! = c_loc(var), but done implicitly with c_loc below
 
-         real :: X
          integer :: IB, NA
          integer :: OFFSET
 
          ! AERO state variables
          type (ESMF_State) :: AERO
          type (ESMF_Info) :: aero_info
-         type (ESMF_Field) :: AS_FIELD
          character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
-         type (ESMF_Field) :: AS_FIELD_Q
-         integer :: AS_STATUS
-         real, pointer, dimension(:,:,:) :: AS_PTR_3D, AS_PTR_PLE, AS_PTR_T, AS_PTR_Q
-         real, allocatable, dimension(:,:,:) :: AS_ARR_RH, AS_ARR_PL
+         real, pointer, dimension(:,:,:) :: AS_PTR_3D
          real, allocatable, dimension(:,:,:,:) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
-         real, pointer, dimension(:,:,:) :: VAR_PTR_3D
          logical :: implements_aerosol_optics
          integer :: band
 
@@ -713,7 +711,7 @@ contains
          integer :: iceflglw ! Flag for ice particle specification
          integer :: liqflglw ! Flag for liquid droplet specification
          logical :: Ts_derivs ! calculate Tsurf derivatives of upward fluxes
-         integer :: NN, IJ, LV
+         integer :: IJ, LV
 
          real, allocatable, dimension(:,:) :: FCLD_R
          real, allocatable, dimension(:,:) :: TLEV_R ! Edge Level temperature
@@ -772,9 +770,6 @@ contains
          type(ty_gas_optics_rrtmgp), pointer :: k_dist
          type(ty_gas_concs) :: gas_concs, gas_concs_block
          type(ty_cloud_optics_rrtmgp) :: cloud_optics
-         type(ty_source_func_lw) :: sources
-         type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
-         type(ty_fluxes_byband) :: fluxes_byband_allnoa, fluxes_byband_allsky
 
          ! The band-space (ncols_block,nlay,nbnd) aerosol and in-cloud optical properties
          ! Polymorphic with dynamic type (#streams) defined later
@@ -788,21 +783,18 @@ contains
          class(ty_optical_props_arry), allocatable :: clean_optical_props, dirty_optical_props
 
          ! RRTMGP locals
-         logical :: top_at_1, u2s, partial_block, gen_mro, cond_inhomo
+         logical :: top_at_1, u2s, gen_mro, cond_inhomo
          logical :: need_dirty_optical_props, need_cloud_optical_props
          logical :: export_clrnoa, export_clrsky, export_allnoa, export_allsky
          logical :: calc_clrnoa, calc_clrsky, calc_allnoa, calc_allsky
          logical :: allnoa_to_allsky_band_xfer_needed
          integer :: ncol, nbnd, ngpt, nmom, nga, icergh
-         integer :: b, nBlocks, colS, colE, ncols_block
-         integer :: partial_blockSize, icol, isub, ilay, igpt
+         integer :: b, nBlocks
          character(len=:), allocatable :: k_dist_file, cloud_optics_file
          character(len=:), allocatable :: cloud_optics_type, cloud_overlap_type
          character(len=ESMF_MAXSTR) :: error_msg
          type(ESMF_Time) :: reference_time
          type(ESMF_TimeInterval) :: refresh_interval
-         real(wp) :: cld_frac
-         real :: sigma_qcw
 
          ! for global gcolumn index seeding of PRNGs
          integer :: iBeg, iEnd, jBeg, jEnd
@@ -815,40 +807,20 @@ contains
          ! the fuller explanation in Run's own scratch-pointer block)
          real, pointer, contiguous, dimension(:,:,:,:) :: p4d
 
-         ! a column random number generator
-#ifdef HAVE_MKL
-         type(ty_rng_mklvsl_plus) :: rng
-#else
-         type(ty_rng_mt) :: rng
-#endif
          integer, dimension(:), allocatable :: seeds
-
-         ! uniform random numbers need by mcICA (ngpt,nlay,rrtmgp_blocksize)
-         real(wp), dimension(:,:,:), allocatable :: urand, urand_aux, urand_cond, urand_cond_aux
-
-         ! Cloud mask for overlap scheme (ncols_block,nlay,ngpt)
-         logical, dimension(:,:,:), allocatable :: cld_mask
-
-         ! sub-gridscale condensate scaling for overlap scheme (ncols_block,nlay,ngpt)
-         real(wp), dimension(:,:,:), allocatable :: zcw
 
          ! correlation length scales [m] for cloud presence and condensate (ncol)
          real, dimension(:), allocatable :: adl, rdl
 
-         ! binomial probability of maximum overlap (cf. random overlap)
-         ! for cloud presence and condensate (ncols_block,nlay-1)
-         real(wp), dimension(:,:), allocatable :: alpha, rcorr
-
          ! TEMP ... see below
-         real(wp) :: press_ref_min, ptop
-         real(wp) :: temp_ref_min, tmin
+         real(wp) :: press_ref_min
+         real(wp) :: temp_ref_min
          real(wp) :: temp_ref_max, tmax
 
          ! block size for efficient column processing (set from resource file)
          integer :: rrtmgp_blockSize
 
          ! For aerosol
-         integer :: in
          real :: xx, LWT, IWT
          type(ESMF_Time) :: current_time
          real :: TLEV(LM+1), DP(LM)
@@ -859,8 +831,6 @@ contains
          ! which declares/fetches them once via the ACG-generated
          ! Irrad_DeclarePointer___.h / Irrad_GetPointer___.h includes)
 
-         real, pointer, dimension(:,:,:,:) :: RAERO
-         real, pointer, dimension(:,:,:) :: QAERO
          real, pointer, dimension(:,:,:) :: CO2_3d => null() ! <<>> MSL
          real, pointer, dimension(:,:,:) :: tmp_3d => null() ! <<>> MSL
 
@@ -3331,7 +3301,6 @@ contains
       integer, optional, intent(out) :: rc
 
       integer :: status
-      character(len=256) :: error_msg
       integer :: ncols_block, colS, colE
 
       ! local RRTMGP objects (LW always uses 2-stream)

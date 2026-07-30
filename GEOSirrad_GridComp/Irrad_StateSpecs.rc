@@ -5,7 +5,7 @@ category: INTERNAL
 #--------------------------------------------------------------------------------------------------------------------------------
 #  VARIABLE       | DIMENSION   |          Additional Metadata
 #--------------------------------------------------------------------------------------------------------------------------------
- NAME             | ALIAS       | UNITS       | DIMS | VLOC | COND                          | ADD2EXPORT | LONG NAME
+ NAME             | ALIAS            | UNITS       | DIMS | VLOC | COND                          | ADD2EXPORT | LONG NAME
 #--------------------------------------------------------------------------------------------------------------------------------
  FLX              | FLX_INT          | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air
  FLC              | FLC_INT          | W m-2       | xyz  | E    |                               |            | net_downward_longwave_flux_in_air_for_clear_sky

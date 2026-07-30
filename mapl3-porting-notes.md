@@ -130,6 +130,21 @@ mandatory (no `COND`) - `PLEINST` has no conditional gating and
 `SetServices` - so no `associated()` guard needed before remapping,
 same reasoning as `Run`'s Edge remap block in `GEOS_IrradGridComp.F90`.
 
+## Built as a SHARED library (2026-07-22)
+Added `TYPE SHARED` to this container's `esma_add_library()` call in
+`CMakeLists.txt`, matching the convention used throughout MAPL3 (e.g.
+`src/Shared/@MAPL/mapl/CMakeLists.txt`'s own top-level `MAPL` target).
+Same change applied to the `GEOSirrad_GridComp` child's `CMakeLists.txt`.
+
+## Committed (2026-07-22)
+This session's Radiation work (the standalone `Radiation_SetServices`
+routine, the `Radiation_StateSpecs.rc` rename, the `Edge`-field 0-based
+bounds-remap fix, the `TYPE SHARED` build change, and this notes file)
+is committed on `feature/pchakrab/port-to-mapl3` in this repo (commit
+`bbc9dc1`, bundled together with the matching `GEOSirrad_GridComp`
+fixes in the same commit since both live in this one git repo). Not
+pushed to `origin` yet.
+
 ## Build verification caveat
 Editing `CMakeLists.txt` forces a full top-level CMake reconfigure (not
 incremental) on the next `make`. In this session's sandboxed tool
