@@ -217,6 +217,17 @@ contains
 #include "Irrad_Export___.h"
 #include "Irrad_Internal___.h"
 
+      ! 'AERO' is a nested State (aerosol-optics-provider bundle, fetched via
+      ! ESMF_StateGet into a type(ESMF_State) in Run/LW_Driver), not a plain
+      ! Field, so it can't be expressed in Irrad_StateSpecs.rc (ITEMTYPE
+      ! column only supports 'F'/'V'). Must be added here unconditionally,
+      ! ahead of the RATS-only early return below.
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_IMPORT, &
+           short_name='AERO', &
+           standard_name='aerosols', &
+           itemtype=mapl_STATEITEM_STATE, _RC)
+
       ! Settings for RATS-specific radiation diagnostics -- these will cause
       ! RRTMG_LW to be called multiple times toggling the named species
       ! on/off, to compute the specific radiative impact of that species.
@@ -385,10 +396,12 @@ contains
 
       integer :: status
       integer :: irrad_dt
+      real :: run_dt
       type(ESMF_TimeInterval) :: lw_alarm_interval
       type(ESMF_Alarm) :: lw_alarm
 
-      call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, _RC)
+      call MAPL_ClockGet(clock, dt=run_dt, _RC)
+      call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
       call ESMF_TimeIntervalSet(lw_alarm_interval, s=irrad_dt, _RC)
       lw_alarm = ESMF_AlarmCreate(name="irrad_lw_alarm", clock=clock, ringInterval=lw_alarm_interval, sticky=.true., _RC)
 
@@ -1035,8 +1048,11 @@ contains
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call ESMF_InfoGetFromHost(AERO, aero_info, _RC)
 
-         call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', &
-              value=implements_aerosol_optics, _RC)
+         ! pchakrab - TODO: till I figure out a way to get the implements_aerosol_optics_method
+         ! from the aero provider, I will assume that it is always false. This is a temporary fix
+         ! and needs to be fixed
+         implements_aerosol_optics = .false.
+         ! call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', value=implements_aerosol_optics, _RC)
 
          RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
 
@@ -2262,22 +2278,28 @@ contains
          call MAPL_StateGetPointer(export, CLDTMP, 'CLDTMP', _RC)
          call MAPL_StateGetPointer(export, TAUIR,  'TAUIR',  _RC)
 
-         if(associated(TAUIR)) TAUIR = 0.5*(TAUDIAG(:,:,:,3)+TAUDIAG(:,:,:,4))
+         ! TAUDIAG is only filled by the IRRAD() call in the USE_CHOU branch
+         ! above; under RRTMG/RRTMGP it is left uninitialized, so guard every
+         ! read of it here behind USE_CHOU to avoid an FPE on garbage stack
+         ! values.
+         if (USE_CHOU) then
+            if(associated(TAUIR)) TAUIR = 0.5*(TAUDIAG(:,:,:,3)+TAUDIAG(:,:,:,4))
 
-         if(associated(CLDTMP).or.associated(CLDPRS)) then
-            if(associated(CLDTMP)) CLDTMP = MAPL_UNDEF
-            if(associated(CLDPRS)) CLDPRS = MAPL_UNDEF
-            do j=1,jm
-               do i=1,im
-                  do l=1,lm
-                     if(0.5*(TAUDIAG(I,J,L,3)+TAUDIAG(I,J,L,4))>TAUCRIT) then
-                        if(associated(CLDTMP)) CLDTMP(I,J) = T  (I,J,L)
-                        if(associated(CLDPRS)) CLDPRS(I,J) = PLE(I,J,L-1)
-                        exit
-                     end if
+            if(associated(CLDTMP).or.associated(CLDPRS)) then
+               if(associated(CLDTMP)) CLDTMP = MAPL_UNDEF
+               if(associated(CLDPRS)) CLDPRS = MAPL_UNDEF
+               do j=1,jm
+                  do i=1,im
+                     do l=1,lm
+                        if(0.5*(TAUDIAG(I,J,L,3)+TAUDIAG(I,J,L,4))>TAUCRIT) then
+                           if(associated(CLDTMP)) CLDTMP(I,J) = T  (I,J,L)
+                           if(associated(CLDPRS)) CLDPRS(I,J) = PLE(I,J,L-1)
+                           exit
+                        end if
+                     end do
                   end do
                end do
-            end do
+            end if
          end if
 
          ! Correcting the timing of the alw and blw (mjs)

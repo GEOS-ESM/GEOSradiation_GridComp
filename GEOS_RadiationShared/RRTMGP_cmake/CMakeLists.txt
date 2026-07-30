@@ -67,7 +67,7 @@ endif()
 
 esma_add_library(${this}
   SRCS ${SRCS}
-  DEPENDENCIES NetCDF::NetCDF_Fortran)
+  DEPENDENCIES NetCDF::NetCDF_Fortran ${MKL_LIBRARIES})
 
 # Use of the GEOS Vectorized flags in RRTMGP caused a segfault leading to
 # line 726 of mo_gas_optics_kernels.F90. Moving to the "old" no-vect flags

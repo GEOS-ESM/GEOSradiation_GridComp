@@ -47,6 +47,10 @@ category: IMPORT
 #-------------------------------------------------------------------------------------------------------------------
 #  VARIABLE    | DIMENSIONS  |          Additional Metadata
 #-------------------------------------------------------------------------------------------------------------------
+# NOTE: 'AERO' (the aerosol-optics-provider nested State, itemtype=state) is
+# not declared here - this schema's ITEMTYPE column has no "state" option
+# (only 'F'/'V'). It is added manually in SetServices via
+# MAPL_GridCompAddSpec(itemtype=mapl_STATEITEM_STATE).
  NAME    | ALIAS    | UNITS       | DIMS | VLOC | RESTART | COND        | LONG NAME
 #-------------------------------------------------------------------------------------------------------------------
  PLE     |          | Pa          | xyz  | E    | SKIP    |             | air_pressure
@@ -73,7 +77,6 @@ category: IMPORT
  EMIS    |          | 1           | xy   | N    | SKIP    |             | surface_emissivity
  PREF    |          | Pa          |   z  | E    | SKIP    |             | reference_air_pressure
  TSINST  |          | K           | xy   | N    | SKIP    |             | surface_skin_temperature_instantaneous
- AERO    |          | kg kg-1     | xyz  | C    | SKIP    |             | aerosols
  CO2     |          | pppv        | xyz  | C    | SKIP    | USE_CO2_3D  | carbondioxide_concentration
 
 category: EXPORT
