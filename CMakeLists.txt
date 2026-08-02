@@ -19,3 +19,5 @@ mapl_acg (
   IMPORT_SPECS EXPORT_SPECS GET_POINTERS DECLARE_POINTERS
 )
 
+add_subdirectory(regression)
+
