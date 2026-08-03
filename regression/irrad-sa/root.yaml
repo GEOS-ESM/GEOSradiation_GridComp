@@ -24,6 +24,10 @@ mapl:
       setservice: irrad_setservices_
       config_file: irrad.yaml
 
+    FakeGOCART:
+      dso: libFakeGOCART_GridComp.so
+      setservice: fakegocart_setservices_
+
   connections:
     - src_name: PLE
       src_comp: DataIRRAD
@@ -145,11 +149,11 @@ mapl:
       src_intent: internal
       dst_name: TSINST
       dst_comp: IRRAD
-    # - src_name: AERO
-    #   src_comp: DataIRRAD
-    #   src_intent: internal
-    #   dst_name: AERO
-    #   dst_comp: IRRAD
+    - src_name: AERO
+      src_comp: FakeGOCART
+      src_intent: export
+      dst_name: AERO
+      dst_comp: IRRAD
     # - src_name: CO2 pchakrab - uncomment for USE_CO2_3D = .true.
     #   src_comp: DataIRRAD
     #   src_intent: internal

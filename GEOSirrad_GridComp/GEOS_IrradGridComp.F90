@@ -223,7 +223,7 @@ contains
            state_intent=ESMF_STATEINTENT_IMPORT, &
            short_name='AERO', &
            standard_name='aerosols', &
-           itemtype=mapl_STATEITEM_STATE, _RC)
+           itemtype=MAPL_STATEITEM_STATE, _RC)
 
       ! Settings for RATS-specific radiation diagnostics -- these will cause
       ! RRTMG_LW to be called multiple times toggling the named species
@@ -716,10 +716,10 @@ contains
          ! AERO state variables
          type(ESMF_State) :: AERO
          type(ESMF_Info) :: aero_info
-         character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
-         real, pointer, dimension(:, :, :) :: AS_PTR_3D
+         character(len=ESMF_MAXSTR) :: as_field_name
+         real, pointer, dimension(:, :, :) :: as_ptr_3d
          real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
-         logical :: implements_aerosol_optics
+         logical :: aerosol_optics
          integer :: band
 
          ! Variables for RRTMG Code
@@ -1045,30 +1045,27 @@ contains
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call ESMF_InfoGetFromHost(AERO, aero_info, _RC)
 
-         ! pchakrab - TODO: till I figure out a way to get the implements_aerosol_optics_method
-         ! from the aero provider, I will assume that it is always false. This is a temporary fix
-         ! and needs to be fixed
-         implements_aerosol_optics = .false.
-         ! call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', value=implements_aerosol_optics, _RC)
+         call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', value=aerosol_optics, _RC)
 
-         RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
+         ! TODO: pchakrab - this block is skipped in the first round of testing
+         RADIATIVELY_ACTIVE_AEROSOLS: if (aerosol_optics) then
 
             ! set RH for aerosol optics
             call ESMF_InfoGet(aero_info, &
                  key='relative_humidity_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, _RC)
-            if (AS_FIELD_NAME /= '') then
-               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-               AS_PTR_3D = RH
+                 value=as_field_name, _RC)
+            if (as_field_name /= '') then
+               call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
+               as_ptr_3d = RH
             end if
 
             ! set PLE for aerosol optics
             call ESMF_InfoGet(aero_info, &
                  key='air_pressure_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, _RC)
-            if (AS_FIELD_NAME /= '') then
-               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-               AS_PTR_3D = PLE
+                 value=as_field_name, _RC)
+            if (as_field_name /= '') then
+               call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
+               as_ptr_3d = PLE
             end if
 
             ! allocate memory for total aerosol ext, ssa and asy at all solar bands
@@ -1093,33 +1090,33 @@ contains
                ! EXT from AERO_PROVIDER
                call ESMF_InfoGet(aero_info, &
                     key='extinction_in_air_due_to_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) then
-                     AEROSOL_EXT(:, :, :, band) = max(AS_PTR_3D, 0.0)
+                    value=as_field_name, _RC)
+               if (as_field_name /= '') then
+                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
+                  if (associated(as_ptr_3d)) then
+                     AEROSOL_EXT(:, :, :, band) = max(as_ptr_3d, 0.0)
                   end if
                end if
 
                ! SSA from AERO_PROVIDER
                call ESMF_InfoGet(aero_info, &
                     key='single_scattering_albedo_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) then
-                     AEROSOL_SSA(:, :, :, band) = min(max(AS_PTR_3D, 0.0), SSA_MAX)
+                    value=as_field_name, _RC)
+               if (as_field_name /= '') then
+                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
+                  if (associated(as_ptr_3d)) then
+                     AEROSOL_SSA(:, :, :, band) = min(max(as_ptr_3d, 0.0), SSA_MAX)
                   end if
                end if
 
                ! ASY from AERO_PROVIDER
                call ESMF_InfoGet(aero_info, &
                     key='asymmetry_parameter_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) then
-                     AEROSOL_ASY(:, :, :, band) = min(max(AS_PTR_3D, 0.0), ASY_MAX)
+                    value=as_field_name, _RC)
+               if (as_field_name /= '') then
+                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
+                  if (associated(as_ptr_3d)) then
+                     AEROSOL_ASY(:, :, :, band) = min(max(as_ptr_3d, 0.0), ASY_MAX)
                   end if
                end if
 
@@ -1462,19 +1459,19 @@ contains
 
             ! which fluxes to calculate?
             ! the clean fluxes are also used for "dirty" fluxes if no aerosols
-            calc_clrnoa = (export_clrnoa .or. (export_clrsky .and. .not. implements_aerosol_optics))
-            calc_allnoa = (export_allnoa .or. (export_allsky .and. .not. implements_aerosol_optics))
+            calc_clrnoa = (export_clrnoa .or. (export_clrsky .and. .not. aerosol_optics))
+            calc_allnoa = (export_allnoa .or. (export_allsky .and. .not. aerosol_optics))
             calc_clrsky = export_clrsky
             calc_allsky = export_allsky
 
             ! handle allnoa -> allsky band output when aerosols not implemented
             !   (band output currently only available for all-sky case)
             allnoa_to_allsky_band_xfer_needed = &
-                 export_allsky .and. any_band_output .and. .not. implements_aerosol_optics
+                 export_allsky .and. any_band_output .and. .not. aerosol_optics
 
             ! do we actually need dirty optical properties?
             need_dirty_optical_props = &
-                 (export_clrsky .or. export_allsky) .and. implements_aerosol_optics
+                 (export_clrsky .or. export_allsky) .and. aerosol_optics
 
             ! do we need cloudy optical properties?
             need_cloud_optical_props = (export_allnoa .or. export_allsky)
@@ -1711,7 +1708,7 @@ contains
                     gen_mro, cond_inhomo, cloud_overlap_type, &
                     calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
                     allnoa_to_allsky_band_xfer_needed, any_band_output, &
-                    export_clrsky, export_allsky, implements_aerosol_optics, &
+                    export_clrsky, export_allsky, aerosol_optics, &
                     k_dist, cloud_optics, gas_concs, &
                     p_lay, p_lev, t_lay, t_lev, t_sfc, dp_wp, cf_wp, dzmid, emis_sfc, &
                     adl=adl, rdl=rdl, &
@@ -3101,7 +3098,7 @@ contains
         calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
         allnoa_to_allsky_band_xfer_needed, any_band_output, &
         export_clrsky, export_allsky, &
-        implements_aerosol_optics, need_dirty_optical_props, &
+        aerosol_optics, need_dirty_optical_props, &
         clean_optical_props, sources, emis_sfc, &
         dirty_optical_props, aer_props, cloud_props_gpt, &
         flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
@@ -3128,7 +3125,7 @@ contains
       logical, intent(in) :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
       logical, intent(in) :: allnoa_to_allsky_band_xfer_needed, any_band_output
       logical, intent(in) :: export_clrsky, export_allsky
-      logical, intent(in) :: implements_aerosol_optics, need_dirty_optical_props
+      logical, intent(in) :: aerosol_optics, need_dirty_optical_props
       class(ty_optical_props_arry), intent(inout) :: clean_optical_props
       type(ty_source_func_lw), intent(inout) :: sources
       real(kind=wp), dimension(:, :), intent(in) :: emis_sfc
@@ -3217,7 +3214,7 @@ contains
       end if
 
       if (export_clrsky .or. export_allsky) then
-         if (implements_aerosol_optics) then
+         if (aerosol_optics) then
 
             ! dirty flux calculations required ...
 
@@ -3287,7 +3284,7 @@ contains
                end if
             end if
 
-         end if ! implements_aerosol_optics
+         end if ! aerosol_optics
       end if ! export dirty clear-sky or all-sky
 
       _RETURN(_SUCCESS)
@@ -3308,7 +3305,7 @@ contains
         gen_mro, cond_inhomo, cloud_overlap_type, &
         calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
         allnoa_to_allsky_band_xfer_needed, any_band_output, &
-        export_clrsky, export_allsky, implements_aerosol_optics, &
+        export_clrsky, export_allsky, aerosol_optics, &
         k_dist, cloud_optics, gas_concs, &
         p_lay, p_lev, t_lay, t_lev, t_sfc, dp_wp, cf_wp, dzmid, emis_sfc, &
         adl, rdl, &
@@ -3341,7 +3338,7 @@ contains
       character(len=*), intent(in) :: cloud_overlap_type
       logical, intent(in) :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
       logical, intent(in) :: allnoa_to_allsky_band_xfer_needed, any_band_output
-      logical, intent(in) :: export_clrsky, export_allsky, implements_aerosol_optics
+      logical, intent(in) :: export_clrsky, export_allsky, aerosol_optics
       type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
       type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
       type(ty_gas_concs), intent(inout) :: gas_concs
@@ -3454,7 +3451,7 @@ contains
               calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
               allnoa_to_allsky_band_xfer_needed, any_band_output, &
               export_clrsky, export_allsky, &
-              implements_aerosol_optics, need_dirty_optical_props, &
+              aerosol_optics, need_dirty_optical_props, &
               clean_optical_props, sources, emis_sfc, &
               dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
               cloud_props_gpt=cloud_props_gpt, &
@@ -3472,7 +3469,7 @@ contains
               calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
               allnoa_to_allsky_band_xfer_needed, any_band_output, &
               export_clrsky, export_allsky, &
-              implements_aerosol_optics, need_dirty_optical_props, &
+              aerosol_optics, need_dirty_optical_props, &
               clean_optical_props, sources, emis_sfc, &
               dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
               flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
@@ -3489,7 +3486,7 @@ contains
               calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
               allnoa_to_allsky_band_xfer_needed, any_band_output, &
               export_clrsky, export_allsky, &
-              implements_aerosol_optics, need_dirty_optical_props, &
+              aerosol_optics, need_dirty_optical_props, &
               clean_optical_props, sources, emis_sfc, &
               cloud_props_gpt=cloud_props_gpt, &
               flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
@@ -3506,7 +3503,7 @@ contains
               calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
               allnoa_to_allsky_band_xfer_needed, any_band_output, &
               export_clrsky, export_allsky, &
-              implements_aerosol_optics, need_dirty_optical_props, &
+              aerosol_optics, need_dirty_optical_props, &
               clean_optical_props, sources, emis_sfc, &
               flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
               flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
