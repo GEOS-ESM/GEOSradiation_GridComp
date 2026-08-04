@@ -145,6 +145,8 @@ module GEOS_IrradGridCompMod
       private
       logical :: initialized = .false.
       type(ty_gas_optics_rrtmgp) :: k_dist
+      integer :: nRATS = 0
+      character(len=128), allocatable :: nameRATS(:) ! RATS toggle list
    end type ty_RRTMGP_state
 
    ! name under which the RRTMGP state is attached as a private state
@@ -393,6 +395,9 @@ contains
       ! the full LW transfer calculation (LW\_Driver), with ring interval
       ! set by the IRRAD\_DT configuration resource (seconds). Run() later
       ! retrieves this alarm from the clock by name via ESMF\_ClockGetAlarm.
+      ! Also parses the RATS_DIAGNOSTICS toggle list once here and stores it
+      ! in the private state, instead of the old lazy `first`-call-to-Run()
+      ! hack from back when this component had no Initialize() method.
       !EOP
 
       integer :: status
@@ -400,6 +405,8 @@ contains
       real :: run_dt
       type(ESMF_TimeInterval) :: lw_alarm_interval
       type(ESMF_Alarm) :: lw_alarm
+      type(ESMF_HConfig) :: hconfig
+      type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
@@ -409,6 +416,14 @@ contains
            clock=clock, &
            ringInterval=lw_alarm_interval, &
            sticky=.true., _RC)
+
+      call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      rrtmgp_state%nameRATS = ESMF_HConfigAsStringSeq(hconfig, &
+           keyString='RATS_DIAGNOSTICS', &
+           stringLen=ESMF_MAXSTR, _RC)
+      rrtmgp_state%nRATS = 0 ! Default, no RAT diags
+      if (allocated(rrtmgp_state%nameRATS)) rrtmgp_state%nRATS = size(rrtmgp_state%nameRATS)
 
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(import)
@@ -442,7 +457,6 @@ contains
       type(ESMF_State) :: internal
       type(ESMF_Alarm) :: lw_alarm
       logical :: lw_alarm_ringing
-      type(ESMF_HConfig) :: hconfig
       character(len=:), allocatable :: band_msg
 
       integer :: IM, JM, LM
@@ -487,11 +501,9 @@ contains
       character*2 :: bb
 
       ! For RATS <<>> MSL
-      ! I don't wanna do this, but there's no Initialize() method
-      logical, save :: first = .true. ! this prevents repeating unneeded ops
-      integer, save :: nRATS ! Number of active RATs to toggle
+      integer :: nRATS ! Number of active RATs to toggle
       character(len=128) :: gen_str
-      character(len=128), allocatable, save :: nameRATS(:) ! Current toggles read from AGCM.rc
+      character(len=128), allocatable :: nameRATS(:) ! current toggles read from config file
       real, allocatable, dimension(:, :) :: TMP_R
       real, allocatable, dimension(:, :, :) :: UFLXRAT, DFLXRAT, DUFLX_DT_RAT
       real, pointer, dimension(:, :, :) :: SFCEM_INT_RAT
@@ -499,7 +511,7 @@ contains
       real, pointer, contiguous, dimension(:, :, :, :) :: FLX_INT_RAT, FLXU_INT_RAT, FLXD_INT_RAT
 
       ! Get the target components grid.
-      call MAPL_GridCompGet(gc, grid=esmfgrid, hconfig=hconfig, num_levels=LM, _RC)
+      call MAPL_GridCompGet(gc, grid=esmfgrid, num_levels=LM, _RC)
       call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
       call MAPL_GridGetCoordinates(esmfgrid, longitudes=lons, latitudes=lats, _RC)
 
@@ -929,21 +941,13 @@ contains
          ! -- ideally, we could query the exports to find if any actually -need- computing
          !    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
          !    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
-         ! -- This is done every call to Run(), when it really only needs to be done once
-         if (first) then
-
-            nameRATS = ESMF_HConfigAsStringSeq(hconfig, &
-                 keyString='RATS_DIAGNOSTICS', &
-                 stringLen=ESMF_MAXSTR, _RC)
-            nRATS = 0 ! Default, no RAT diags
-            if (allocated(nameRATS)) nRATS = size(nameRATS)
-
-            ! No error thrown. Just go around this if nothing learnable from config.
-            if (nRATS /= 0) then ! if the label was found...
-               allocate(TMP_R(IM * JM, LM), _STAT)
-            end if
-            first = .false. ! Don't repeat this.
-         end if ! first
+         ! nameRATS/nRATS are parsed once in Initialize() and read from the private state
+         _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+         nRATS = rrtmgp_state%nRATS
+         nameRATS = rrtmgp_state%nameRATS
+         if (nRATS /= 0) then ! if the label was found...
+            allocate(TMP_R(IM * JM, LM), _STAT)
+         end if
 
          ! Prepare for aerosol optics calculations
 
