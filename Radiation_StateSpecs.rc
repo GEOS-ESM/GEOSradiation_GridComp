@@ -2,38 +2,34 @@ schema_version: 2.0.0
 component: RADIATION
 
 category: IMPORT
-#-------------------------------------------------------------------------------------------------------------------
-#  VARIABLE    | DIMENSIONS  |          Additional Metadata
-#-------------------------------------------------------------------------------------------------------------------
- NAME    | ALIAS    | UNITS       | DIMS | VLOC | RESTART | COND        | LONG NAME
-#-------------------------------------------------------------------------------------------------------------------
- PLEINST |          | Pa          | xyz  | E    | SKIP    |             | air_pressure
+#---------------------------------------------------------------------------------
+ NAME    | UNITS     | DIMS | VLOC | RESTART | LONG NAME
+#---------------------------------------------------------------------------------
+ PLEINST | Pa        | xyz  | E    | SKIP    | air_pressure
 # The following are connected internally from IRRAD's own exports (see
 # SetServices) so that Run can combine them into the temperature-tendency
 # exports below. They are not meant to be filled by an external coupler.
- FLX     |          | W m-2       | xyz  | E    | SKIP    |             | net_downward_longwave_flux_in_air
- FLC     |          | W m-2       | xyz  | E    | SKIP    |             | net_downward_longwave_flux_in_air_assuming_clear_sky
- FLXA    |          | W m-2       | xyz  | E    | SKIP    |             | net_downward_longwave_flux_in_air_and_no_aerosol
- FLA     |          | W m-2       | xyz  | E    | SKIP    |             | net_downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol
- DSFDTS0 |          | W m-2 K-1   | xy   | N    | SKIP    |             | sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature_at_reference_time
- SFCEM0  |          | W m-2       | xy   | N    | SKIP    |             | longwave_flux_emitted_from_surface_at_reference_time
- TSREFF  |          | K           | xy   | N    | SKIP    |             | surface_temperature
+ FLX     | W m-2     | xyz  | E    | SKIP    | net_downward_longwave_flux_in_air
+ FLC     | W m-2     | xyz  | E    | SKIP    | net_downward_longwave_flux_in_air_assuming_clear_sky
+ FLXA    | W m-2     | xyz  | E    | SKIP    | net_downward_longwave_flux_in_air_and_no_aerosol
+ FLA     | W m-2     | xyz  | E    | SKIP    | net_downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol
+ DSFDTS0 | W m-2 K-1 | xy   | N    | SKIP    | sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature_at_reference_time
+ SFCEM0  | W m-2     | xy   | N    | SKIP    | longwave_flux_emitted_from_surface_at_reference_time
+ TSREFF  | K         | xy   | N    | SKIP    | surface_temperature
 
 category: EXPORT
-#-------------------------------------------------------------------------------------------------------
-#  VARIABLE    | DIMENSIONS  |          Additional Metadata
-#-------------------------------------------------------------------------------------------------------
- NAME         | UNITS       | DIMS | VLOC | COND                          | LONG NAME
-#-------------------------------------------------------------------------------------------------------
- DTDT         | Pa K s-1    | xyz  | C    |                               | pressure_weighted_air_temperature_tendency_due_to_radiation
- RADLW        | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_longwave
- RADSW        | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_shortwave
- RADLWC       | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_longwave_for_clear_skies
- RADSWC       | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_shortwave_for_clear_skies
- RADLWNA      | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_longwave_no_aerosol
- RADSWNA      | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_shortwave_no_aerosol
- RADLWCNA     | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_longwave_for_clear_skies_no_aerosol
- RADSWCNA     | K s-1       | xyz  | C    |                               | air_temperature_tendency_due_to_shortwave_for_clear_skies_no_aerosol
- RADSRF       | W m-2       | xy   | N    |                               | net_downwelling_radiation_at_surface
- ALW          | W m-2       | xy   | N    |                               | linearization_of_surface_upwelling_longwave_flux
- BLW          | W m-2 K-1   | xy   | N    |                               | linearization_of_surface_upwelling_longwave_flux
+#-------------------------------------------------------------------
+ NAME     | UNITS     | DIMS | VLOC | LONG NAME
+#-------------------------------------------------------------------
+ DTDT     | Pa K s-1  | xyz  | C    | pressure_weighted_air_temperature_tendency_due_to_radiation
+ RADLW    | K s-1     | xyz  | C    | air_temperature_tendency_due_to_longwave
+ RADSW    | K s-1     | xyz  | C    | air_temperature_tendency_due_to_shortwave
+ RADLWC   | K s-1     | xyz  | C    | air_temperature_tendency_due_to_longwave_for_clear_skies
+ RADSWC   | K s-1     | xyz  | C    | air_temperature_tendency_due_to_shortwave_for_clear_skies
+ RADLWNA  | K s-1     | xyz  | C    | air_temperature_tendency_due_to_longwave_no_aerosol
+ RADSWNA  | K s-1     | xyz  | C    | air_temperature_tendency_due_to_shortwave_no_aerosol
+ RADLWCNA | K s-1     | xyz  | C    | air_temperature_tendency_due_to_longwave_for_clear_skies_no_aerosol
+ RADSWCNA | K s-1     | xyz  | C    | air_temperature_tendency_due_to_shortwave_for_clear_skies_no_aerosol
+ RADSRF   | W m-2     | xy   | N    | net_downwelling_radiation_at_surface
+ ALW      | W m-2     | xy   | N    | linearization_of_surface_upwelling_longwave_flux
+ BLW      | W m-2 K-1 | xy   | N    | linearization_of_surface_upwelling_longwave_flux
