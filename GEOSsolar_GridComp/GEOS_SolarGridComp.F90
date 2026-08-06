@@ -167,6 +167,7 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
+  use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
   use gFTL_StringVector
 
   ! for RRTMGP
@@ -2884,9 +2885,9 @@ contains
 
     integer :: CalledLast
     integer :: LCLDMH, LCLDLM
-    integer :: YY, DOY, HH, MM ! +++ awlee add HH and MM
+    integer :: YY, DOY, HH, MM 
     integer :: K
-    real    :: MLRAD_P_BOTTOM_HPA ! +++ awlee
+    real    :: MLRAD_P_BOTTOM_HPA 
     real    :: CO2
     real    :: PRS_LOW_MID
     real    :: PRS_MID_HIGH
@@ -2896,8 +2897,8 @@ contains
 
     logical :: REFRESH_FLUXES
     logical :: UPDATE_FIRST
-    logical :: GEOS_MLT ! +++ awlee
-    logical :: RUN_MLRAD ! +++ awlee
+    logical :: GEOS_MLT 
+    logical :: RUN_MLRAD 
 
     real, external                  :: getco2
     character(len=ESMF_MAXSTR)      :: MSGSTRING
@@ -2921,10 +2922,9 @@ contains
     type(StringVectorIterator) :: string_vec_iter
     character(len=:), pointer :: string_pointer
 
-    ! +++ awlee
     logical, save :: pybridge_initialized = .false.
     logical, save :: FIRST_MLRAD_CALL = .true.
-    ! --- awlee
+    logical, save :: FIRST_GEOS_MLT_SOLAR_CALL = .true.
 
 !=============================================================================
 
@@ -2964,7 +2964,7 @@ contains
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
     if (GEOS_MLT) then
-       call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=0.1, __RC__)
+       call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=1.0, __RC__)
     end if
 
     ! Should we load balance solar radiation?
@@ -3172,6 +3172,12 @@ contains
     call MAPL_GetResource (MAPL, CalledLast, 'CALLED_LAST:', default=1, __RC__)
     UPDATE_FIRST = CalledLast /= 0
 
+    ! For GEOS-MLT, do not export the solar internal restart state before
+    ! performing a fresh solar calculation on the first call after restart.
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       UPDATE_FIRST = .false.
+    endif
+
     call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
 
     ! Update the Sun position and weight the export variables
@@ -3185,8 +3191,14 @@ contains
     ! Periodically, refresh the internal state with a full solar calc
     ! ---------------------------------------------------------------
     REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
+ 
+    ! Always refresh native solar fluxes on the first GEOS-MLT call after
+    ! initialization or restart.
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       REFRESH_FLUXES = .true.
+    endif
 
-    ! +++ awlee: Run ML radiation on the normal radiation refresh cadence,
+    ! Run ML radiation on the normal radiation refresh cadence,
     ! or once immediately after initialization/restart. This prevents
     ! MLRADSW, MLRADLW, and MLRADJH from remaining zero until the first
     ! hourly radiation alarm after restart.
@@ -3442,6 +3454,10 @@ contains
        call UPDATE_EXPORT (IM,JM,LM,     __RC__)
        call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
+
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       FIRST_GEOS_MLT_SOLAR_CALL = .false.
+    endif
 
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
     RETURN_(ESMF_SUCCESS)
@@ -3821,8 +3837,14 @@ contains
 
       if (adjustl(DYCORE)=="DATMO") ZTH = max(.0001,ZTH)
 
-      daytime = ZTH > 0.
-      NumLit  = count(daytime)
+      ! Avoid treating floating-point roundoff near the terminator as daylight.
+      ! Preserve the native GEOS daytime mask outside the GEOS-MLT configuration.
+      if (GEOS_MLT) then
+         daytime = ZTH > 1.0e-4
+      else
+         daytime = ZTH > 0.0
+      endif
+      NumLit = count(daytime)
 
 !  Create a balancing strategy. This is a collective call on the communicator
 !  of the current VM. The original, unbalanced local work consists of (OrgLen)
@@ -7028,6 +7050,54 @@ contains
       call MAPL_GetPointer(INTERNAL, FSCUNAN,    'FSCUNAN',    __RC__)
       call MAPL_GetPointer(INTERNAL, FSWBANDN,   'FSWBANDN',   __RC__)
       call MAPL_GetPointer(INTERNAL, FSWBANDNAN, 'FSWBANDNAN', __RC__)
+
+      ! Protect GEOS-MLT from nonphysical normalized shortwave fluxes.
+      ! These fields should remain order one; extremely large finite values can
+      ! otherwise produce catastrophic physical fluxes when multiplied by SLR.
+      if (GEOS_MLT) then
+
+         where (.not. ieee_is_finite(FSWN) .or. abs(FSWN) > 10.0)
+            FSWN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSCN) .or. abs(FSCN) > 10.0)
+            FSCN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSWNAN) .or. abs(FSWNAN) > 10.0)
+            FSWNAN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSCNAN) .or. abs(FSCNAN) > 10.0)
+            FSCNAN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSWUN) .or. abs(FSWUN) > 10.0)
+            FSWUN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSCUN) .or. abs(FSCUN) > 10.0)
+            FSCUN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSWUNAN) .or. abs(FSWUNAN) > 10.0)
+            FSWUNAN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSCUNAN) .or. abs(FSCUNAN) > 10.0)
+            FSCUNAN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSWBANDN) .or. abs(FSWBANDN) > 10.0)
+            FSWBANDN = 0.0
+         end where
+
+         where (.not. ieee_is_finite(FSWBANDNAN) .or. &
+                abs(FSWBANDNAN) > 10.0)
+            FSWBANDNAN = 0.0
+         end where
+
+      endif
 
       call MAPL_GetPointer(INTERNAL, DRUVRN,     'DRUVRN',     __RC__)
       call MAPL_GetPointer(INTERNAL, DFUVRN,     'DFUVRN',     __RC__)

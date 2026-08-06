@@ -43,6 +43,7 @@ module GEOS_RadiationGridCompMod
 
   use ESMF
   use MAPL
+  use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
   use GEOS_SolarGridCompMod,  only : solarSetServices  => SetServices
   use GEOS_IrradGridCompMod,  only : irradSetServices  => SetServices
@@ -736,6 +737,7 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   ! The lower boundary is the high-pressure / low-altitude side.
   ! For p <= upper, use pure ML radiation.
   ! For p >= lower, use pure native GEOS radiation.
+  real :: MLRAD_P_BOTTOM_HPA
   real :: MLRAD_SW_BLEND_UPPER_HPA
   real :: MLRAD_SW_BLEND_LOWER_HPA
   real :: MLRAD_LW_BLEND_UPPER_HPA
@@ -786,6 +788,13 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
          LABEL='GEOS_MLT:',                             &
          DEFAULT=.FALSE.,                               &
          RC=STATUS )
+    VERIFY_(STATUS)
+
+    ! Read the lower-pressure boundary of the valid ML radiation region.
+    ! ML radiation may replace unphysical native GEOS tendencies only at
+    ! pressures less than or equal to this value.
+    call MAPL_GetResource(MAPL, MLRAD_P_BOTTOM_HPA, &
+         LABEL="MLRAD_P_BOTTOM_HPA:", default=1.0, RC=STATUS)
     VERIFY_(STATUS)
 
     ! Read pressure bounds for the GEOS/ML radiation blend.
@@ -1025,6 +1034,24 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                 ! Blended GEOS-MLT SW/LW heating rates.
                 RADSW_BLEND = WGEOS_SW * RADSW_GEOS + (1.0 - WGEOS_SW) * MLRADSW
                 RADLW_BLEND = WGEOS_LW * RADLW_GEOS + (1.0 - WGEOS_LW) * MLRADLW
+
+                ! Wherever ML radiation is available, replace a non-finite or
+                ! unphysically large native GEOS tendency with the corresponding
+                ! finite ML tendency. The regular blending remains unchanged for
+                ! physically valid native GEOS tendencies.
+                where (PMID_HPA <= MLRAD_P_BOTTOM_HPA .and. &
+                       ieee_is_finite(MLRADSW) .and. &
+                       (.not. ieee_is_finite(RADSW_GEOS) .or. &
+                        abs(RADSW_GEOS) > 1.0))
+                   RADSW_BLEND = MLRADSW
+                end where
+
+                where (PMID_HPA <= MLRAD_P_BOTTOM_HPA .and. &
+                       ieee_is_finite(MLRADLW) .and. &
+                       (.not. ieee_is_finite(RADLW_GEOS) .or. &
+                        abs(RADLW_GEOS) > 1.0))
+                   RADLW_BLEND = MLRADLW
+                end where
 
                 ! Export blended diagnostics separately.
                 if( associated(RADSWMLT) ) RADSWMLT = RADSW_BLEND
