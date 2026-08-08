@@ -16,17 +16,17 @@ mapl:
   children:
     DataIRRAD:
       dso: libconfigurable_gridcomp.so
-      setservice: setservices_
+      setservices: setservices_
       config_file: data-irrad.yaml
 
     IRRAD:
       dso: libGEOSradiation_GridComp.so
-      setservice: irrad_setservices_
+      setservices: irrad_setservices_
       config_file: irrad.yaml
 
     FakeGOCART:
       dso: libFakeGOCART_GridComp.so
-      setservice: fakegocart_setservices_
+      setservices: fakegocart_setservices_
 
   connections:
     - src_name: PLE
