@@ -893,9 +893,8 @@ contains
          if (ibinary /= 0) where (FCLD > 0.) FCLD = 1.
 
          ! Get trace gases concentrations by volume (pppv) from configuration
+         ! CO2_FIXED is used by all three schemes, CHOU, RRTMG, and RRTMGP
          call MAPL_GridCompGetResource(gc, "CO2", CO2_FIXED, _RC)
-
-         ! <<>> MSL
          if (CO2_FIXED == -2.0) then ! 3D CO2
             if (USE_CHOU) then ! No 3D CO2 if USE_CHOU
                CO2_FIXED = -1.0
@@ -918,27 +917,10 @@ contains
                end if
             end if
          end if
-
          if (CO2_FIXED == -1.0) then
             call ESMF_ClockGet(clock, currTIME=current_time, _RC)
             call ESMF_TimeGet(current_time, YY=YY, DayOfYear=DOY, _RC)
             CO2_FIXED = getco2(YY, DOY)
-         end if
-
-         call MAPL_GridCompGetResource(gc, "PRS_LOW_MID_CLOUDS", PRS_LOW_MID, default=70000., _RC)
-         call MAPL_GridCompGetResource(gc, "PRS_MID_HIGH_CLOUDS", PRS_MID_HIGH, default=40000., _RC)
-
-         ! Set up the RATS toggles  <<>> MSL
-         ! -- these fields will be turn on/off to eval flux impacts
-         ! -- ideally, we could query the exports to find if any actually -need- computing
-         !    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
-         !    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
-         ! nameRATS/nRATS are parsed once in Initialize() and read from the private state
-         _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
-         nRATS = rrtmgp_state%nRATS
-         nameRATS = rrtmgp_state%nameRATS
-         if (nRATS /= 0) then ! if the label was found...
-            allocate(TMP_R(IM * JM, LM), _STAT)
          end if
 
          ! Prepare for and run aerosol optics calculations
@@ -971,17 +953,7 @@ contains
 
          call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
-         ! For now, use the same emissivity for all bands
-         do K = 1, 10
-            EG(:, :, 1, K) = EMIS(:, :)
-         end do
-
-         ! For now, hardwire vegetation and aerosol parameters
-         FS = 1.0
-         TG(:, :, 1) = TS
-         TV(:, :, 1) = TS
-         EV = 0.0
-         RV = 0.0
+         ! CWC and REFF setup is shared, since they are used by all three schemes, CHOU, RRTMG/P
 
          ! Copy cloud constituent properties into contiguous buffers
          ! In-cloud water contents
@@ -1003,7 +975,11 @@ contains
          where (RS == MAPL_UNDEF) REFF(:, :, :, KSNOW) = 50.
          where (RG == MAPL_UNDEF) REFF(:, :, :, KGRAUPEL) = 50.
 
+         ! LCLDMH/LCLDLM setup is shared, since both CHOU and RRTMG need it
+
          ! Determine the model level separating high-middle and low-middle clouds
+         call MAPL_GridCompGetResource(gc, "PRS_LOW_MID_CLOUDS", PRS_LOW_MID, default=70000., _RC)
+         call MAPL_GridCompGetResource(gc, "PRS_MID_HIGH_CLOUDS", PRS_MID_HIGH, default=40000., _RC)
          _ASSERT(PRS_MID_HIGH > PREF(1), 'mid-high pressure band boundary too high!')
          _ASSERT(PRS_LOW_MID > PRS_MID_HIGH, 'pressure band misordering!')
          _ASSERT(PRS_LOW_MID < PREF(LM), 'low-mid pressure band boundary too low!')
@@ -1035,16 +1011,23 @@ contains
          !    layers [LCLDMH, LCLDLM-1] are in mid  pressure band
          !    layers [LCLDLM, LM      ] are in low  pressure band
 
-         call MAPL_StateGetPointer(export, CLDTTLW, 'CLDTTLW', _RC)
-         call MAPL_StateGetPointer(export, CLDHILW, 'CLDHILW', _RC)
-         call MAPL_StateGetPointer(export, CLDMDLW, 'CLDMDLW', _RC)
-         call MAPL_StateGetPointer(export, CLDLOLW, 'CLDLOLW', _RC)
-
          call MAPL_GridCompTimerStop(gc, "MISC", _RC)
 
          SCHEME: if (USE_CHOU) then
 
             call MAPL_GridCompTimerStart(gc, "IRRAD", _RC)
+
+            ! For now, use the same emissivity for all bands
+            do K = 1, 10
+               EG(:, :, 1, K) = EMIS(:, :)
+            end do
+
+            ! For now, hardwire vegetation and aerosol parameters
+            FS = 1.0
+            TG(:, :, 1) = TS
+            TV(:, :, 1) = TS
+            EV = 0.0
+            RV = 0.0
 
             ! Do longwave calculations on a list of soundings
             !  This fills the internal state
@@ -1733,6 +1716,24 @@ contains
          else if (USE_RRTMG) then
 
             call MAPL_GridCompTimerStart(gc, "RRTMG", _RC)
+
+            ! Set up the RATS toggles  <<>> MSL
+            ! -- these fields will be turn on/off to eval flux impacts
+            ! -- ideally, we could query the exports to find if any actually -need- computing
+            !    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
+            !    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
+            ! nameRATS/nRATS are parsed once in Initialize() and read from the private state
+            _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+            nRATS = rrtmgp_state%nRATS
+            nameRATS = rrtmgp_state%nameRATS
+            if (nRATS /= 0) then ! if the label was found...
+               allocate(TMP_R(IM * JM, LM), _STAT)
+            end if
+
+            call MAPL_StateGetPointer(export, CLDTTLW, 'CLDTTLW', _RC)
+            call MAPL_StateGetPointer(export, CLDHILW, 'CLDHILW', _RC)
+            call MAPL_StateGetPointer(export, CLDMDLW, 'CLDMDLW', _RC)
+            call MAPL_StateGetPointer(export, CLDLOLW, 'CLDLOLW', _RC)
 
             if (LM > 72) then
                call MAPL_GridCompGetResource(gc, &
