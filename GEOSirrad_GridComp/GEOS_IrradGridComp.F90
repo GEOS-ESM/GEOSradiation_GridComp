@@ -727,12 +727,7 @@ contains
 
          ! AERO state variables
          type(ESMF_State) :: AERO
-         type(ESMF_Info) :: aero_info
-         character(len=ESMF_MAXSTR) :: as_field_name
-         real, pointer, dimension(:, :, :) :: as_ptr_3d
-         real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
          logical :: aerosol_optics
-         integer :: band
 
          ! Variables for RRTMG Code
          integer :: iceflglw ! Flag for ice particle specification
@@ -742,13 +737,13 @@ contains
 
          real, allocatable, dimension(:, :) :: FCLD_R
          real, allocatable, dimension(:, :) :: TLEV_R ! Edge Level temperature
-         real, allocatable, dimension(:, :) :: PLE_R ! Reverse of level pressure
-         real, allocatable, dimension(:, :) :: ZM_R ! Reverse of layer height
-         real, allocatable, dimension(:, :) :: EMISS ! Surface emissivity at 16 RRTMG bands
+         real, allocatable, dimension(:, :) :: PLE_R  ! Reverse of level pressure
+         real, allocatable, dimension(:, :) :: ZM_R   ! Reverse of layer height
+         real, allocatable, dimension(:, :) :: EMISS  ! Surface emissivity at 16 RRTMG bands
          real, allocatable, dimension(:, :) :: CLIQWP ! Cloud liquid water path
          real, allocatable, dimension(:, :) :: CICEWP ! Cloud ice water path
-         real, allocatable, dimension(:, :) :: RELIQ ! Cloud liquid effective radius
-         real, allocatable, dimension(:, :) :: REICE ! Cloud ice effective radius
+         real, allocatable, dimension(:, :) :: RELIQ  ! Cloud liquid effective radius
+         real, allocatable, dimension(:, :) :: REICE  ! Cloud ice effective radius
          real, allocatable, dimension(:, :, :) :: TAUAER
          real, allocatable, dimension(:, :) :: PL_R, T_R, Q_R, O2_R, O3_R
          real, allocatable, dimension(:, :) :: CO2_R, CH4_R, N2O_R, CFC11_R, CFC12_R, CFC22_R, CCL4_R
@@ -881,9 +876,6 @@ contains
          logical :: USE_PRECIP_IN_RADIATION
          integer :: PARTITION_SIZE
 
-         real, parameter :: SSA_MAX = 0.999999
-         real, parameter :: ASY_MAX = 0.999
-
          call MAPL_GridCompTimerStart(gc, "MISC", _RC)
 
          ! Pointer to Imports used only for full transfer calculation
@@ -949,7 +941,8 @@ contains
             allocate(TMP_R(IM * JM, LM), _STAT)
          end if
 
-         ! Prepare for aerosol optics calculations
+         ! Prepare for and run aerosol optics calculations
+         call MAPL_GridCompTimerStart(gc, "AEROSOLS", _RC)
 
          ! Set the offset for the IRRAD aerosol bands
          if (USE_RRTMGP_SORAD) then
@@ -959,6 +952,24 @@ contains
          else
             OFFSET = NB_CHOU_SORAD
          end if
+
+         ! Allocate per-band aerosol arrays
+         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
+
+         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
+         NA = 0
+         TAUA = 0.
+         SSAA = 0.
+         ASYA = 0.
+
+         ! If we have aerosols, accumulate the arrays
+         call ESMF_StateGet(import, 'AERO', AERO, _RC)
+         call compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &
+              NA, TAUA, SSAA, ASYA, aerosol_optics, _RC)
+
+         call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
          ! For now, use the same emissivity for all bands
          do K = 1, 10
@@ -1028,117 +1039,6 @@ contains
          call MAPL_StateGetPointer(export, CLDHILW, 'CLDHILW', _RC)
          call MAPL_StateGetPointer(export, CLDMDLW, 'CLDMDLW', _RC)
          call MAPL_StateGetPointer(export, CLDLOLW, 'CLDLOLW', _RC)
-
-         ! Begin aerosol code
-
-         ! Allocate per-band aerosol arrays
-         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
-
-         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
-         NA = 0
-
-         TAUA = 0.
-         SSAA = 0.
-         ASYA = 0.
-
-         ! If we have aerosols, accumulate the arrays
-         call MAPL_GridCompTimerStart(gc, "AEROSOLS", _RC)
-
-         call ESMF_StateGet(import, 'AERO', AERO, _RC)
-         call ESMF_InfoGetFromHost(AERO, aero_info, _RC)
-
-         call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', value=aerosol_optics, _RC)
-
-         ! TODO: pchakrab - this block is skipped in the first round of testing
-         RADIATIVELY_ACTIVE_AEROSOLS: if (aerosol_optics) then
-
-            ! set RH for aerosol optics
-            call ESMF_InfoGet(aero_info, &
-                 key='relative_humidity_for_aerosol_optics', &
-                 value=as_field_name, _RC)
-            if (as_field_name /= '') then
-               call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
-               as_ptr_3d = RH
-            end if
-
-            ! set PLE for aerosol optics
-            call ESMF_InfoGet(aero_info, &
-                 key='air_pressure_for_aerosol_optics', &
-                 value=as_field_name, _RC)
-            if (as_field_name /= '') then
-               call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
-               as_ptr_3d = PLE
-            end if
-
-            ! allocate memory for total aerosol ext, ssa and asy at all solar bands
-            allocate(AEROSOL_EXT(IM, JM, LM, NB_IRRAD), _STAT)
-            allocate(AEROSOL_SSA(IM, JM, LM, NB_IRRAD), _STAT)
-            allocate(AEROSOL_ASY(IM, JM, LM, NB_IRRAD), _STAT)
-
-            AEROSOL_EXT = 0.
-            AEROSOL_SSA = 0.
-            AEROSOL_ASY = 0.
-
-            ! compute aerosol optics at all solar bands
-            IR_BANDS: do band = 1, NB_IRRAD
-
-               call ESMF_InfoSet(aero_info, &
-                    key='band_for_aerosol_optics', &
-                    value=(OFFSET + band), _RC)
-
-               ! execute the aero provider's optics method
-               call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
-
-               ! EXT from AERO_PROVIDER
-               call ESMF_InfoGet(aero_info, &
-                    key='extinction_in_air_due_to_ambient_aerosol', &
-                    value=as_field_name, _RC)
-               if (as_field_name /= '') then
-                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
-                  if (associated(as_ptr_3d)) then
-                     AEROSOL_EXT(:, :, :, band) = max(as_ptr_3d, 0.0)
-                  end if
-               end if
-
-               ! SSA from AERO_PROVIDER
-               call ESMF_InfoGet(aero_info, &
-                    key='single_scattering_albedo_of_ambient_aerosol', &
-                    value=as_field_name, _RC)
-               if (as_field_name /= '') then
-                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
-                  if (associated(as_ptr_3d)) then
-                     AEROSOL_SSA(:, :, :, band) = min(max(as_ptr_3d, 0.0), SSA_MAX)
-                  end if
-               end if
-
-               ! ASY from AERO_PROVIDER
-               call ESMF_InfoGet(aero_info, &
-                    key='asymmetry_parameter_of_ambient_aerosol', &
-                    value=as_field_name, _RC)
-               if (as_field_name /= '') then
-                  call MAPL_StateGetPointer(AERO, as_ptr_3d, trim(as_field_name), _RC)
-                  if (associated(as_ptr_3d)) then
-                     AEROSOL_ASY(:, :, :, band) = min(max(as_ptr_3d, 0.0), ASY_MAX)
-                  end if
-               end if
-
-            end do IR_BANDS
-
-            NA = 3
-
-            TAUA = AEROSOL_EXT
-            SSAA = AEROSOL_SSA
-            ASYA = AEROSOL_ASY
-
-            deallocate(AEROSOL_EXT, _STAT)
-            deallocate(AEROSOL_SSA, _STAT)
-            deallocate(AEROSOL_ASY, _STAT)
-
-         end if RADIATIVELY_ACTIVE_AEROSOLS
-
-         call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
          call MAPL_GridCompTimerStop(gc, "MISC", _RC)
 
@@ -2880,6 +2780,95 @@ contains
       _RETURN(_SUCCESS)
 #undef TEST_
    end subroutine compute_lw_aer_optics
+
+   ! compute_provider_aerosol_optics: reports back (via aerosol_optics) whether
+   !   the AERO provider implements the aerosol_optics method; if so, also
+   !   queries it (via its Info attributes) for RH/PLE, runs its
+   !   "run_aerosol_optics" method once per IR band, and accumulates the
+   !   resulting extinction/SSA/asymmetry into TAUA/SSAA/ASYA. A no-op
+   !   (NA/TAUA/SSAA/ASYA left untouched) if the provider does not implement it.
+   subroutine compute_provider_aerosol_optics(AERO, & ! input/output
+        RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &      ! input
+        NA, TAUA, SSAA, ASYA, &                       ! input/output
+        aerosol_optics, rc)                           ! output
+      type(ESMF_State), intent(inout) :: AERO
+      real, dimension(:, :, :), intent(in) :: RH, PLE
+      integer, intent(in) :: IM, JM, LM, NB_IRRAD, OFFSET
+      integer, intent(inout) :: NA
+      real, dimension(:, :, :, :), intent(inout) :: TAUA, SSAA, ASYA
+      logical, intent(out) :: aerosol_optics
+      integer, optional, intent(out) :: rc
+
+      integer :: status, band
+      type(ESMF_Info) :: info
+      character(len=ESMF_MAXSTR) :: field_name
+      real, pointer, dimension(:, :, :) :: ptr3d
+      real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
+      real, parameter :: SSA_MAX = 0.999999
+      real, parameter :: ASY_MAX = 0.999
+
+      call ESMF_InfoGetFromHost(AERO, info, _RC)
+      call ESMF_InfoGet(info, key='implements_aerosol_optics_method', value=aerosol_optics, _RC)
+      _RETURN_UNLESS(aerosol_optics)
+
+      ! set RH for aerosol optics
+      call ESMF_InfoGet(info, key='relative_humidity_for_aerosol_optics', value=field_name, _RC)
+      if (field_name /= '') then
+         call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+         ptr3d = RH
+      end if
+
+      ! set PLE for aerosol optics
+      call ESMF_InfoGet(info, key='air_pressure_for_aerosol_optics', value=field_name, _RC)
+      if (field_name /= '') then
+         call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+         ptr3d = PLE
+      end if
+
+      ! allocate memory for total aerosol ext, ssa and asy at all solar bands
+      allocate(AEROSOL_EXT(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+      allocate(AEROSOL_SSA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+      allocate(AEROSOL_ASY(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+
+      ! compute aerosol optics at all solar bands
+      IR_BANDS: do band = 1, NB_IRRAD
+
+         call ESMF_InfoSet(info, key='band_for_aerosol_optics', value=(OFFSET + band), _RC)
+
+         ! execute the aero provider's optics method
+         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
+
+         ! EXT from AERO_PROVIDER
+         call ESMF_InfoGet(info, key='extinction_in_air_due_to_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_EXT(:, :, :, band) = max(ptr3d, 0.0)
+         end if
+
+         ! SSA from AERO_PROVIDER
+         call ESMF_InfoGet(info, key='single_scattering_albedo_of_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_SSA(:, :, :, band) = min(max(ptr3d, 0.0), SSA_MAX)
+         end if
+
+         ! ASY from AERO_PROVIDER
+         call ESMF_InfoGet(info, key='asymmetry_parameter_of_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_ASY(:, :, :, band) = min(max(ptr3d, 0.0), ASY_MAX)
+         end if
+
+      end do IR_BANDS
+
+      NA = 3
+
+      TAUA = AEROSOL_EXT
+      SSAA = AEROSOL_SSA
+      ASYA = AEROSOL_ASY
+
+      _RETURN(_SUCCESS)
+   end subroutine compute_provider_aerosol_optics
 
    ! compute_lw_cloud_optics_mcica: compute band cloud optical properties,
    !   generate McICA random numbers, sample cloud mask, draw band->gpt,
