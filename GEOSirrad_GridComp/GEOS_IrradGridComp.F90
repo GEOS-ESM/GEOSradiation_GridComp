@@ -876,7 +876,7 @@ contains
          logical :: USE_PRECIP_IN_RADIATION
          integer :: PARTITION_SIZE
 
-         call MAPL_GridCompTimerStart(gc, "MISC", _RC)
+         call MAPL_GridCompTimerStart(gc, "LW-Setup", _RC)
 
          ! Pointer to Imports used only for full transfer calculation
          ! (fetched once in Run via the ACG-generated Irrad_GetPointer___.h
@@ -1012,7 +1012,7 @@ contains
          !    layers [LCLDMH, LCLDLM-1] are in mid  pressure band
          !    layers [LCLDLM, LM      ] are in low  pressure band
 
-         call MAPL_GridCompTimerStop(gc, "MISC", _RC)
+         call MAPL_GridCompTimerStop(gc, "LW-Setup", _RC)
 
          SCHEME: if (USE_CHOU) then
 
