@@ -882,12 +882,43 @@ contains
          ! (fetched once in Run via the ACG-generated Irrad_GetPointer___.h
          !  include and host-associated here; see declarations above)
 
+         ! PL setup is shared, since it is used by both aerosol optics and RRTMG/P
          PL = 0.5 * (PLE(:, :, :UBOUND(PLE, 3) - 1) + PLE(:, :, LBOUND(PLE, 3) + 1:))
+
+         ! Prepare for and run aerosol optics calculations
+         call MAPL_GridCompTimerStart(gc, "AEROSOLS", _RC)
+
          RH = Q / GEOS_QSAT(T, PL, PASCALS=.true.)
+
+         ! Set the offset for the IRRAD aerosol bands
+         if (USE_RRTMGP_SORAD) then
+            OFFSET = NB_RRTMGP_SORAD
+         else if (USE_RRTMG_SORAD) then
+            OFFSET = NB_RRTMG_SORAD
+         else
+            OFFSET = NB_CHOU_SORAD
+         end if
+
+         ! Allocate per-band aerosol arrays
+         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
+         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
+
+         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
+         NA = 0
+         TAUA = 0.
+         SSAA = 0.
+         ASYA = 0.
+
+         ! If we have aerosols, accumulate the arrays
+         call ESMF_StateGet(import, 'AERO', AERO, _RC)
+         call compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &
+              NA, TAUA, SSAA, ASYA, aerosol_optics, _RC)
+
+         call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
          ! make a copy of 'FCLD' so can optionally change it without changing import state
          FCLD = FCLD_IN
-
          ! Option to force binary clouds for LW
          call MAPL_GridCompGetResource(gc, "RADLW_BINARY_CLOUDS", ibinary, default=0, _RC)
          if (ibinary /= 0) where (FCLD > 0.) FCLD = 1.
@@ -922,36 +953,6 @@ contains
             call ESMF_TimeGet(current_time, YY=YY, DayOfYear=DOY, _RC)
             CO2_FIXED = getco2(YY, DOY)
          end if
-
-         ! Prepare for and run aerosol optics calculations
-         call MAPL_GridCompTimerStart(gc, "AEROSOLS", _RC)
-
-         ! Set the offset for the IRRAD aerosol bands
-         if (USE_RRTMGP_SORAD) then
-            OFFSET = NB_RRTMGP_SORAD
-         else if (USE_RRTMG_SORAD) then
-            OFFSET = NB_RRTMG_SORAD
-         else
-            OFFSET = NB_CHOU_SORAD
-         end if
-
-         ! Allocate per-band aerosol arrays
-         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
-
-         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
-         NA = 0
-         TAUA = 0.
-         SSAA = 0.
-         ASYA = 0.
-
-         ! If we have aerosols, accumulate the arrays
-         call ESMF_StateGet(import, 'AERO', AERO, _RC)
-         call compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &
-              NA, TAUA, SSAA, ASYA, aerosol_optics, _RC)
-
-         call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
          ! CWC and REFF setup is shared, since they are used by all three schemes, CHOU, RRTMG/P
 
