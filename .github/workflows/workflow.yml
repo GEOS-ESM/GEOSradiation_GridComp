@@ -27,15 +27,20 @@ jobs:
       compiler: ${{ matrix.compiler }}
       cmake-build-type: ${{ matrix.build-type }}
       fixture-repo: GEOS-ESM/GEOSgcm
-      run-mepo-develop: true
+      fixture-ref: release/MAPL-v3
+      run-mepo-develop: false
 
-  spack_build:
+  spack_build_gcm:
     uses: GEOS-ESM/CI-workflows/.github/workflows/spack_gcc_build.yml@project/geosgcm
     secrets:
       BUILDCACHE_USERNAME: ${{ secrets.BUILDCACHE_USERNAME }}
       BUILDCACHE_TOKEN: ${{ secrets.BUILDCACHE_TOKEN }}
     with:
       fixture-repo: GEOS-ESM/GEOSgcm
-      run-mepo-develop: true
+      fixture-ref: release/MAPL-v3
+      run-mepo-develop: false
+      patch-esmf: true
+      # For some reason, Spack builds have weird install issues. For now, skip install.
+      run-install: false
       load-fms: true
 
