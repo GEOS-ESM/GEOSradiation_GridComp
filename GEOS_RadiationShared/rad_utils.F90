@@ -181,11 +181,11 @@ contains
   ! Chou-Suarez is the default if nothing else asked for in Resource file.
   ! ----------------------------------------------------------------------
 
-  subroutine choose_solar_scheme (MAPL, &
+  subroutine choose_solar_scheme (gc, &
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
 
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    type(ESMF_GridComp), intent(inout) :: gc
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
@@ -195,10 +195,10 @@ contains
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_SORAD:', DEFAULT=0., __RC__)
+    call MAPL_GridCompGetResource(gc, "USE_RRTMGP_SORAD", RFLAG, default=0., _RC)
     USE_RRTMGP = RFLAG /= 0.
     if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_SORAD:', DEFAULT=0., __RC__)
+      call MAPL_GridCompGetResource(gc, "USE_RRTMG_SORAD", RFLAG, default=0., _RC)
       USE_RRTMG = RFLAG /= 0.
       USE_CHOU  = .not.USE_RRTMG
     end if
@@ -206,11 +206,11 @@ contains
     _RETURN(_SUCCESS)
   end subroutine choose_solar_scheme
 
-  subroutine choose_irrad_scheme (MAPL, &
+  subroutine choose_irrad_scheme (gc, &
     USE_RRTMGP, USE_RRTMG, USE_CHOU, &
     RC)
 
-    type (MAPL_MetaComp), pointer, intent(in) :: MAPL
+    type(ESMF_GridComp), intent(inout) :: gc
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
     integer, optional, intent(out) :: RC  ! return code
 
@@ -220,10 +220,10 @@ contains
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
-    call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMGP_IRRAD:', DEFAULT=0., __RC__)
+    call MAPL_GridCompGetResource(gc, "USE_RRTMGP_IRRAD", RFLAG, default=0., _RC)
     USE_RRTMGP = RFLAG /= 0.
     if (.not. USE_RRTMGP) then
-      call MAPL_GetResource (MAPL, RFLAG, LABEL='USE_RRTMG_IRRAD:', DEFAULT=0., __RC__)
+      call MAPL_GridCompGetResource(gc, "USE_RRTMG_IRRAD", RFLAG, default=0., _RC)
       USE_RRTMG = RFLAG /= 0.
       USE_CHOU  = .not.USE_RRTMG
     end if

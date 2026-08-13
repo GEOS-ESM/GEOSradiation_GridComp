@@ -1,0 +1,161 @@
+---
+mapl:
+
+  geometry:
+    esmf_geom:
+      class: CubedSphere
+      im_world: 12
+    vertical_grid:
+      class: model
+      standard_name: air_pressure
+      units: hPa
+      num_levels: 181
+      field_edge: PLE
+      field_center: PE
+
+  children:
+    DataIRRAD:
+      dso: libconfigurable_gridcomp.so
+      setservices: setservices_
+      config_file: data-irrad.yaml
+
+    IRRAD:
+      dso: libGEOSradiation_GridComp.so
+      setservices: irrad_setservices_
+      config_file: irrad.yaml
+
+    FakeGOCART:
+      dso: libFakeGOCART_GridComp.so
+      setservices: fakegocart_setservices_
+
+  connections:
+    - src_name: PLE
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: PLE
+      dst_comp: IRRAD
+    - src_name: T
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: T
+      dst_comp: IRRAD
+    - src_name: QV
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QV # Q
+      dst_comp: IRRAD
+    - src_name: QL
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QL
+      dst_comp: IRRAD
+    - src_name: QI
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QI
+      dst_comp: IRRAD
+    - src_name: QR
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QR
+      dst_comp: IRRAD
+    - src_name: QS
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QS
+      dst_comp: IRRAD
+    - src_name: QG
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: QG
+      dst_comp: IRRAD
+    - src_name: RL
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: RL
+      dst_comp: IRRAD
+    - src_name: RI
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: RI
+      dst_comp: IRRAD
+    - src_name: RR
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: RR
+      dst_comp: IRRAD
+    - src_name: RS
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: RS
+      dst_comp: IRRAD
+    - src_name: RG
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: RG
+      dst_comp: IRRAD
+    - src_name: O3
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: O3
+      dst_comp: IRRAD
+    - src_name: CH4
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: CH4
+      dst_comp: IRRAD
+    - src_name: N2O
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: N2O
+      dst_comp: IRRAD
+    - src_name: CFC11
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: CFC11
+      dst_comp: IRRAD
+    - src_name: CFC12
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: CFC12
+      dst_comp: IRRAD
+    - src_name: HCFC22
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: HCFC22
+      dst_comp: IRRAD
+    - src_name: FCLD
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: FCLD
+      dst_comp: IRRAD
+    - src_name: TS
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: TS
+      dst_comp: IRRAD
+    - src_name: EMIS
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: EMIS
+      dst_comp: IRRAD
+    - src_name: PREF
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: PREF
+      dst_comp: IRRAD
+    - src_name: TSINST
+      src_comp: DataIRRAD
+      src_intent: internal
+      dst_name: TSINST
+      dst_comp: IRRAD
+    - src_name: AERO
+      src_comp: FakeGOCART
+      src_intent: export
+      dst_name: AERO
+      dst_comp: IRRAD
+    # - src_name: CO2 pchakrab - uncomment for USE_CO2_3D = .true.
+    #   src_comp: DataIRRAD
+    #   src_intent: internal
+    #   dst_name: CO2
+    #   dst_comp: IRRAD
