@@ -156,6 +156,7 @@ module GEOS_IrradGridCompMod
    ! consulted wherever CO2 is handled in this module.
    logical :: USE_CO2_3D
 
+   real, parameter :: MAPL2_UNDEF = 1.0e15
 contains
 
    !BOP
@@ -383,7 +384,6 @@ contains
    !IROUTINE: Initialize -- Initialize method for the LW component
    !INTERFACE:
    subroutine Initialize(gc, import, export, clock, rc)
-
       !ARGUMENTS:
       type(ESMF_GridComp) :: gc
       type(ESMF_State) :: import
@@ -425,10 +425,18 @@ contains
       rrtmgp_state%nRATS = 0 ! Default, no RAT diags
       if (allocated(rrtmgp_state%nameRATS)) rrtmgp_state%nRATS = size(rrtmgp_state%nameRATS)
 
+      ! Borrowed from GEOSradiation_GridCompMod::Initialize(), for testing purposes only
+      ! TODO: pchakrab - eventually remove this
+      block
+         use cloud_condensate_inhomogeneity, only: set_inhomogeneity
+         integer :: ih
+         call MAPL_GridCompGetResource(gc, "RAD_CONDENSATE_INHOMOGENEITY", ih, default=1, _RC)
+         call set_inhomogeneity(ih)
+      end block
+
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(import)
       _UNUSED_DUMMY(export)
-
    end subroutine Initialize
 
    !BOP
@@ -970,11 +978,11 @@ contains
          REFF(:, :, :, KRAIN) = RR * 1.0e6
          REFF(:, :, :, KSNOW) = RS * 1.0e6
          REFF(:, :, :, KGRAUPEL) = RG * 1.0e6
-         where (RI == MAPL_UNDEF) REFF(:, :, :, KICE) = 36.
-         where (RL == MAPL_UNDEF) REFF(:, :, :, KLIQUID) = 14.
-         where (RR == MAPL_UNDEF) REFF(:, :, :, KRAIN) = 50.
-         where (RS == MAPL_UNDEF) REFF(:, :, :, KSNOW) = 50.
-         where (RG == MAPL_UNDEF) REFF(:, :, :, KGRAUPEL) = 50.
+         where (RI == MAPL2_UNDEF) REFF(:, :, :, KICE) = 36.
+         where (RL == MAPL2_UNDEF) REFF(:, :, :, KLIQUID) = 14.
+         where (RR == MAPL2_UNDEF) REFF(:, :, :, KRAIN) = 50.
+         where (RS == MAPL2_UNDEF) REFF(:, :, :, KSNOW) = 50.
+         where (RG == MAPL2_UNDEF) REFF(:, :, :, KGRAUPEL) = 50.
 
          ! LCLDMH/LCLDLM setup is shared, since both CHOU and RRTMG need it
 
@@ -1366,31 +1374,31 @@ contains
 
             ! allocation of output arrays
             if (calc_clrnoa) then
-               allocate(flux_up_clrnoa(ncol, LM + 1), &
-                    flux_dn_clrnoa(ncol, LM + 1), &
-                    dfupdts_clrnoa(ncol, LM + 1), _STAT)
+               allocate(flux_up_clrnoa(ncol, LM + 1), _STAT)
+               allocate(flux_dn_clrnoa(ncol, LM + 1), _STAT)
+               allocate(dfupdts_clrnoa(ncol, LM + 1), _STAT)
             end if
             if (calc_allnoa) then
-               allocate(flux_up_allnoa(ncol, LM + 1), &
-                    flux_dn_allnoa(ncol, LM + 1), &
-                    dfupdts_allnoa(ncol, LM + 1), _STAT)
+               allocate(flux_up_allnoa(ncol, LM + 1), _STAT)
+               allocate(flux_dn_allnoa(ncol, LM + 1), _STAT)
+               allocate(dfupdts_allnoa(ncol, LM + 1), _STAT)
                if (allnoa_to_allsky_band_xfer_needed) then
-                  allocate(bnd_flux_up_allnoa(ncol, LM + 1, nbnd), &
-                       bnd_dfupdts_allnoa(ncol, LM + 1, nbnd), _STAT)
+                  allocate(bnd_flux_up_allnoa(ncol, LM + 1, nbnd), _STAT)
+                  allocate(bnd_dfupdts_allnoa(ncol, LM + 1, nbnd), _STAT)
                end if
             end if
             if (calc_clrsky) then
-               allocate(flux_up_clrsky(ncol, LM + 1), &
-                    flux_dn_clrsky(ncol, LM + 1), &
-                    dfupdts_clrsky(ncol, LM + 1), _STAT)
+               allocate(flux_up_clrsky(ncol, LM + 1), _STAT)
+               allocate(flux_dn_clrsky(ncol, LM + 1), _STAT)
+               allocate(dfupdts_clrsky(ncol, LM + 1), _STAT)
             end if
             if (calc_allsky) then
-               allocate(flux_up_allsky(ncol, LM + 1), &
-                    flux_dn_allsky(ncol, LM + 1), &
-                    dfupdts_allsky(ncol, LM + 1), _STAT)
+               allocate(flux_up_allsky(ncol, LM + 1), _STAT)
+               allocate(flux_dn_allsky(ncol, LM + 1), _STAT)
+               allocate(dfupdts_allsky(ncol, LM + 1), _STAT)
                if (any_band_output) then
-                  allocate(bnd_flux_up_allsky(ncol, LM + 1, nbnd), &
-                       bnd_dfupdts_allsky(ncol, LM + 1, nbnd), _STAT)
+                  allocate(bnd_flux_up_allsky(ncol, LM + 1, nbnd), _STAT)
+                  allocate(bnd_dfupdts_allsky(ncol, LM + 1, nbnd), _STAT)
                end if
             end if
 
@@ -1467,6 +1475,7 @@ contains
                   ! condensate inhomogeneous?
                   ! see RadiationGC initialization
                   cond_inhomo = condensate_inhomogeneous()
+                  _HERE, "cond_inhomo = ", cond_inhomo
                   ! Compute decorrelation length scales [m]
                   allocate(adl(ncol), _STAT)
                   call correlation_length_cloud_fraction(ncol, ncol, DOY, reshape(lats,[ncol]), adl)
@@ -2220,8 +2229,8 @@ contains
             if (associated(TAUIR)) TAUIR = 0.5 * (TAUDIAG(:, :, :, 3) + TAUDIAG(:, :, :, 4))
 
             if (associated(CLDTMP) .or. associated(CLDPRS)) then
-               if (associated(CLDTMP)) CLDTMP = MAPL_UNDEF
-               if (associated(CLDPRS)) CLDPRS = MAPL_UNDEF
+               if (associated(CLDTMP)) CLDTMP = MAPL2_UNDEF
+               if (associated(CLDPRS)) CLDPRS = MAPL2_UNDEF
                do j = 1, JM
                   do i = 1, IM
                      do L = 1, LM
@@ -2448,7 +2457,7 @@ contains
                where (CLDTT <= 0.05)
                   OLCC5 = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
                   elsewhere
-                  OLCC5 = MAPL_UNDEF
+                  OLCC5 = MAPL2_UNDEF
                end where
             end if
 
@@ -2471,7 +2480,7 @@ contains
                where (CLDTT <= 0.05)
                   LCSC5 = FLC_INT(:, :, LM) + SFCEM_INT
                   elsewhere
-                  LCSC5 = MAPL_UNDEF
+                  LCSC5 = MAPL2_UNDEF
                end where
             end if
 
@@ -2488,33 +2497,33 @@ contains
             do K = 0, LM
                ! net downward (downward plus negated upward) fluxes
                if (associated(FLX)) FLX(:, :, K) = FLX_INT(:, :, K) + DFDTS(:, :, K) * DELT ! all-sky
-               if (associated(FLXA)) FLXA(:, :, K) = MAPL_UNDEF ! all-sky no-aerosol
+               if (associated(FLXA)) FLXA(:, :, K) = MAPL2_UNDEF ! all-sky no-aerosol
                if (associated(FLC)) FLC(:, :, K) = FLC_INT(:, :, K) + DFDTSC(:, :, K) * DELT ! clr-sky
-               if (associated(FLA)) FLA(:, :, K) = MAPL_UNDEF ! clr-sky no-aerosol
+               if (associated(FLA)) FLA(:, :, K) = MAPL2_UNDEF ! clr-sky no-aerosol
                ! negated upward fluxes
                if (associated(FLXU)) FLXU(:, :, K) = FLXU_INT(:, :, K) + DFDTS(:, :, K) * DELT
-               if (associated(FLXAU)) FLXAU(:, :, K) = MAPL_UNDEF
+               if (associated(FLXAU)) FLXAU(:, :, K) = MAPL2_UNDEF
                if (associated(FLCU)) FLCU(:, :, K) = FLCU_INT(:, :, K) + DFDTSC(:, :, K) * DELT
-               if (associated(FLAU)) FLAU(:, :, K) = MAPL_UNDEF
+               if (associated(FLAU)) FLAU(:, :, K) = MAPL2_UNDEF
                ! downward fluxes
                if (associated(FLXD)) FLXD(:, :, K) = FLXD_INT(:, :, K)
-               if (associated(FLXAD)) FLXAD(:, :, K) = MAPL_UNDEF
+               if (associated(FLXAD)) FLXAD(:, :, K) = MAPL2_UNDEF
                if (associated(FLCD)) FLCD(:, :, K) = FLCD_INT(:, :, K)
-               if (associated(FLAD)) FLAD(:, :, K) = MAPL_UNDEF
+               if (associated(FLAD)) FLAD(:, :, K) = MAPL2_UNDEF
             end do
 
             ! fill TOA exports
             ! outgoing longwave radiation
             ! pmn: using FLXU_INT, etc. would be better ... here assuming down at TOA is zero
             if (associated(OLR)) OLR = -(FLX_INT(:, :, 0) + DFDTS(:, :, 0) * DELT)
-            if (associated(OLRA)) OLRA = MAPL_UNDEF
+            if (associated(OLRA)) OLRA = MAPL2_UNDEF
             if (associated(OLC)) OLC = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
-            if (associated(OLA)) OLA = MAPL_UNDEF
+            if (associated(OLA)) OLA = MAPL2_UNDEF
             if (associated(OLCC5)) then
                where (CLDTT <= 0.05)
                   OLCC5 = -(FLC_INT(:, :, 0) + DFDTSC(:, :, 0) * DELT)
                   elsewhere
-                  OLCC5 = MAPL_UNDEF
+                  OLCC5 = MAPL2_UNDEF
                end where
             end if
 
@@ -2530,22 +2539,22 @@ contains
             ! absorbed (non-reflected) downward surface fluxes
             ! (remember: downward fluxes are not not linearized)
             if (associated(LWS)) LWS = FLX_INT(:, :, LM) + SFCEM_INT
-            if (associated(LWSA)) LWSA = MAPL_UNDEF
+            if (associated(LWSA)) LWSA = MAPL2_UNDEF
             if (associated(LCS)) LCS = FLC_INT(:, :, LM) + SFCEM_INT
-            if (associated(LAS)) LAS = MAPL_UNDEF
+            if (associated(LAS)) LAS = MAPL2_UNDEF
             if (associated(LCSC5)) then
                where (CLDTT <= 0.05)
                   LCSC5 = FLC_INT(:, :, LM) + SFCEM_INT
                   elsewhere
-                  LCSC5 = MAPL_UNDEF
+                  LCSC5 = MAPL2_UNDEF
                end where
             end if
 
             ! surface net downward fluxes
             if (associated(FLNS)) FLNS = FLX_INT(:, :, LM) + DFDTS(:, :, LM) * DELT
-            if (associated(FLNSNA)) FLNSNA = MAPL_UNDEF
+            if (associated(FLNSNA)) FLNSNA = MAPL2_UNDEF
             if (associated(FLNSC)) FLNSC = FLC_INT(:, :, LM) + DFDTSC(:, :, LM) * DELT
-            if (associated(FLNSA)) FLNSA = MAPL_UNDEF
+            if (associated(FLNSA)) FLNSA = MAPL2_UNDEF
 
          end if ! RRTMG
 
@@ -2577,7 +2586,7 @@ contains
                   if (associated(ptr2d)) then
                      if (all(OLRB == 0.)) then
                         ! handles pre-first-full-calc case
-                        ptr2d = MAPL_UNDEF
+                        ptr2d = MAPL2_UNDEF
                      else
                         ptr2d = OLRB
                      end if
@@ -2596,7 +2605,7 @@ contains
                            wn2 = band_lims_wvn(2, ibnd) * 100. ! [m-1]
                            call Tbr_from_band_flux(IM, JM, OLRB, wn1, wn2, ptr2d, _RC)
                         else
-                           ptr2d = MAPL_UNDEF
+                           ptr2d = MAPL2_UNDEF
                         end if
                      end if
                   end if

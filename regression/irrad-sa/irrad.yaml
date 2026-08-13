@@ -5,6 +5,7 @@ RRTMGP_CLOUD_OPTICS_LW: ExtData/g5gcm/radiation/RRTMGP/v1.8/rrtmgp-clouds-lw.nc
 USE_RRTMGP_IRRAD: 1.0
 USE_RRTMGP_SORAD: 1.0
 NUM_BANDS: 30
+IRRAD_DT: 0
 
 mapl:
   misc:

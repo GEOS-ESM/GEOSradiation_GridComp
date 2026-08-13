@@ -41,7 +41,6 @@ contains
    !IROUTINE: SetServices -- Sets ESMF services for this component
    !INTERFACE:
    subroutine SetServices(gc, rc)
-
       !ARGUMENTS:
       type(ESMF_GridComp) :: gc
       integer, intent(out) :: rc
@@ -72,14 +71,12 @@ contains
 #include "Radiation_Export___.h"
 
       _RETURN(_SUCCESS)
-
    end subroutine SetServices
 
    !BOP
    !IROUTINE: Initialize -- Initialize method for the composite Radiation Gridded Component
    !INTERFACE:
    subroutine Initialize(gc, import, export, clock, rc)
-
       !USES:
       use cloud_condensate_inhomogeneity, only: set_inhomogeneity
       use cloud_subcol_gen, only: initialize_cloud_subcol_gen, &
@@ -115,14 +112,14 @@ contains
 
       ! Set RRTMG[P] cloud subcolumn generator correlation length parameters
       ! to non-default values from MAPL resource parameters, if given.
-      call MAPL_GridCompGetResource(gc, "ADL_AM1",  aam1,  default=def_aam1,  _RC)
-      call MAPL_GridCompGetResource(gc, "ADL_AM2",  aam2,  default=def_aam2,  _RC)
+      call MAPL_GridCompGetResource(gc, "ADL_AM1", aam1, default=def_aam1, _RC)
+      call MAPL_GridCompGetResource(gc, "ADL_AM2", aam2, default=def_aam2, _RC)
       call MAPL_GridCompGetResource(gc, "ADL_AM30", aam30, default=def_aam30, _RC)
-      call MAPL_GridCompGetResource(gc, "ADL_AM4",  aam4,  default=def_aam4,  _RC)
-      call MAPL_GridCompGetResource(gc, "RDL_AM1",  ram1,  default=def_ram1,  _RC)
-      call MAPL_GridCompGetResource(gc, "RDL_AM2",  ram2,  default=def_ram2,  _RC)
+      call MAPL_GridCompGetResource(gc, "ADL_AM4", aam4, default=def_aam4, _RC)
+      call MAPL_GridCompGetResource(gc, "RDL_AM1", ram1, default=def_ram1, _RC)
+      call MAPL_GridCompGetResource(gc, "RDL_AM2", ram2, default=def_ram2, _RC)
       call MAPL_GridCompGetResource(gc, "RDL_AM30", ram30, default=def_ram30, _RC)
-      call MAPL_GridCompGetResource(gc, "RDL_AM4",  ram4,  default=def_ram4,  _RC)
+      call MAPL_GridCompGetResource(gc, "RDL_AM4", ram4, default=def_ram4, _RC)
       call initialize_cloud_subcol_gen( &
            adl_am1=aam1, adl_am2=aam2, adl_am30=aam30, adl_am4=aam4, &
            rdl_am1=ram1, rdl_am2=ram2, rdl_am30=ram30, rdl_am4=ram4)
@@ -131,14 +128,12 @@ contains
       _UNUSED_DUMMY(import)
       _UNUSED_DUMMY(export)
       _UNUSED_DUMMY(clock)
-
    end subroutine Initialize
 
    !BOP
    !IROUTINE: Run -- Run method for the composite Radiation Gridded Component
    !INTERFACE:
    subroutine Run(gc, import, export, clock, rc)
-
       !ARGUMENTS:
       type(ESMF_GridComp) :: gc
       type(ESMF_State) :: import
@@ -158,9 +153,9 @@ contains
 
       ! Pointers to imports (PLEINST plus IRRAD's exports, connected into
       ! our own Import state in SetServices)
-      real, pointer, contiguous, dimension(:,:,:) :: PLE
-      real, pointer, contiguous, dimension(:,:,:) :: FLW, FLWCLR, FLWNA, FLA
-      real, pointer, dimension(:,:  ) :: DSFDTS, SFCEM, TRD
+      real, pointer, contiguous, dimension(:, :, :) :: PLE
+      real, pointer, contiguous, dimension(:, :, :) :: FLW, FLWCLR, FLWNA, FLA
+      real, pointer, dimension(:, :) :: DSFDTS, SFCEM, TRD
 
       ! Scratch pointer for the Edge-array bounds remap below. MAPL always
       ! creates Edge-staggered fields with Fortran bounds 1:LM+1 (no
@@ -173,16 +168,16 @@ contains
       ! CONTIGUOUS-declared scratch pointer avoids that (verified with an
       ! isolated test compile; see GEOS_IrradGridComp.F90's identical
       ! fix and porting notes for the full explanation).
-      real, pointer, contiguous, dimension(:,:,:) :: p3d
+      real, pointer, contiguous, dimension(:, :, :) :: p3d
 
       ! Pointers to exports
-      real, pointer, dimension(:,:,:) :: RADLW, RADLWC, RADLWNA, RADLWCNA
-      real, pointer, dimension(:,:  ) :: ALW, BLW
+      real, pointer, dimension(:, :, :) :: RADLW, RADLWC, RADLWNA, RADLWCNA
+      real, pointer, dimension(:, :) :: ALW, BLW
 
-      real, allocatable, dimension(:,:,:) :: DMI
+      real, allocatable, dimension(:, :, :) :: DMI
 
       call MAPL_GridCompGet(gc, grid=esmfgrid, num_levels=LM, _RC)
-      call MAPL_GridGet(esmfgrid, im=IM, jm=JM, _RC)
+      call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
 
       ! Run the child components
       call MAPL_GridCompTimerStop(gc, "IRRAD", _RC)
@@ -191,13 +186,13 @@ contains
 
       ! Get pointers to imports
       call MAPL_StateGetPointer(import, PLE, 'PLEINST', _RC)
-      call MAPL_StateGetPointer(import, FLW,    'FLX',     _RC)
-      call MAPL_StateGetPointer(import, FLWCLR, 'FLC',     _RC)
-      call MAPL_StateGetPointer(import, FLWNA,  'FLXA',    _RC)
-      call MAPL_StateGetPointer(import, FLA,    'FLA',     _RC)
+      call MAPL_StateGetPointer(import, FLW, 'FLX', _RC)
+      call MAPL_StateGetPointer(import, FLWCLR, 'FLC', _RC)
+      call MAPL_StateGetPointer(import, FLWNA, 'FLXA', _RC)
+      call MAPL_StateGetPointer(import, FLA, 'FLA', _RC)
       call MAPL_StateGetPointer(import, DSFDTS, 'DSFDTS0', _RC)
-      call MAPL_StateGetPointer(import, SFCEM,  'SFCEM0',  _RC)
-      call MAPL_StateGetPointer(import, TRD,    'TSREFF',  _RC)
+      call MAPL_StateGetPointer(import, SFCEM, 'SFCEM0', _RC)
+      call MAPL_StateGetPointer(import, TRD, 'TSREFF', _RC)
 
       ! Edge imports: remap to the 0:LM layer-interface convention used
       ! below (see the declaration comment above for why).
@@ -208,27 +203,27 @@ contains
       p3d => FLA;    FLA   (1:IM,1:JM,0:LM) => p3d
 
       ! Get pointers to exports
-      call MAPL_StateGetPointer(export, ALW,      'ALW',      _RC)
-      call MAPL_StateGetPointer(export, BLW,      'BLW',      _RC)
-      call MAPL_StateGetPointer(export, RADLW,    'RADLW',    _RC)
-      call MAPL_StateGetPointer(export, RADLWC,   'RADLWC',   _RC)
-      call MAPL_StateGetPointer(export, RADLWNA,  'RADLWNA',  _RC)
+      call MAPL_StateGetPointer(export, ALW, 'ALW', _RC)
+      call MAPL_StateGetPointer(export, BLW, 'BLW', _RC)
+      call MAPL_StateGetPointer(export, RADLW, 'RADLW', _RC)
+      call MAPL_StateGetPointer(export, RADLWC, 'RADLWC', _RC)
+      call MAPL_StateGetPointer(export, RADLWNA, 'RADLWNA', _RC)
       call MAPL_StateGetPointer(export, RADLWCNA, 'RADLWCNA', _RC)
 
       ! Prepare exports
       if (associated(BLW)) BLW = DSFDTS
-      if (associated(ALW)) ALW = SFCEM - DSFDTS*TRD
+      if (associated(ALW)) ALW = SFCEM - DSFDTS * TRD
 
       if (associated(RADLW) .or. associated(RADLWC) .or. &
-          associated(RADLWNA) .or. associated(RADLWCNA)) then
+           associated(RADLWNA) .or. associated(RADLWCNA)) then
 
-         allocate(DMI(IM,JM,LM), _STAT)
-         DMI = MAPL_GRAV/(MAPL_CP*(PLE(:,:,1:LM)-PLE(:,:,0:LM-1)))
+         allocate(DMI(IM, JM, LM), _STAT)
+         DMI = MAPL_GRAV / (MAPL_CP * (PLE(:, :, 1:LM) - PLE(:, :, 0:LM - 1)))
 
-         if (associated(RADLW))    RADLW    = (FLW   (:,:,0:LM-1) - FLW   (:,:,1:LM))*DMI
-         if (associated(RADLWC))   RADLWC   = (FLWCLR(:,:,0:LM-1) - FLWCLR(:,:,1:LM))*DMI
-         if (associated(RADLWNA))  RADLWNA  = (FLWNA (:,:,0:LM-1) - FLWNA (:,:,1:LM))*DMI
-         if (associated(RADLWCNA)) RADLWCNA = (FLA   (:,:,0:LM-1) - FLA   (:,:,1:LM))*DMI
+         if (associated(RADLW)) RADLW = (FLW(:, :, 0:LM - 1) - FLW(:, :, 1:LM)) * DMI
+         if (associated(RADLWC)) RADLWC = (FLWCLR(:, :, 0:LM - 1) - FLWCLR(:, :, 1:LM)) * DMI
+         if (associated(RADLWNA)) RADLWNA = (FLWNA(:, :, 0:LM - 1) - FLWNA(:, :, 1:LM)) * DMI
+         if (associated(RADLWCNA)) RADLWCNA = (FLA(:, :, 0:LM - 1) - FLA(:, :, 1:LM)) * DMI
 
          deallocate(DMI, _STAT)
 
@@ -238,7 +233,6 @@ contains
 
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(clock)
-
    end subroutine Run
 
 end module GEOS_RadiationGridCompMod
@@ -250,4 +244,3 @@ subroutine Radiation_SetServices(gc, rc)
    integer, intent(out) :: rc
    call mySetServices(gc, rc=rc)
 end subroutine Radiation_SetServices
-
