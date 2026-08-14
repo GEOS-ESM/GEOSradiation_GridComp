@@ -3014,7 +3014,6 @@ contains
            value=implements_aerosol_optics, _RC)
 
       ! Setting aerosol optics implementation to false for testing purposes
-      implements_aerosol_optics = .false.
       RADIATIVELY_ACTIVE_AEROSOLS: if (implements_aerosol_optics) then
 
          ! set RH for aerosol optics
