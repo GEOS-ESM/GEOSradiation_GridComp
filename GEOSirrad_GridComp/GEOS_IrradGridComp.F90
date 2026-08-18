@@ -3,9 +3,9 @@
 module GEOS_IrradGridCompMod
 
    !BOP
-   !MODULE: GEOS_Irrad -- Computes longwave radiative transfer through a cloudy atmosphere
+   ! !MODULE: GEOS_Irrad -- Computes longwave radiative transfer through a cloudy atmosphere
 
-   !DESCRIPTION:
+   ! !DESCRIPTION:
    !
    !   {\tt Irrad} is a light-weight gridded component to compute longwave
    ! radiative fluxes. It operates on the ESMF grid that appears in the
@@ -54,8 +54,10 @@ module GEOS_IrradGridCompMod
    !    and so a means is provided, through the logical attribute \texttt{CALL\_LAST} in
    !    configuration, of telling the component how it is being used. The
    !    default is \texttt{CALL\_LAST = "TRUE"}.
+   !
+   !
+   ! !USES:
 
-   !USES:
    use ESMF
    use MAPL
    use GEOS_UtilsMod
@@ -65,7 +67,8 @@ module GEOS_IrradGridCompMod
    use rrtmg_lw_init, only: rrtmg_lw_ini
    use parrrtm, only: ngptlw, nbndlw
    use rrlw_wvn, only: wavenum1, wavenum2
-   use rad_utils, only: Tbr_from_band_flux, choose_solar_scheme, choose_irrad_scheme
+   use rad_utils, only: Tbr_from_band_flux, &
+        choose_solar_scheme, choose_irrad_scheme
 
    ! for RRTMGP
    use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -75,7 +78,7 @@ module GEOS_IrradGridCompMod
    implicit none
    private
 
-   !PUBLIC MEMBER FUNCTIONS:
+   ! !PUBLIC MEMBER FUNCTIONS:
 
    public SetServices
 
@@ -158,16 +161,16 @@ module GEOS_IrradGridCompMod
 contains
 
    !BOP
-   !IROUTINE: SetServices -- Sets ESMF services for this component
+   ! !IROUTINE: SetServices -- Sets ESMF services for this component
 
-   !INTERFACE:
+   ! !INTERFACE:
    subroutine SetServices ( GC, RC )
 
-      !ARGUMENTS:
+      ! !ARGUMENTS:
       type(ESMF_GridComp), intent(INOUT) :: GC  ! gridded component
       integer, optional                  :: RC  ! return code
 
-      !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
+      ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
       !                the Initialize and Finalize services, as well as allocating
       !   our instance of a generic state and putting it in the
       !   gridded component (GC). Here we only need to set the run method and
@@ -472,19 +475,19 @@ contains
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    !BOP
-   !IROUTINE: RUN -- Run method for the LW component
+   ! !IROUTINE: RUN -- Run method for the LW component
 
-   !INTERFACE:
+   ! !INTERFACE:
    subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
-      !ARGUMENTS:
+      ! !ARGUMENTS:
       type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
       type(ESMF_State),    intent(inout) :: IMPORT ! Import state
       type(ESMF_State),    intent(inout) :: EXPORT ! Export state
       type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
       integer, optional,   intent(  out) :: RC     ! Error code:
 
-      !DESCRIPTION: Periodically refreshes the fluxes and their derivatives
+      ! !DESCRIPTION: Periodically refreshes the fluxes and their derivatives
       !                w.r.t surface skin temperature. On every step it produces
       !                a linear estimate of the fluxes based on the instantaneous
       !                surface temperature.
@@ -711,6 +714,8 @@ contains
       _RETURN(_SUCCESS)
 
    contains
+
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       subroutine LW_Driver(IM,JM,LM,LATS,LONS,RC)
 
@@ -2514,762 +2519,6 @@ contains
 
       end subroutine LW_Driver
 
-      ! compute_lw_aer_optics: load and normalize aerosol optical properties
-      !   for a column block into aer_props (ty_optical_props_2str).
-      !   Called only when need_dirty_optical_props is .true., so aer_props
-      !   is guaranteed to be allocated at the call site.
-      subroutine compute_lw_aer_optics(colS, colE, &
-           TAUA_3d, SSAA_3d, ASYA_3d, aer_props, RC)
-
-         use mo_rte_kind,       only: wp
-         use mo_optical_props,  only: ty_optical_props_arry, ty_optical_props_2str
-
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
-         integer,                          intent(in)    :: colS, colE
-         real, dimension(:,:,:),           intent(in)    :: TAUA_3d, SSAA_3d, ASYA_3d
-         class(ty_optical_props_arry),     intent(inout) :: aer_props
-         integer, optional,                intent(out)   :: RC
-
-         integer :: STATUS
-
-         select type (aer_props)
-         class is (ty_optical_props_2str)
-            ! load unormalized optical properties from aerosol system
-            aer_props%tau = real(TAUA_3d(colS:colE,:,:),kind=wp)
-            aer_props%ssa = real(SSAA_3d(colS:colE,:,:),kind=wp)
-            aer_props%g   = real(ASYA_3d(colS:colE,:,:),kind=wp)
-            ! renormalize
-            where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp )
-               aer_props%g   = aer_props%g   / aer_props%ssa
-               aer_props%ssa = aer_props%ssa / aer_props%tau
-            elsewhere
-               aer_props%tau = 0._wp
-               aer_props%ssa = 0._wp
-               aer_props%g   = 0._wp
-            end where
-
-            ! Because RRTMGP is (currently) compiled at R8,
-            ! _wp is R8. Apparently with aggressive compiler
-            ! flags using Intel, it's possible for, say,
-            ! aer_props%ssa to become slightly greater than one
-            ! in the above renormalization. So, we add clamps
-            ! to the values based on the restrictions see in
-            ! RRTMGP/rte-frontend/mo_optical_props.F90
-            !
-            ! In testing, the values seen were like 1.00000011905028
-            ! so just slightly above one.
-
-            ! tau must be greater than 0.0
-            aer_props%tau = max(aer_props%tau, 0._wp)
-            ! ssa must be between 0.0 and 1.0
-            aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
-            ! g must be between -1.0 and 1.0
-            aer_props%g   = max(min(aer_props%g,   1._wp),-1._wp)
-
-         class default
-            STATUS = 1
-            TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
-         end select
-
-         RETURN_(ESMF_SUCCESS)
-#undef TEST_
-
-      end subroutine compute_lw_aer_optics
-
-      ! compute_lw_cloud_optics_mcica: compute band cloud optical properties,
-      !   generate McICA random numbers, sample cloud mask, draw band->gpt,
-      !   and apply condensate inhomogeneity scaling.
-      subroutine compute_lw_cloud_optics_mcica( &
-           colS, colE, ncols_block, LM, ngpt, &
-           gen_mro, cond_inhomo, cloud_overlap_type, IM, IM_World, iBeg, jBeg, &
-           seeds_time_key, seeds_ctr_key, &
-           CWC_3d, REFF_3d, dp_wp, cf_wp, dzmid, &
-           cwp_fac_arg, cloud_optics, &
-           cloud_props_bnd, cloud_props_gpt, &
-           urand, urand_aux, urand_cond, urand_cond_aux, &
-           alpha, rcorr, zcw, &
-           adl, rdl, &
-           cld_mask, &
-           MAPL, RC)
-
-         use mo_rte_kind,             only: wp
-         use mo_optical_props,        only: ty_optical_props_arry, ty_optical_props_2str
-         use mo_cloud_optics_rrtmgp,  only: ty_cloud_optics_rrtmgp
-         use mo_cloud_sampling,       only: draw_samples, sampled_mask_max_ran, &
-              sampled_urand_gen_max_ran
-         use cloud_condensate_inhomogeneity, only: zcw_lookup
-#ifdef HAVE_MKL
-         use MKL_VSL_TYPE
-         use mo_rng_mklvsl_plus,      only: ty_rng_mklvsl_plus
-#else
-         use mo_rng_mt19937,          only: ty_rng_mt
-#endif
-
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
-
-         integer,                      intent(in)    :: colS, colE, ncols_block, LM, ngpt
-         logical,                      intent(in)    :: gen_mro, cond_inhomo
-         character(len=*),             intent(in)    :: cloud_overlap_type
-         integer,                      intent(in)    :: IM, IM_World, iBeg, jBeg
-         integer,                      intent(in)    :: seeds_time_key, seeds_ctr_key
-         real, dimension(:,:,:),       intent(in)    :: CWC_3d, REFF_3d
-         real(wp), dimension(:,:),     intent(in)    :: dp_wp, cf_wp, dzmid
-         real,     dimension(:),       intent(in), optional :: adl, rdl
-         real(wp),                     intent(in)    :: cwp_fac_arg
-         type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
-         class(ty_optical_props_arry), intent(inout) :: cloud_props_bnd, cloud_props_gpt
-         real(wp), dimension(:,:,:),   intent(inout) :: urand
-         real(wp), dimension(:,:,:),   intent(inout), optional :: urand_aux
-         real(wp), dimension(:,:,:),   intent(inout), optional :: urand_cond, urand_cond_aux
-         real(wp), dimension(:,:),     intent(inout), optional :: alpha, rcorr
-         real(wp), dimension(:,:,:),   intent(inout), optional :: zcw
-         logical,  dimension(:,:,:),   intent(out)   :: cld_mask
-         type(MAPL_MetaComp),          intent(inout) :: MAPL
-         integer,  optional,           intent(out)   :: RC
-
-         integer :: STATUS
-         character(len=256) :: error_msg
-         integer :: isub, icol, ilay, igpt, I, J
-         integer :: seeds(3)
-         real(wp) :: cld_frac
-         real :: sigma_qcw
-         integer, parameter :: KLIQUID = 2
-         integer, parameter :: KICE    = 1
-#ifdef HAVE_MKL
-         type(ty_rng_mklvsl_plus) :: rng
-#else
-         type(ty_rng_mt) :: rng
-#endif
-
-         ! set PRNG seeds: word1 set per-column below, word2=time, word3=counter
-         seeds(2) = seeds_time_key
-         seeds(3) = seeds_ctr_key
-
-         !call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
-         error_msg = cloud_optics%cloud_optics( &
-              real(CWC_3d(colS:colE,:,KLIQUID),kind=wp) * dp_wp(colS:colE,:) * cwp_fac_arg, &
-              real(CWC_3d(colS:colE,:,KICE),   kind=wp) * dp_wp(colS:colE,:) * cwp_fac_arg, &
-              min( max( real(REFF_3d(colS:colE,:,KLIQUID),kind=wp), &
-              cloud_optics%get_min_radius_liq()), cloud_optics%get_max_radius_liq()), &
-              min( max( real(REFF_3d(colS:colE,:,KICE),   kind=wp), &
-              cloud_optics%get_min_radius_ice()), cloud_optics%get_max_radius_ice()), &
-              cloud_props_bnd)
-         TEST_(error_msg)
-
-         !call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         !call MAPL_TimerOn(MAPL,"---RRTMGP_MCICA",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         ! exponential inter-layer correlations
-         if (gen_mro) then
-            do ilay = 1,LM-1
-               alpha(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(adl(colS:colE),kind=wp))
-            enddo
-            if (cond_inhomo) then
-               do ilay = 1,LM-1
-                  rcorr(:,ilay) = exp(-abs(dzmid(colS:colE,ilay))/real(rdl(colS:colE),kind=wp))
-               enddo
-            endif
-         endif
-
-         ! Generate McICA random numbers for block (Philox PRNG)
-         do isub = 1, ncols_block
-            icol = colS + isub - 1
-            J = (icol-1) / IM + 1
-            I = icol - (J-1) * IM
-            seeds(1) = (jBeg + J - 1) * IM_World + (iBeg + I - 1)
-#ifdef HAVE_MKL
-            call rng%init(VSL_BRNG_PHILOX4X32X10,seeds)
-#else
-            call rng%init(seeds)
-#endif
-            urand(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-            if (gen_mro) then
-               urand_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-               if (cond_inhomo) then
-                  urand_cond    (:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-                  urand_cond_aux(:,:,isub) = reshape(rng%get_random(ngpt*LM),(/ngpt,LM/))
-               endif
-            endif
-            call rng%end()
-         end do
-
-         ! cloud sampling to gpoints
-         select case (cloud_overlap_type)
-         case ("MAX_RAN_OVERLAP")
-            error_msg = sampled_mask_max_ran( &
-                 urand(:,:,1:ncols_block), cf_wp(colS:colE,:), cld_mask)
-            TEST_(error_msg)
-         case ("EXP_RAN_OVERLAP")
-            STATUS = 1
-            TEST_('EXP_RAN_OVERLAP not implemented yet')
-         case ("GEN_MAX_RAN_OVERLAP")
-            error_msg = sampled_urand_gen_max_ran(alpha, &
-                 urand(:,:,1:ncols_block),urand_aux(:,:,1:ncols_block))
-            TEST_(error_msg)
-            if (cond_inhomo) then
-               error_msg = sampled_urand_gen_max_ran(rcorr, &
-                    urand_cond(:,:,1:ncols_block),urand_cond_aux(:,:,1:ncols_block))
-               TEST_(error_msg)
-            end if
-            do isub = 1,ncols_block
-               icol = colS + isub - 1
-               do ilay = 1,LM
-                  cld_frac = cf_wp(icol,ilay)
-                  if (cld_frac <= 0._wp) then
-                     cld_mask(isub,ilay,:) = .false.
-                  else
-                     cld_mask(isub,ilay,:) = urand(:,ilay,isub) < cld_frac
-                     if (cond_inhomo) then
-                        if (cld_frac > 0.99_wp) then
-                           sigma_qcw = 0.5
-                        elseif (cld_frac > 0.9_wp) then
-                           sigma_qcw = 0.71
-                        else
-                           sigma_qcw = 1.0
-                        endif
-                        do igpt = 1,ngpt
-                           if (cld_mask(isub,ilay,igpt)) zcw(isub,ilay,igpt) = &
-                                zcw_lookup(real(urand_cond(igpt,ilay,isub)),sigma_qcw)
-                        end do
-                     end if
-                  end if
-               end do
-            end do
-         case default
-            STATUS = 1
-            TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
-         end select
-
-         ! draw McICA optical property samples (band->gpt)
-         TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
-
-         ! Apply sub-gridscale condensate scaling
-         if (gen_mro) then
-            if (cond_inhomo) &
-                 where (cld_mask) cloud_props_gpt%tau = cloud_props_gpt%tau * zcw
-         end if
-
-         !call MAPL_TimerOff(MAPL,"---RRTMGP_MCICA",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         RETURN_(ESMF_SUCCESS)
-#undef TEST_
-
-      end subroutine compute_lw_cloud_optics_mcica
-
-      ! compute_lw_gas_optics: compute LW gas optical properties and Planck
-      !   source functions for one block of columns.
-      subroutine compute_lw_gas_optics(colS, colE, &
-           k_dist, p_lay, p_lev, t_lay, t_lev, t_sfc, &
-           gas_concs_block, clean_optical_props, sources, &
-           MAPL, RC)
-
-         use mo_rte_kind,              only: wp
-         use mo_gas_optics_rrtmgp,    only: ty_gas_optics_rrtmgp
-         use mo_gas_concentrations,   only: ty_gas_concs
-         use mo_optical_props,        only: ty_optical_props_arry
-         use mo_source_functions,     only: ty_source_func_lw
-
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
-
-         integer,                      intent(in)    :: colS, colE
-         type(ty_gas_optics_rrtmgp),   intent(inout) :: k_dist
-         real(wp), dimension(:,:),     intent(in)    :: p_lay, p_lev, t_lay, t_lev
-         real(wp), dimension(:),       intent(in)    :: t_sfc
-         type(ty_gas_concs),           intent(inout) :: gas_concs_block
-         class(ty_optical_props_arry), intent(inout) :: clean_optical_props
-         type(ty_source_func_lw),      intent(inout) :: sources
-         type(MAPL_MetaComp),          intent(inout) :: MAPL
-         integer, optional,            intent(out)   :: RC
-
-         integer :: STATUS
-         character(len=256) :: error_msg
-
-         !call MAPL_TimerOn(MAPL,"---RRTMGP_GAS_OPTICS",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         ! get gas optical properties and Planck source functions
-         error_msg = k_dist%gas_optics( &
-              p_lay(colS:colE,:), p_lev(colS:colE,:), t_lay(colS:colE,:), &
-              t_sfc(colS:colE), gas_concs_block, clean_optical_props, sources, &
-              tlev = t_lev(colS:colE,:))
-         TEST_(error_msg)
-
-         !call MAPL_TimerOff(MAPL,"---RRTMGP_GAS_OPTICS",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         RETURN_(ESMF_SUCCESS)
-#undef TEST_
-
-      end subroutine compute_lw_gas_optics
-
-      ! compute_lw_rte: solve LW radiative transfer for one block of columns.
-      !   Handles clean clear-sky, clean all-sky, dirty clear-sky, and dirty
-      !   all-sky cases as controlled by the calc_* / export_* flags.
-      subroutine compute_lw_rte( &
-           colS, colE, ncols_block, LM, nmom, &
-           top_at_1, u2s, nga, &
-           calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-           allnoa_to_allsky_band_xfer_needed, any_band_output, &
-           export_clrsky, export_allsky, &
-           implements_aerosol_optics, need_dirty_optical_props, &
-           clean_optical_props, sources, emis_sfc, &
-           dirty_optical_props, aer_props, cloud_props_gpt, &
-           flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
-           flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa, &
-           bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
-           flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
-           flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
-           bnd_flux_up_allsky, bnd_dfupdts_allsky, &
-           MAPL, RC)
-
-         use mo_rte_kind,        only: wp
-         use mo_optical_props,   only: ty_optical_props_arry, ty_optical_props_1scl, &
-              ty_optical_props_2str, ty_optical_props_nstr
-         use mo_source_functions, only: ty_source_func_lw
-         use mo_fluxes,          only: ty_fluxes_broadband
-         use mo_fluxes_byband,   only: ty_fluxes_byband
-         use mo_rte_lw,          only: rte_lw
-
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
-
-         integer,                      intent(in)    :: colS, colE, ncols_block, LM, nmom
-         logical,                      intent(in)    :: top_at_1, u2s
-         integer,                      intent(in)    :: nga
-         logical,                      intent(in)    :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
-         logical,                      intent(in)    :: allnoa_to_allsky_band_xfer_needed, any_band_output
-         logical,                      intent(in)    :: export_clrsky, export_allsky
-         logical,                      intent(in)    :: implements_aerosol_optics, need_dirty_optical_props
-         class(ty_optical_props_arry), intent(inout) :: clean_optical_props
-         type(ty_source_func_lw),      intent(inout) :: sources
-         real(wp), dimension(:,:),     intent(in)    :: emis_sfc
-         class(ty_optical_props_arry), intent(inout), optional :: dirty_optical_props
-         class(ty_optical_props_arry), intent(inout), optional :: aer_props
-         class(ty_optical_props_arry), intent(inout), optional :: cloud_props_gpt
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
-         real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
-         real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
-         type(MAPL_MetaComp),          intent(inout) :: MAPL
-         integer, optional,            intent(out)   :: RC
-
-         integer :: STATUS
-         character(len=256) :: error_msg
-         type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
-         type(ty_fluxes_byband)    :: fluxes_byband_allnoa, fluxes_byband_allsky
-
-         !call MAPL_TimerOn(MAPL,"---RRTMGP_RT",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         ! clean clear-sky case
-         if (calc_clrnoa) then
-            fluxes_clrnoa%flux_up     => flux_up_clrnoa(colS:colE,:)
-            fluxes_clrnoa%flux_dn     => flux_dn_clrnoa(colS:colE,:)
-            fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE,:)
-            error_msg = rte_lw( &
-                 clean_optical_props, &
-                 top_at_1, sources, emis_sfc(:,colS:colE), &
-                 fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
-            TEST_(error_msg)
-         end if
-
-         if (present(dirty_optical_props)) then
-            ! make copy of clrnoa optical properties as the
-            !   starting point for later dirty calculations
-            select type (dirty_optical_props)
-            class is (ty_optical_props_1scl)
-               TEST_(dirty_optical_props%alloc_1scl(ncols_block, LM, clean_optical_props))
-            class is (ty_optical_props_2str)
-               TEST_(dirty_optical_props%alloc_2str(ncols_block, LM, clean_optical_props))
-               select type (clean_optical_props)
-               class is (ty_optical_props_2str)
-                  dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%g   = clean_optical_props%g
-               end select
-            class is (ty_optical_props_nstr)
-               TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_block, LM, clean_optical_props))
-               select type (clean_optical_props)
-               class is (ty_optical_props_nstr)
-                  dirty_optical_props%ssa = clean_optical_props%ssa
-                  dirty_optical_props%p   = clean_optical_props%p
-               end select
-            end select
-            ! all streams have tau
-            dirty_optical_props%tau = clean_optical_props%tau
-         end if
-
-         ! clean all-sky case
-         if (calc_allnoa) then
-
-            ! add in cloud optical properties
-            TEST_(cloud_props_gpt%increment(clean_optical_props))
-
-            ! clean all-sky RT
-            if (allnoa_to_allsky_band_xfer_needed) then
-               fluxes_byband_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
-               fluxes_byband_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
-               fluxes_byband_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
-               fluxes_byband_allnoa%bnd_flux_up     => bnd_flux_up_allnoa(colS:colE,:,:)
-               fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE,:,:)
-               error_msg = rte_lw( &
-                    clean_optical_props, &
-                    top_at_1, sources, emis_sfc(:,colS:colE), &
-                    fluxes_byband_allnoa, n_gauss_angles=nga, use_2stream=u2s)
-               TEST_(error_msg)
-            else
-               ! only broadband required
-               fluxes_allnoa%flux_up     => flux_up_allnoa(colS:colE,:)
-               fluxes_allnoa%flux_dn     => flux_dn_allnoa(colS:colE,:)
-               fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE,:)
-               error_msg = rte_lw( &
-                    clean_optical_props, &
-                    top_at_1, sources, emis_sfc(:,colS:colE), &
-                    fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s)
-               TEST_(error_msg)
-            endif
-         end if
-
-         if (export_clrsky .or. export_allsky) then
-            if (implements_aerosol_optics) then
-
-               ! dirty flux calculations required ...
-
-               ! "dirty_optical_props" is currently just a copy of the clrnoa optical_props
-               !   so must now add in aerosols to make it actually dirty
-               TEST_(aer_props%increment(dirty_optical_props))
-
-               ! dirty clear-sky RT
-               if (calc_clrsky) then
-                  fluxes_clrsky%flux_up     => flux_up_clrsky(colS:colE,:)
-                  fluxes_clrsky%flux_dn     => flux_dn_clrsky(colS:colE,:)
-                  fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE,:)
-                  error_msg = rte_lw( &
-                       dirty_optical_props, &
-                       top_at_1, sources, emis_sfc(:,colS:colE), &
-                       fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s)
-                  TEST_(error_msg)
-               end if
-
-               ! dirty all-sky case
-               if (calc_allsky) then
-
-                  ! add in cloud optical properties
-                  TEST_(cloud_props_gpt%increment(dirty_optical_props))
-
-                  ! dirty all-sky RT
-                  ! (band output currently only available for all-sky case)
-                  if (any_band_output) then
-                     fluxes_byband_allsky%flux_up     => flux_up_allsky(colS:colE,:)
-                     fluxes_byband_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
-                     fluxes_byband_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
-                     fluxes_byband_allsky%bnd_flux_up     => bnd_flux_up_allsky(colS:colE,:,:)
-                     fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE,:,:)
-                     error_msg = rte_lw( &
-                          dirty_optical_props, &
-                          top_at_1, sources, emis_sfc(:,colS:colE), &
-                          fluxes_byband_allsky, n_gauss_angles=nga, use_2stream=u2s)
-                     TEST_(error_msg)
-                  else
-                     fluxes_allsky%flux_up     => flux_up_allsky(colS:colE,:)
-                     fluxes_allsky%flux_dn     => flux_dn_allsky(colS:colE,:)
-                     fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE,:)
-                     error_msg = rte_lw( &
-                          dirty_optical_props, &
-                          top_at_1, sources, emis_sfc(:,colS:colE), &
-                          fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s)
-                     TEST_(error_msg)
-                  end if
-               end if
-
-            else
-
-               ! there are no aerosols so we are done because the
-               !   dirty cases are the same as the clean ones
-               if (export_clrsky) then
-                  flux_up_clrsky(colS:colE,:) = flux_up_clrnoa(colS:colE,:)
-                  flux_dn_clrsky(colS:colE,:) = flux_dn_clrnoa(colS:colE,:)
-                  dfupdts_clrsky(colS:colE,:) = dfupdts_clrnoa(colS:colE,:)
-               end if
-               if (export_allsky) then
-                  flux_up_allsky(colS:colE,:) = flux_up_allnoa(colS:colE,:)
-                  flux_dn_allsky(colS:colE,:) = flux_dn_allnoa(colS:colE,:)
-                  dfupdts_allsky(colS:colE,:) = dfupdts_allnoa(colS:colE,:)
-                  if (any_band_output) then
-                     bnd_flux_up_allsky(colS:colE,:,:) = bnd_flux_up_allnoa(colS:colE,:,:)
-                     bnd_dfupdts_allsky(colS:colE,:,:) = bnd_dfupdts_allnoa(colS:colE,:,:)
-                  end if
-               end if
-
-            end if ! implements_aerosol_optics
-         end if ! export dirty clear-sky or all-sky
-
-         !call MAPL_TimerOff(MAPL,"---RRTMGP_RT",RC=STATUS)
-         !VERIFY_(STATUS)
-
-         RETURN_(ESMF_SUCCESS)
-#undef TEST_
-
-      end subroutine compute_lw_rte
-
-      ! PROCESS_RRTMGP_LW_BLOCK: process one block of columns through the
-      !   full LW RRTMGP pipeline (aerosol optics, cloud optics, gas optics,
-      !   RTE solve).  Intended to be called from a serial or OpenMP
-      !   parallel do loop over blocks.
-      subroutine PROCESS_RRTMGP_LW_BLOCK( &
-           b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga, &
-           IM, IM_World, iBeg, jBeg, &
-           top_at_1, u2s, &
-           seeds_time_key, seeds_ctr_key, &
-           cwp_fac, &
-           need_cloud_optical_props, need_dirty_optical_props, &
-           gen_mro, cond_inhomo, cloud_overlap_type, &
-           calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-           allnoa_to_allsky_band_xfer_needed, any_band_output, &
-           export_clrsky, export_allsky, implements_aerosol_optics, &
-           k_dist, cloud_optics, gas_concs, &
-           p_lay, p_lev, t_lay, t_lev, t_sfc, dp_wp, cf_wp, dzmid, emis_sfc, &
-           adl, rdl, &
-           CWC_3d, REFF_3d, &
-           TAUA_3d, SSAA_3d, ASYA_3d, &
-           flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
-           flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa, &
-           bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
-           flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
-           flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
-           bnd_flux_up_allsky, bnd_dfupdts_allsky, &
-           MAPL, RC)
-
-         use mo_rte_kind,             only: wp
-         use mo_gas_optics_rrtmgp,   only: ty_gas_optics_rrtmgp
-         use mo_gas_concentrations,  only: ty_gas_concs
-         use mo_optical_props,       only: ty_optical_props_2str
-         use mo_source_functions,    only: ty_source_func_lw
-         use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
-
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
-
-         integer,                      intent(in)    :: b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga
-         integer,                      intent(in)    :: IM, IM_World, iBeg, jBeg
-         logical,                      intent(in)    :: top_at_1, u2s
-         integer,                      intent(in)    :: seeds_time_key, seeds_ctr_key
-         real(wp),                     intent(in)    :: cwp_fac
-         logical,                      intent(in)    :: need_cloud_optical_props, need_dirty_optical_props
-         logical,                      intent(in)    :: gen_mro, cond_inhomo
-         character(len=*),             intent(in)    :: cloud_overlap_type
-         logical,                      intent(in)    :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
-         logical,                      intent(in)    :: allnoa_to_allsky_band_xfer_needed, any_band_output
-         logical,                      intent(in)    :: export_clrsky, export_allsky, implements_aerosol_optics
-         type(ty_gas_optics_rrtmgp),   intent(inout) :: k_dist
-         type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
-         type(ty_gas_concs),           intent(inout) :: gas_concs
-         real(wp), dimension(:,:),     intent(in)    :: p_lay, p_lev, t_lay, t_lev
-         real(wp), dimension(:),       intent(in)    :: t_sfc
-         real(wp), dimension(:,:),     intent(in)    :: dp_wp, cf_wp, dzmid
-         real(wp), dimension(:,:),     intent(in)    :: emis_sfc
-         real,     dimension(:),       intent(in), optional :: adl, rdl
-         real,     dimension(:,:,:),   pointer       :: CWC_3d, REFF_3d
-         real,     dimension(:,:,:),   pointer       :: TAUA_3d, SSAA_3d, ASYA_3d
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
-         real(wp), dimension(:,:), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
-         real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
-         real(wp), dimension(:,:,:), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
-         type(MAPL_MetaComp),          intent(inout) :: MAPL
-         integer,  optional,           intent(out)   :: RC
-
-         integer :: STATUS
-         character(len=256) :: error_msg
-         integer :: ncols_block, colS, colE
-
-         ! local RRTMGP objects (LW always uses 2-stream)
-         type(ty_optical_props_2str) :: clean_optical_props
-         type(ty_optical_props_2str) :: dirty_optical_props
-         type(ty_optical_props_2str) :: aer_props
-         type(ty_optical_props_2str) :: cloud_props_bnd, cloud_props_gpt
-         type(ty_source_func_lw)     :: sources
-         type(ty_gas_concs)          :: gas_concs_block
-
-         ! per-block scratch arrays
-         real(wp), dimension(:,:,:), allocatable :: urand, urand_aux, urand_cond, urand_cond_aux
-         real(wp), dimension(:,:,:), allocatable :: zcw
-         real(wp), dimension(:,:),   allocatable :: alpha, rcorr
-         logical,  dimension(:,:,:), allocatable :: cld_mask
-
-         ! compute column range for this block (final block may be partial)
-         ncols_block = min(rrtmgp_blockSize, ncol - (b-1)*rrtmgp_blockSize)
-         colS = (b-1) * rrtmgp_blockSize + 1
-         colE = colS + ncols_block - 1
-
-         ! spectral init + array allocation for gas optics and Planck sources
-         TEST_(clean_optical_props%init(k_dist))
-         TEST_(clean_optical_props%alloc_2str(ncols_block, LM))
-         TEST_(sources%init(k_dist))
-         TEST_(sources%alloc(ncols_block, LM))
-
-         ! subset gas concentrations for this block
-         TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
-
-         ! aerosol optics objects (always 2-stream for LW)
-         if (need_dirty_optical_props) then
-            TEST_(dirty_optical_props%init(k_dist))
-            TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
-            TEST_(aer_props%alloc_2str(ncols_block, LM))
-         end if
-
-         ! cloud optics objects and scratch arrays
-         if (need_cloud_optical_props) then
-            TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
-            TEST_(cloud_props_bnd%alloc_2str(ncols_block, LM))
-            TEST_(cloud_props_gpt%init(k_dist))
-            TEST_(cloud_props_gpt%alloc_2str(ncols_block, LM))
-            allocate(urand(ngpt, LM, ncols_block), _STAT)
-            allocate(cld_mask(ncols_block, LM, ngpt), _STAT)
-            if (gen_mro) then
-               allocate(urand_aux(ngpt, LM, ncols_block), _STAT)
-               allocate(alpha(ncols_block, LM-1), _STAT)
-               if (cond_inhomo) then
-                  allocate(urand_cond    (ngpt, LM, ncols_block), _STAT)
-                  allocate(urand_cond_aux(ngpt, LM, ncols_block), _STAT)
-                  allocate(rcorr(ncols_block, LM-1), _STAT)
-                  allocate(zcw  (ncols_block, LM, ngpt), _STAT)
-               end if
-            end if
-         end if
-
-         ! aerosol optical properties
-         if (need_dirty_optical_props) then
-            call compute_lw_aer_optics(colS, colE, &
-                 TAUA_3d, SSAA_3d, ASYA_3d, aer_props, _RC)
-         end if
-
-         ! cloud optical properties (McICA sampling)
-         if (need_cloud_optical_props) then
-            call compute_lw_cloud_optics_mcica( &
-                 colS, colE, ncols_block, LM, ngpt, &
-                 gen_mro, cond_inhomo, cloud_overlap_type, IM, IM_World, iBeg, jBeg, &
-                 seeds_time_key, seeds_ctr_key, &
-                 CWC_3d, REFF_3d, dp_wp, cf_wp, dzmid, &
-                 cwp_fac, cloud_optics, &
-                 cloud_props_bnd, cloud_props_gpt, &
-                 urand, &
-                 urand_aux=urand_aux, urand_cond=urand_cond, urand_cond_aux=urand_cond_aux, &
-                 alpha=alpha, rcorr=rcorr, zcw=zcw, &
-                 adl=adl, rdl=rdl, &
-                 cld_mask=cld_mask, &
-                 MAPL=MAPL, _RC)
-         end if
-
-         ! gas optical properties and Planck source functions
-         call compute_lw_gas_optics(colS, colE, &
-              k_dist, p_lay, p_lev, t_lay, t_lev, t_sfc, &
-              gas_concs_block, clean_optical_props, sources, &
-              MAPL=MAPL, _RC)
-
-         ! radiative transfer solve (conditional on which optional objects are present)
-         if (need_dirty_optical_props .and. need_cloud_optical_props) then
-            call compute_lw_rte( &
-                 colS, colE, ncols_block, LM, nmom, &
-                 top_at_1, u2s, nga, &
-                 calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-                 allnoa_to_allsky_band_xfer_needed, any_band_output, &
-                 export_clrsky, export_allsky, &
-                 implements_aerosol_optics, need_dirty_optical_props, &
-                 clean_optical_props, sources, emis_sfc, &
-                 dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
-                 cloud_props_gpt=cloud_props_gpt, &
-                 flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
-                 flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
-                 bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
-                 flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
-                 flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
-                 bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
-                 MAPL=MAPL, RC=STATUS)
-         else if (need_dirty_optical_props) then
-            call compute_lw_rte( &
-                 colS, colE, ncols_block, LM, nmom, &
-                 top_at_1, u2s, nga, &
-                 calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-                 allnoa_to_allsky_band_xfer_needed, any_band_output, &
-                 export_clrsky, export_allsky, &
-                 implements_aerosol_optics, need_dirty_optical_props, &
-                 clean_optical_props, sources, emis_sfc, &
-                 dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
-                 flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
-                 flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
-                 bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
-                 flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
-                 flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
-                 bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
-                 MAPL=MAPL, RC=STATUS)
-         else if (need_cloud_optical_props) then
-            call compute_lw_rte( &
-                 colS, colE, ncols_block, LM, nmom, &
-                 top_at_1, u2s, nga, &
-                 calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-                 allnoa_to_allsky_band_xfer_needed, any_band_output, &
-                 export_clrsky, export_allsky, &
-                 implements_aerosol_optics, need_dirty_optical_props, &
-                 clean_optical_props, sources, emis_sfc, &
-                 cloud_props_gpt=cloud_props_gpt, &
-                 flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
-                 flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
-                 bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
-                 flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
-                 flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
-                 bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
-                 MAPL=MAPL, RC=STATUS)
-         else
-            call compute_lw_rte( &
-                 colS, colE, ncols_block, LM, nmom, &
-                 top_at_1, u2s, nga, &
-                 calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
-                 allnoa_to_allsky_band_xfer_needed, any_band_output, &
-                 export_clrsky, export_allsky, &
-                 implements_aerosol_optics, need_dirty_optical_props, &
-                 clean_optical_props, sources, emis_sfc, &
-                 flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
-                 flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
-                 bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
-                 flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
-                 flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
-                 bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
-                 MAPL=MAPL, RC=STATUS)
-         end if
-         VERIFY_(STATUS)
-
-         ! finalize/deallocate per-block RRTMGP objects
-         call sources%finalize()
-         call clean_optical_props%finalize()
-         if (need_dirty_optical_props) then
-            call dirty_optical_props%finalize()
-            call aer_props%finalize()
-         end if
-         if (need_cloud_optical_props) then
-            call cloud_props_bnd%finalize()
-            call cloud_props_gpt%finalize()
-            deallocate(urand, cld_mask, _STAT)
-            if (gen_mro) then
-               deallocate(urand_aux, alpha, _STAT)
-               if (cond_inhomo) then
-                  deallocate(urand_cond, urand_cond_aux, rcorr, zcw, _STAT)
-               end if
-            end if
-         end if
-
-         RETURN_(ESMF_SUCCESS)
-#undef TEST_
-
-      end subroutine PROCESS_RRTMGP_LW_BLOCK
-
       subroutine Update_Flx(IM,JM,LM,RC)
          use mo_rte_kind, only: wp
          integer,           intent(IN ) :: IM, JM, LM
@@ -3738,4 +2987,781 @@ contains
 
    end subroutine RUN
 
+   ! compute_lw_aer_optics: load and normalize aerosol optical properties
+   !   for a column block into aer_props (ty_optical_props_2str).
+   !   Called only when need_dirty_optical_props is .true., so aer_props
+   !   is guaranteed to be allocated at the call site.
+   subroutine compute_lw_aer_optics(colS, colE, &
+        TAUA_3d, SSAA_3d, ASYA_3d, aer_props, rc)
+
+      use mo_rte_kind, only: wp
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+
+#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(status); end if
+      integer, intent(in) :: colS, colE
+      real, dimension(:, :, :), intent(in) :: TAUA_3d, SSAA_3d, ASYA_3d
+      class(ty_optical_props_arry), intent(inout) :: aer_props
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      character(len=ESMF_MAXSTR) :: IAm
+
+      IAm = "compute_lw_aer_optics"
+
+      select type (aer_props)
+      class is (ty_optical_props_2str)
+         ! load unormalized optical properties from aerosol system
+         aer_props%tau = real(TAUA_3d(colS:colE, :, :), kind=wp)
+         aer_props%ssa = real(SSAA_3d(colS:colE, :, :), kind=wp)
+         aer_props%g = real(ASYA_3d(colS:colE, :, :), kind=wp)
+         ! renormalize
+         where (aer_props%tau > 0._wp .and. aer_props%ssa > 0._wp)
+            aer_props%g = aer_props%g / aer_props%ssa
+            aer_props%ssa = aer_props%ssa / aer_props%tau
+            elsewhere
+            aer_props%tau = 0._wp
+            aer_props%ssa = 0._wp
+            aer_props%g = 0._wp
+         end where
+
+         ! Because RRTMGP is (currently) compiled at R8,
+         ! _wp is R8. Apparently with aggressive compiler
+         ! flags using Intel, it's possible for, say,
+         ! aer_props%ssa to become slightly greater than one
+         ! in the above renormalization. So, we add clamps
+         ! to the values based on the restrictions see in
+         ! RRTMGP/rte-frontend/mo_optical_props.F90
+         !
+         ! In testing, the values seen were like 1.00000011905028
+         ! so just slightly above one.
+
+         ! tau must be greater than 0.0
+         aer_props%tau = max(aer_props%tau, 0._wp)
+         ! ssa must be between 0.0 and 1.0
+         aer_props%ssa = max(min(aer_props%ssa, 1._wp), 0._wp)
+         ! g must be between -1.0 and 1.0
+         aer_props%g = max(min(aer_props%g, 1._wp), -1._wp)
+
+      class default
+         status = 1
+         TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
+      end select
+
+      RETURN_(ESMF_SUCCESS)
+#undef TEST_
+   end subroutine compute_lw_aer_optics
+
+   ! compute_lw_cloud_optics_mcica: compute band cloud optical properties,
+   !   generate McICA random numbers, sample cloud mask, draw band->gpt,
+   !   and apply condensate inhomogeneity scaling.
+   subroutine compute_lw_cloud_optics_mcica( &
+        colS, colE, ncols_block, LM, ngpt, &
+        gen_mro, cond_inhomo, cloud_overlap_type, IM, IM_World, iBeg, jBeg, &
+        seeds_time_key, seeds_ctr_key, &
+        CWC_3d, REFF_3d, dp_wp, cf_wp, dzmid, &
+        cwp_fac_arg, cloud_optics, &
+        cloud_props_bnd, cloud_props_gpt, &
+        urand, urand_aux, urand_cond, urand_cond_aux, &
+        alpha, rcorr, zcw, &
+        adl, rdl, &
+        cld_mask, &
+        MAPL, rc)
+
+      use mo_rte_kind, only: wp
+      use mo_optical_props, only: ty_optical_props_arry
+      use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
+      use mo_cloud_sampling, only: draw_samples, sampled_mask_max_ran, &
+           sampled_urand_gen_max_ran
+      use cloud_condensate_inhomogeneity, only: zcw_lookup
+#ifdef HAVE_MKL
+      use MKL_VSL_TYPE
+      use mo_rng_mklvsl_plus, only: ty_rng_mklvsl_plus
+#else
+      use mo_rng_mt19937, only: ty_rng_mt
+#endif
+
+#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(status); end if
+
+      integer, intent(in) :: colS, colE, ncols_block, LM, ngpt
+      logical, intent(in) :: gen_mro, cond_inhomo
+      character(len=*), intent(in) :: cloud_overlap_type
+      integer, intent(in) :: IM, IM_World, iBeg, jBeg
+      integer, intent(in) :: seeds_time_key, seeds_ctr_key
+      real, dimension(:, :, :), intent(in) :: CWC_3d, REFF_3d
+      real(kind=wp), dimension(:, :), intent(in) :: dp_wp, cf_wp, dzmid
+      real, dimension(:), intent(in), optional :: adl, rdl
+      real(kind=wp), intent(in) :: cwp_fac_arg
+      type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
+      class(ty_optical_props_arry), intent(inout) :: cloud_props_bnd, cloud_props_gpt
+      real(kind=wp), dimension(:, :, :), intent(inout) :: urand
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: urand_aux
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: urand_cond, urand_cond_aux
+      real(kind=wp), dimension(:, :), intent(inout), optional :: alpha, rcorr
+      real(kind=wp), dimension(:, :, :), intent(inout), optional :: zcw
+      logical, dimension(:, :, :), intent(out) :: cld_mask
+      type(MAPL_MetaComp), intent(inout) :: MAPL
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      character(len=256) :: error_msg
+      integer :: isub, icol, ilay, igpt, i, j
+      integer :: seeds(3)
+      real(kind=wp) :: cld_frac
+      real :: sigma_qcw
+      integer, parameter :: KLIQUID = 2
+      integer, parameter :: KICE = 1
+#ifdef HAVE_MKL
+      type(ty_rng_mklvsl_plus) :: rng
+#else
+      type(ty_rng_mt) :: rng
+#endif
+
+      character(len=ESMF_MAXSTR) :: IAm
+
+      IAm = "compute_lw_cloud_optics_mcica"
+
+      ! set PRNG seeds: word1 set per-column below, word2=time, word3=counter
+      seeds(2) = seeds_time_key
+      seeds(3) = seeds_ctr_key
+
+      !call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",rc=status)
+      !VERIFY_(status)
+
+      ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
+      error_msg = cloud_optics%cloud_optics( &
+           real(CWC_3d(colS:colE, :, KLIQUID), kind=wp) * dp_wp(colS:colE, :) * cwp_fac_arg, &
+           real(CWC_3d(colS:colE, :, KICE), kind=wp) * dp_wp(colS:colE, :) * cwp_fac_arg, &
+           min(max(real(REFF_3d(colS:colE, :, KLIQUID), kind=wp), &
+           cloud_optics%get_min_radius_liq()), cloud_optics%get_max_radius_liq()), &
+           min(max(real(REFF_3d(colS:colE, :, KICE), kind=wp), &
+           cloud_optics%get_min_radius_ice()), cloud_optics%get_max_radius_ice()), &
+           cloud_props_bnd)
+      TEST_(error_msg)
+
+      !call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",rc=status)
+      !VERIFY_(status)
+
+      !call MAPL_TimerOn(MAPL,"---RRTMGP_MCICA",rc=status)
+      !VERIFY_(status)
+
+      ! exponential inter-layer correlations
+      if (gen_mro) then
+         do ilay = 1, LM - 1
+            alpha(:, ilay) = exp(-abs(dzmid(colS:colE, ilay)) / real(adl(colS:colE), kind=wp))
+         end do
+         if (cond_inhomo) then
+            do ilay = 1, LM - 1
+               rcorr(:, ilay) = exp(-abs(dzmid(colS:colE, ilay)) / real(rdl(colS:colE), kind=wp))
+            end do
+         end if
+      end if
+
+      ! Generate McICA random numbers for block (Philox PRNG)
+      do isub = 1, ncols_block
+         icol = colS + isub - 1
+         j = (icol - 1) / IM + 1
+         i = icol - (j - 1) * IM
+         seeds(1) = (jBeg + j - 1) * IM_World + (iBeg + i - 1)
+#ifdef HAVE_MKL
+         call rng%init(VSL_BRNG_PHILOX4X32X10, seeds)
+#else
+         call rng%init(seeds)
+#endif
+         urand(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+         if (gen_mro) then
+            urand_aux(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+            if (cond_inhomo) then
+               urand_cond(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+               urand_cond_aux(:, :, isub) = reshape(rng%get_random(ngpt * LM), [ngpt, LM])
+            end if
+         end if
+         call rng%end()
+      end do
+
+      ! cloud sampling to gpoints
+      select case (cloud_overlap_type)
+      case ("MAX_RAN_OVERLAP")
+         error_msg = sampled_mask_max_ran(urand(:, :, 1:ncols_block), cf_wp(colS:colE, :), cld_mask)
+         TEST_(error_msg)
+      case ("EXP_RAN_OVERLAP")
+         status = 1
+         TEST_('EXP_RAN_OVERLAP not implemented yet')
+      case ("GEN_MAX_RAN_OVERLAP")
+         error_msg = sampled_urand_gen_max_ran(alpha, &
+              urand(:, :, 1:ncols_block), urand_aux(:, :, 1:ncols_block))
+         TEST_(error_msg)
+         if (cond_inhomo) then
+            error_msg = sampled_urand_gen_max_ran(rcorr, &
+                 urand_cond(:, :, 1:ncols_block), urand_cond_aux(:, :, 1:ncols_block))
+            TEST_(error_msg)
+         end if
+         do isub = 1, ncols_block
+            icol = colS + isub - 1
+            do ilay = 1, LM
+               cld_frac = cf_wp(icol, ilay)
+               if (cld_frac <= 0._wp) then
+                  cld_mask(isub, ilay, :) = .false.
+               else
+                  cld_mask(isub, ilay, :) = urand(:, ilay, isub) < cld_frac
+                  if (cond_inhomo) then
+                     if (cld_frac > 0.99_wp) then
+                        sigma_qcw = 0.5
+                     elseif (cld_frac > 0.9_wp) then
+                        sigma_qcw = 0.71
+                     else
+                        sigma_qcw = 1.0
+                     end if
+                     do igpt = 1, ngpt
+                        if (cld_mask(isub, ilay, igpt)) then
+                           zcw(isub, ilay, igpt) = zcw_lookup(real(urand_cond(igpt, ilay, isub)), sigma_qcw)
+                        end if
+                     end do
+                  end if
+               end if
+            end do
+         end do
+      case default
+         status = 1
+         TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
+      end select
+
+      ! draw McICA optical property samples (band->gpt)
+      TEST_(draw_samples(cld_mask, cloud_props_bnd, cloud_props_gpt))
+
+      ! Apply sub-gridscale condensate scaling
+      if (gen_mro) then
+         if (cond_inhomo) then
+              where (cld_mask) cloud_props_gpt%tau = cloud_props_gpt%tau * zcw
+         end if
+      end if
+
+      !call MAPL_TimerOff(MAPL,"---RRTMGP_MCICA",rc=status)
+      !VERIFY_(status)
+
+      RETURN_(ESMF_SUCCESS)
+#undef TEST_
+   end subroutine compute_lw_cloud_optics_mcica
+
+   ! compute_lw_gas_optics: compute LW gas optical properties and Planck
+   !   source functions for one block of columns.
+   subroutine compute_lw_gas_optics(colS, colE, &
+        k_dist, p_lay, p_lev, t_lay, t_lev, t_sfc, &
+        gas_concs_block, clean_optical_props, sources, &
+        MAPL, rc)
+
+      use mo_rte_kind, only: wp
+      use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
+      use mo_gas_concentrations, only: ty_gas_concs
+      use mo_optical_props, only: ty_optical_props_arry
+      use mo_source_functions, only: ty_source_func_lw
+
+#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(status); end if
+
+      integer, intent(in) :: colS, colE
+      type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
+      real(kind=wp), dimension(:, :), intent(in) :: p_lay, p_lev, t_lay, t_lev
+      real(kind=wp), dimension(:), intent(in) :: t_sfc
+      type(ty_gas_concs), intent(inout) :: gas_concs_block
+      class(ty_optical_props_arry), intent(inout) :: clean_optical_props
+      type(ty_source_func_lw), intent(inout) :: sources
+      type(MAPL_MetaComp), intent(inout) :: MAPL
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      character(len=256) :: error_msg
+      character(len=ESMF_MAXSTR) :: IAm
+
+      IAm = "compute_lw_gas_optics"
+
+      !call MAPL_TimerOn(MAPL,"---RRTMGP_GAS_OPTICS",rc=status)
+      !VERIFY_(status)
+
+      ! get gas optical properties and Planck source functions
+      error_msg = k_dist%gas_optics( &
+           p_lay(colS:colE, :), p_lev(colS:colE, :), t_lay(colS:colE, :), &
+           t_sfc(colS:colE), gas_concs_block, clean_optical_props, sources, &
+           tlev = t_lev(colS:colE,:))
+      TEST_(error_msg)
+
+      !call MAPL_TimerOff(MAPL,"---RRTMGP_GAS_OPTICS",rc=status)
+      !VERIFY_(status)
+
+      RETURN_(ESMF_SUCCESS)
+#undef TEST_
+   end subroutine compute_lw_gas_optics
+
+   ! compute_lw_rte: solve LW radiative transfer for one block of columns.
+   !   Handles clean clear-sky, clean all-sky, dirty clear-sky, and dirty
+   !   all-sky cases as controlled by the calc_* / export_* flags.
+   subroutine compute_lw_rte( &
+        colS, colE, ncols_block, LM, nmom, &
+        top_at_1, u2s, nga, &
+        calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+        allnoa_to_allsky_band_xfer_needed, any_band_output, &
+        export_clrsky, export_allsky, &
+        implements_aerosol_optics, need_dirty_optical_props, &
+        clean_optical_props, sources, emis_sfc, &
+        dirty_optical_props, aer_props, cloud_props_gpt, &
+        flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
+        flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa, &
+        bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
+        flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
+        flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
+        bnd_flux_up_allsky, bnd_dfupdts_allsky, &
+        MAPL, rc)
+
+      use mo_rte_kind, only: wp
+      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_1scl
+      use mo_optical_props, only: ty_optical_props_2str, ty_optical_props_nstr
+      use mo_source_functions, only: ty_source_func_lw
+      use mo_fluxes, only: ty_fluxes_broadband
+      use mo_fluxes_byband, only: ty_fluxes_byband
+      use mo_rte_lw, only: rte_lw
+
+#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(status); end if
+
+      integer, intent(in) :: colS, colE, ncols_block, LM, nmom
+      logical, intent(in) :: top_at_1, u2s
+      integer, intent(in) :: nga
+      logical, intent(in) :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
+      logical, intent(in) :: allnoa_to_allsky_band_xfer_needed, any_band_output
+      logical, intent(in) :: export_clrsky, export_allsky
+      logical, intent(in) :: implements_aerosol_optics, need_dirty_optical_props
+      class(ty_optical_props_arry), intent(inout) :: clean_optical_props
+      type(ty_source_func_lw), intent(inout) :: sources
+      real(kind=wp), dimension(:, :), intent(in) :: emis_sfc
+      class(ty_optical_props_arry), intent(inout), optional :: dirty_optical_props
+      class(ty_optical_props_arry), intent(inout), optional :: aer_props
+      class(ty_optical_props_arry), intent(inout), optional :: cloud_props_gpt
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_allsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_dfupdts_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_dfupdts_allsky
+      type(MAPL_MetaComp), intent(inout) :: MAPL
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      character(len=256) :: error_msg
+      type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
+      type(ty_fluxes_byband) :: fluxes_byband_allnoa, fluxes_byband_allsky
+      character(len=ESMF_MAXSTR) :: IAm
+
+      IAm = "compute_lw_rte"
+
+      !call MAPL_TimerOn(MAPL,"---RRTMGP_RT",rc=status)
+      !VERIFY_(status)
+
+      ! clean clear-sky case
+      if (calc_clrnoa) then
+         fluxes_clrnoa%flux_up => flux_up_clrnoa(colS:colE, :)
+         fluxes_clrnoa%flux_dn => flux_dn_clrnoa(colS:colE, :)
+         fluxes_clrnoa%flux_up_Jac => dfupdts_clrnoa(colS:colE, :)
+         error_msg = rte_lw( &
+              clean_optical_props, &
+              top_at_1, sources, emis_sfc(:, colS:colE), &
+              fluxes_clrnoa, n_gauss_angles=nga, use_2stream=u2s)
+         TEST_(error_msg)
+      end if
+
+      if (present(dirty_optical_props)) then
+         ! make copy of clrnoa optical properties as the
+         !   starting point for later dirty calculations
+         select type (dirty_optical_props)
+         class is (ty_optical_props_1scl)
+            TEST_(dirty_optical_props%alloc_1scl(ncols_block, LM, clean_optical_props))
+         class is (ty_optical_props_2str)
+            TEST_(dirty_optical_props%alloc_2str(ncols_block, LM, clean_optical_props))
+            select type (clean_optical_props)
+            class is (ty_optical_props_2str)
+               dirty_optical_props%ssa = clean_optical_props%ssa
+               dirty_optical_props%g = clean_optical_props%g
+            end select
+         class is (ty_optical_props_nstr)
+            TEST_(dirty_optical_props%alloc_nstr(nmom, ncols_block, LM, clean_optical_props))
+            select type (clean_optical_props)
+            class is (ty_optical_props_nstr)
+               dirty_optical_props%ssa = clean_optical_props%ssa
+               dirty_optical_props%p = clean_optical_props%p
+            end select
+         end select
+         ! all streams have tau
+         dirty_optical_props%tau = clean_optical_props%tau
+      end if
+
+      ! clean all-sky case
+      if (calc_allnoa) then
+
+         ! add in cloud optical properties
+         TEST_(cloud_props_gpt%increment(clean_optical_props))
+
+         ! clean all-sky RT
+         if (allnoa_to_allsky_band_xfer_needed) then
+            fluxes_byband_allnoa%flux_up => flux_up_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%flux_dn => flux_dn_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE, :)
+            fluxes_byband_allnoa%bnd_flux_up => bnd_flux_up_allnoa(colS:colE, :, :)
+            fluxes_byband_allnoa%bnd_flux_up_Jac => bnd_dfupdts_allnoa(colS:colE, :, :)
+            error_msg = rte_lw( &
+                 clean_optical_props, &
+                 top_at_1, sources, emis_sfc(:, colS:colE), &
+                 fluxes_byband_allnoa, n_gauss_angles=nga, use_2stream=u2s)
+            TEST_(error_msg)
+         else
+            ! only broadband required
+            fluxes_allnoa%flux_up => flux_up_allnoa(colS:colE, :)
+            fluxes_allnoa%flux_dn => flux_dn_allnoa(colS:colE, :)
+            fluxes_allnoa%flux_up_Jac => dfupdts_allnoa(colS:colE, :)
+            error_msg = rte_lw( &
+                 clean_optical_props, &
+                 top_at_1, sources, emis_sfc(:, colS:colE), &
+                 fluxes_allnoa, n_gauss_angles=nga, use_2stream=u2s)
+            TEST_(error_msg)
+         end if
+      end if
+
+      if (export_clrsky .or. export_allsky) then
+         if (implements_aerosol_optics) then
+
+            ! dirty flux calculations required ...
+
+            ! "dirty_optical_props" is currently just a copy of the clrnoa optical_props
+            !   so must now add in aerosols to make it actually dirty
+            TEST_(aer_props%increment(dirty_optical_props))
+
+            ! dirty clear-sky RT
+            if (calc_clrsky) then
+               fluxes_clrsky%flux_up => flux_up_clrsky(colS:colE, :)
+               fluxes_clrsky%flux_dn => flux_dn_clrsky(colS:colE, :)
+               fluxes_clrsky%flux_up_Jac => dfupdts_clrsky(colS:colE, :)
+               error_msg = rte_lw( &
+                    dirty_optical_props, &
+                    top_at_1, sources, emis_sfc(:, colS:colE), &
+                    fluxes_clrsky, n_gauss_angles=nga, use_2stream=u2s)
+               TEST_(error_msg)
+            end if
+
+            ! dirty all-sky case
+            if (calc_allsky) then
+
+               ! add in cloud optical properties
+               TEST_(cloud_props_gpt%increment(dirty_optical_props))
+
+               ! dirty all-sky RT
+               ! (band output currently only available for all-sky case)
+               if (any_band_output) then
+                  fluxes_byband_allsky%flux_up => flux_up_allsky(colS:colE, :)
+                  fluxes_byband_allsky%flux_dn => flux_dn_allsky(colS:colE, :)
+                  fluxes_byband_allsky%flux_up_Jac => dfupdts_allsky(colS:colE, :)
+                  fluxes_byband_allsky%bnd_flux_up => bnd_flux_up_allsky(colS:colE, :, :)
+                  fluxes_byband_allsky%bnd_flux_up_Jac => bnd_dfupdts_allsky(colS:colE, :, :)
+                  error_msg = rte_lw( &
+                       dirty_optical_props, &
+                       top_at_1, sources, emis_sfc(:, colS:colE), &
+                       fluxes_byband_allsky, n_gauss_angles=nga, use_2stream=u2s)
+                  TEST_(error_msg)
+               else
+                  fluxes_allsky%flux_up => flux_up_allsky(colS:colE, :)
+                  fluxes_allsky%flux_dn => flux_dn_allsky(colS:colE, :)
+                  fluxes_allsky%flux_up_Jac => dfupdts_allsky(colS:colE, :)
+                  error_msg = rte_lw( &
+                       dirty_optical_props, &
+                       top_at_1, sources, emis_sfc(:, colS:colE), &
+                       fluxes_allsky, n_gauss_angles=nga, use_2stream=u2s)
+                  TEST_(error_msg)
+               end if
+            end if
+
+         else
+
+            ! there are no aerosols so we are done because the
+            !   dirty cases are the same as the clean ones
+            if (export_clrsky) then
+               flux_up_clrsky(colS:colE, :) = flux_up_clrnoa(colS:colE, :)
+               flux_dn_clrsky(colS:colE, :) = flux_dn_clrnoa(colS:colE, :)
+               dfupdts_clrsky(colS:colE, :) = dfupdts_clrnoa(colS:colE, :)
+            end if
+            if (export_allsky) then
+               flux_up_allsky(colS:colE, :) = flux_up_allnoa(colS:colE, :)
+               flux_dn_allsky(colS:colE, :) = flux_dn_allnoa(colS:colE, :)
+               dfupdts_allsky(colS:colE, :) = dfupdts_allnoa(colS:colE, :)
+               if (any_band_output) then
+                  bnd_flux_up_allsky(colS:colE, :, :) = bnd_flux_up_allnoa(colS:colE, :, :)
+                  bnd_dfupdts_allsky(colS:colE, :, :) = bnd_dfupdts_allnoa(colS:colE, :, :)
+               end if
+            end if
+
+         end if ! implements_aerosol_optics
+      end if ! export dirty clear-sky or all-sky
+
+      !call MAPL_TimerOff(MAPL,"---RRTMGP_RT",rc=status)
+      !VERIFY_(status)
+
+      RETURN_(ESMF_SUCCESS)
+#undef TEST_
+   end subroutine compute_lw_rte
+
+   ! PROCESS_RRTMGP_LW_BLOCK: process one block of columns through the
+   !   full LW RRTMGP pipeline (aerosol optics, cloud optics, gas optics,
+   !   RTE solve).  Intended to be called from a serial or OpenMP
+   !   parallel do loop over blocks.
+   subroutine PROCESS_RRTMGP_LW_BLOCK( &
+        b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga, &
+        IM, IM_World, iBeg, jBeg, &
+        top_at_1, u2s, &
+        seeds_time_key, seeds_ctr_key, &
+        cwp_fac, &
+        need_cloud_optical_props, need_dirty_optical_props, &
+        gen_mro, cond_inhomo, cloud_overlap_type, &
+        calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+        allnoa_to_allsky_band_xfer_needed, any_band_output, &
+        export_clrsky, export_allsky, implements_aerosol_optics, &
+        k_dist, cloud_optics, gas_concs, &
+        p_lay, p_lev, t_lay, t_lev, t_sfc, dp_wp, cf_wp, dzmid, emis_sfc, &
+        adl, rdl, &
+        CWC_3d, REFF_3d, &
+        TAUA_3d, SSAA_3d, ASYA_3d, &
+        flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa, &
+        flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa, &
+        bnd_flux_up_allnoa, bnd_dfupdts_allnoa, &
+        flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky, &
+        flux_up_allsky, flux_dn_allsky, dfupdts_allsky, &
+        bnd_flux_up_allsky, bnd_dfupdts_allsky, &
+        MAPL, rc)
+
+      use mo_rte_kind, only: wp
+      use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
+      use mo_gas_concentrations, only: ty_gas_concs
+      use mo_optical_props, only: ty_optical_props_2str
+      use mo_source_functions, only: ty_source_func_lw
+      use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
+
+#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(status); end if
+
+      integer, intent(in) :: b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga
+      integer, intent(in) :: IM, IM_World, iBeg, jBeg
+      logical, intent(in) :: top_at_1, u2s
+      integer, intent(in) :: seeds_time_key, seeds_ctr_key
+      real(kind=wp), intent(in) :: cwp_fac
+      logical, intent(in) :: need_cloud_optical_props, need_dirty_optical_props
+      logical, intent(in) :: gen_mro, cond_inhomo
+      character(len=*), intent(in) :: cloud_overlap_type
+      logical, intent(in) :: calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky
+      logical, intent(in) :: allnoa_to_allsky_band_xfer_needed, any_band_output
+      logical, intent(in) :: export_clrsky, export_allsky, implements_aerosol_optics
+      type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
+      type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
+      type(ty_gas_concs), intent(inout) :: gas_concs
+      real(kind=wp), dimension(:, :), intent(in) :: p_lay, p_lev, t_lay, t_lev
+      real(kind=wp), dimension(:), intent(in) :: t_sfc
+      real(kind=wp), dimension(:, :), intent(in) :: dp_wp, cf_wp, dzmid
+      real(kind=wp), dimension(:, :), intent(in) :: emis_sfc
+      real, dimension(:), intent(in), optional :: adl, rdl
+      real, dimension(:, :, :), pointer :: CWC_3d, REFF_3d
+      real, dimension(:, :, :), pointer :: TAUA_3d, SSAA_3d, ASYA_3d
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
+      type(MAPL_MetaComp), intent(inout) :: MAPL
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      integer :: ncols_block, colS, colE
+      character(len=ESMF_MAXSTR) :: IAm
+
+      ! local RRTMGP objects (LW always uses 2-stream)
+      type(ty_optical_props_2str) :: clean_optical_props
+      type(ty_optical_props_2str) :: dirty_optical_props
+      type(ty_optical_props_2str) :: aer_props
+      type(ty_optical_props_2str) :: cloud_props_bnd, cloud_props_gpt
+      type(ty_source_func_lw) :: sources
+      type(ty_gas_concs) :: gas_concs_block
+
+      ! per-block scratch arrays
+      real(kind=wp), dimension(:, :, :), allocatable :: urand, urand_aux, urand_cond, urand_cond_aux
+      real(kind=wp), dimension(:, :, :), allocatable :: zcw
+      real(kind=wp), dimension(:, :), allocatable :: alpha, rcorr
+      logical, dimension(:, :, :), allocatable :: cld_mask
+
+      IAm = "PROCESS_RRTMGP_LW_BLOCK"
+
+      ! compute column range for this block (final block may be partial)
+      ncols_block = min(rrtmgp_blockSize, ncol - (b - 1) * rrtmgp_blockSize)
+      colS = (b - 1) * rrtmgp_blockSize + 1
+      colE = colS + ncols_block - 1
+
+      ! spectral init + array allocation for gas optics and Planck sources
+      TEST_(clean_optical_props%init(k_dist))
+      TEST_(clean_optical_props%alloc_2str(ncols_block, LM))
+      TEST_(sources%init(k_dist))
+      TEST_(sources%alloc(ncols_block, LM))
+
+      ! subset gas concentrations for this block
+      TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
+
+      ! aerosol optics objects (always 2-stream for LW)
+      if (need_dirty_optical_props) then
+         TEST_(dirty_optical_props%init(k_dist))
+         TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
+         TEST_(aer_props%alloc_2str(ncols_block, LM))
+      end if
+
+      ! cloud optics objects and scratch arrays
+      if (need_cloud_optical_props) then
+         TEST_(cloud_props_bnd%init(k_dist%get_band_lims_wavenumber()))
+         TEST_(cloud_props_bnd%alloc_2str(ncols_block, LM))
+         TEST_(cloud_props_gpt%init(k_dist))
+         TEST_(cloud_props_gpt%alloc_2str(ncols_block, LM))
+         allocate(urand(ngpt, LM, ncols_block), _STAT)
+         allocate(cld_mask(ncols_block, LM, ngpt), _STAT)
+         if (gen_mro) then
+            allocate(urand_aux(ngpt, LM, ncols_block), _STAT)
+            allocate(alpha(ncols_block, LM - 1), _STAT)
+            if (cond_inhomo) then
+               allocate(urand_cond(ngpt, LM, ncols_block), _STAT)
+               allocate(urand_cond_aux(ngpt, LM, ncols_block), _STAT)
+               allocate(rcorr(ncols_block, LM - 1), _STAT)
+               allocate(zcw(ncols_block, LM, ngpt), _STAT)
+            end if
+         end if
+      end if
+
+      ! aerosol optical properties
+      if (need_dirty_optical_props) then
+         call compute_lw_aer_optics(colS, colE, TAUA_3d, SSAA_3d, ASYA_3d, aer_props, _RC)
+      end if
+
+      ! cloud optical properties (McICA sampling)
+      if (need_cloud_optical_props) then
+         call compute_lw_cloud_optics_mcica( &
+              colS, colE, ncols_block, LM, ngpt, &
+              gen_mro, cond_inhomo, cloud_overlap_type, IM, IM_World, iBeg, jBeg, &
+              seeds_time_key, seeds_ctr_key, &
+              CWC_3d, REFF_3d, dp_wp, cf_wp, dzmid, &
+              cwp_fac, cloud_optics, &
+              cloud_props_bnd, cloud_props_gpt, &
+              urand, &
+              urand_aux=urand_aux, urand_cond=urand_cond, urand_cond_aux=urand_cond_aux, &
+              alpha=alpha, rcorr=rcorr, zcw=zcw, &
+              adl=adl, rdl=rdl, &
+              cld_mask=cld_mask, &
+              MAPL=MAPL, _RC)
+      end if
+
+      ! gas optical properties and Planck source functions
+      call compute_lw_gas_optics(colS, colE, &
+           k_dist, p_lay, p_lev, t_lay, t_lev, t_sfc, &
+           gas_concs_block, clean_optical_props, sources, &
+           MAPL=MAPL, _RC)
+
+      ! radiative transfer solve (conditional on which optional objects are present)
+      if (need_dirty_optical_props .and. need_cloud_optical_props) then
+         call compute_lw_rte( &
+              colS, colE, ncols_block, LM, nmom, &
+              top_at_1, u2s, nga, &
+              calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+              allnoa_to_allsky_band_xfer_needed, any_band_output, &
+              export_clrsky, export_allsky, &
+              implements_aerosol_optics, need_dirty_optical_props, &
+              clean_optical_props, sources, emis_sfc, &
+              dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
+              cloud_props_gpt=cloud_props_gpt, &
+              flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
+              flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
+              bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
+              flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
+              flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
+              bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
+              MAPL=MAPL, rc=status)
+      else if (need_dirty_optical_props) then
+         call compute_lw_rte( &
+              colS, colE, ncols_block, LM, nmom, &
+              top_at_1, u2s, nga, &
+              calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+              allnoa_to_allsky_band_xfer_needed, any_band_output, &
+              export_clrsky, export_allsky, &
+              implements_aerosol_optics, need_dirty_optical_props, &
+              clean_optical_props, sources, emis_sfc, &
+              dirty_optical_props=dirty_optical_props, aer_props=aer_props, &
+              flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
+              flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
+              bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
+              flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
+              flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
+              bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
+              MAPL=MAPL, rc=status)
+      else if (need_cloud_optical_props) then
+         call compute_lw_rte( &
+              colS, colE, ncols_block, LM, nmom, &
+              top_at_1, u2s, nga, &
+              calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+              allnoa_to_allsky_band_xfer_needed, any_band_output, &
+              export_clrsky, export_allsky, &
+              implements_aerosol_optics, need_dirty_optical_props, &
+              clean_optical_props, sources, emis_sfc, &
+              cloud_props_gpt=cloud_props_gpt, &
+              flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
+              flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
+              bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
+              flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
+              flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
+              bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
+              MAPL=MAPL, rc=status)
+      else
+         call compute_lw_rte( &
+              colS, colE, ncols_block, LM, nmom, &
+              top_at_1, u2s, nga, &
+              calc_clrnoa, calc_allnoa, calc_clrsky, calc_allsky, &
+              allnoa_to_allsky_band_xfer_needed, any_band_output, &
+              export_clrsky, export_allsky, &
+              implements_aerosol_optics, need_dirty_optical_props, &
+              clean_optical_props, sources, emis_sfc, &
+              flux_up_clrnoa=flux_up_clrnoa, flux_dn_clrnoa=flux_dn_clrnoa, dfupdts_clrnoa=dfupdts_clrnoa, &
+              flux_up_allnoa=flux_up_allnoa, flux_dn_allnoa=flux_dn_allnoa, dfupdts_allnoa=dfupdts_allnoa, &
+              bnd_flux_up_allnoa=bnd_flux_up_allnoa, bnd_dfupdts_allnoa=bnd_dfupdts_allnoa, &
+              flux_up_clrsky=flux_up_clrsky, flux_dn_clrsky=flux_dn_clrsky, dfupdts_clrsky=dfupdts_clrsky, &
+              flux_up_allsky=flux_up_allsky, flux_dn_allsky=flux_dn_allsky, dfupdts_allsky=dfupdts_allsky, &
+              bnd_flux_up_allsky=bnd_flux_up_allsky, bnd_dfupdts_allsky=bnd_dfupdts_allsky, &
+              MAPL=MAPL, rc=status)
+      end if
+      VERIFY_(status)
+
+      ! finalize/deallocate per-block RRTMGP objects
+      call sources%finalize()
+      call clean_optical_props%finalize()
+      if (need_dirty_optical_props) then
+         call dirty_optical_props%finalize()
+         call aer_props%finalize()
+      end if
+      if (need_cloud_optical_props) then
+         call cloud_props_bnd%finalize()
+         call cloud_props_gpt%finalize()
+         deallocate(urand, cld_mask, _STAT)
+         if (gen_mro) then
+            deallocate(urand_aux, alpha, _STAT)
+            if (cond_inhomo) then
+               deallocate(urand_cond, urand_cond_aux, rcorr, zcw, _STAT)
+            end if
+         end if
+      end if
+
+      RETURN_(ESMF_SUCCESS)
+#undef TEST_
+   end subroutine PROCESS_RRTMGP_LW_BLOCK
+
 end module GEOS_IrradGridCompMod
+
