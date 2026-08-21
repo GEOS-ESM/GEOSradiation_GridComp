@@ -8,6 +8,10 @@ NUM_BANDS: 30
 IRRAD_DT: 0
 
 mapl:
+  setServices:
+    sharedObj: libGEOSradiation_GridComp
+    userRoutine: irrad_setservices_
+
   misc:
     activate_all_exports: true
     restart:
