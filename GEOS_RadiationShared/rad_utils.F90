@@ -181,13 +181,11 @@ contains
   ! Chou-Suarez is the default if nothing else asked for in Resource file.
   ! ----------------------------------------------------------------------
 
-  subroutine choose_solar_scheme (gc, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
+  subroutine choose_solar_scheme (hconfig, USE_RRTMGP, USE_RRTMG, USE_CHOU, rc)
 
-    type(ESMF_GridComp), intent(inout) :: gc
+    type(ESMF_HConfig), intent(in) :: hconfig
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
+    integer, optional, intent(out) :: rc ! return code
 
     real :: RFLAG
     integer :: STATUS
@@ -195,24 +193,22 @@ contains
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
-    call MAPL_GridCompGetResource(gc, "USE_RRTMGP_SORAD", RFLAG, default=0., _RC)
+    call MAPL_HConfigGet(hconfig, label="USE_RRTMGP_SORAD", val=RFLAG, default=0., _RC)
     USE_RRTMGP = RFLAG /= 0.
     if (.not. USE_RRTMGP) then
-      call MAPL_GridCompGetResource(gc, "USE_RRTMG_SORAD", RFLAG, default=0., _RC)
+      call MAPL_HConfigGet(hconfig, label="USE_RRTMG_SORAD", val=RFLAG, default=0., _RC)
       USE_RRTMG = RFLAG /= 0.
-      USE_CHOU  = .not.USE_RRTMG
+      USE_CHOU  = .not. USE_RRTMG
     end if
 
     _RETURN(_SUCCESS)
   end subroutine choose_solar_scheme
 
-  subroutine choose_irrad_scheme (gc, &
-    USE_RRTMGP, USE_RRTMG, USE_CHOU, &
-    RC)
+  subroutine choose_irrad_scheme (hconfig, USE_RRTMGP, USE_RRTMG, USE_CHOU, rc)
 
-    type(ESMF_GridComp), intent(inout) :: gc
+    type(ESMF_HConfig), intent(in) :: hconfig
     logical, intent(out) :: USE_RRTMGP, USE_RRTMG, USE_CHOU
-    integer, optional, intent(out) :: RC  ! return code
+    integer, optional, intent(out) :: rc ! return code
 
     real :: RFLAG
     integer :: STATUS
@@ -220,10 +216,10 @@ contains
     USE_RRTMGP = .false.
     USE_RRTMG  = .false.
     USE_CHOU   = .false.
-    call MAPL_GridCompGetResource(gc, "USE_RRTMGP_IRRAD", RFLAG, default=0., _RC)
+    call MAPL_HConfigGet(hconfig, label="USE_RRTMGP_IRRAD", val=RFLAG, default=0., _RC)
     USE_RRTMGP = RFLAG /= 0.
     if (.not. USE_RRTMGP) then
-      call MAPL_GridCompGetResource(gc, "USE_RRTMG_IRRAD", RFLAG, default=0., _RC)
+      call MAPL_HConfigGet(hconfig, label="USE_RRTMG_IRRAD", val=RFLAG, default=0., _RC)
       USE_RRTMG = RFLAG /= 0.
       USE_CHOU  = .not.USE_RRTMG
     end if

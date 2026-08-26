@@ -119,17 +119,17 @@ module GEOS_IrradGridCompMod
         .false., & !  02
         .false., & !  03
         .false., & !  04
-        .true., &  !  05   W. Putman (CO2 Longwave IR, GOES Band 16)
-        .true., &  !  06   A. Collow (Longwave IR, GOES Band 14)
-        .true., &  !  07   W. Putman (Ozone IR, GOES Band 12)
-        .true., &  !  08   W. Putman (needed for lightning param)
-        .true., &  !  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
-        .true., &  !  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
-        .true., &  !  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
+        .true.,  & !  05   W. Putman (CO2 Longwave IR, GOES Band 16)
+        .true.,  & !  06   A. Collow (Longwave IR, GOES Band 14)
+        .true.,  & !  07   W. Putman (Ozone IR, GOES Band 12)
+        .true.,  & !  08   W. Putman (needed for lightning param)
+        .true.,  & !  09   W. Putman (Lower-level Water Vapor, GOES Band 10)
+        .true.,  & !  10   W. Putman (Mid-level Water Vapor, GOES Band 9)
+        .true.,  & !  11   W. Putman (Upper-level Water Vapor, GOES Band 8)
         .false., & !  12
         .false., & !  13
         .false., & !  14
-        .true., &  !  15   W. Putman (Shortwave IR, GOES Band 7)
+        .true.,  & !  15   W. Putman (Shortwave IR, GOES Band 7)
         .false. ]  !  16
    ! PMN: TODO, make LW method like SW so it doesnt waste
    ! intermediate variable space on unused bands?
@@ -156,6 +156,10 @@ module GEOS_IrradGridCompMod
    ! consulted wherever CO2 is handled in this module.
    logical :: USE_CO2_3D
 
+   ! Which radiation scheme to use; set once in SetServices and shared by Run.
+   logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU
+   logical :: USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD
+
    real, parameter :: MAPL2_UNDEF = 1.0e15
 contains
 
@@ -175,7 +179,7 @@ contains
 
       integer :: status
       type(ESMF_HConfig) :: hconfig
-      logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU, USE_CO2_3D
+      logical :: USE_CO2_3D
       real :: CO2_RESOURCE
 
       ! for RATS-specific radiation diagnostics
@@ -184,21 +188,20 @@ contains
       character(len=:), allocatable :: err_msg, stdname
       character(len=ESMF_MAXSTR), allocatable :: nameRATS(:)
       type(MAPL_UngriddedDim) :: ungrd_n
+      type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
       ! Attach the RRTMGP internal state to the gc as a named private state
       _SET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE)
 
-      ! Which radiation scheme to use
-      ! TODO: determine from configuration; default to RRTMGP for now
-      USE_RRTMGP = .true.
-      USE_RRTMG = .false.
-      USE_CHOU = .false.
+      call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
+
+      ! Which radiation scheme to use (shared globally by Run's LW_Driver/Update_Flx)
+      call choose_irrad_scheme(hconfig, USE_RRTMGP, USE_RRTMG, USE_CHOU, _RC)
+      call choose_solar_scheme(hconfig, USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD, _RC)
 
       ! If CO2 is provided as a RAT, decide whether a 3-D CO2 import is
       ! needed. This flag drives the COND on the CO2 entry in
       ! Irrad_StateSpecs.rc.
-      call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
-
       call MAPL_GridCompGetResource(gc, "CO2", CO2_RESOURCE, default=-1.0, _RC)
       USE_CO2_3D = (CO2_RESOURCE == -2.0)
       ! If using 3-D CO2, validate that a CO2_PROVIDER was also given
@@ -237,8 +240,10 @@ contains
       nameRATS = ESMF_HConfigAsStringSeq(hconfig, &
            keyString='RATS_DIAGNOSTICS', &
            stringLen=ESMF_MAXSTR, _RC)
-      n = 0
-      if (allocated(nameRATS)) n = size(nameRATS)
+      n = 0; if (allocated(nameRATS)) n = size(nameRATS)
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      rrtmgp_state%nameRATS = nameRATS
+      rrtmgp_state%nRATS = n
 
       ! No error thrown. Just return if nothing learnable from config.
       _RETURN_UNLESS(n > 0)
@@ -395,9 +400,6 @@ contains
       ! the full LW transfer calculation (LW\_Driver), with ring interval
       ! set by the IRRAD\_DT configuration resource (seconds). Run() later
       ! retrieves this alarm from the clock by name via ESMF\_ClockGetAlarm.
-      ! Also parses the RATS_DIAGNOSTICS toggle list once here and stores it
-      ! in the private state, instead of the old lazy `first`-call-to-Run()
-      ! hack from back when this component had no Initialize() method.
       !EOP
 
       integer :: status
@@ -405,8 +407,6 @@ contains
       real :: run_dt
       type(ESMF_TimeInterval) :: lw_alarm_interval
       type(ESMF_Alarm) :: lw_alarm
-      type(ESMF_HConfig) :: hconfig
-      type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
@@ -416,14 +416,6 @@ contains
            clock=clock, &
            ringInterval=lw_alarm_interval, &
            sticky=.true., _RC)
-
-      call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
-      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
-      rrtmgp_state%nameRATS = ESMF_HConfigAsStringSeq(hconfig, &
-           keyString='RATS_DIAGNOSTICS', &
-           stringLen=ESMF_MAXSTR, _RC)
-      rrtmgp_state%nRATS = 0 ! Default, no RAT diags
-      if (allocated(rrtmgp_state%nameRATS)) rrtmgp_state%nRATS = size(rrtmgp_state%nameRATS)
 
       ! Borrowed from GEOSradiation_GridCompMod::Initialize(), for testing purposes only
       ! TODO: pchakrab - eventually remove this
@@ -460,7 +452,6 @@ contains
       integer :: status
 
       ! Local derived type aliases
-      ! type(MAPL_MetaComp), pointer  :: MAPL
       type(ESMF_Grid) :: esmfgrid
       type(ESMF_State) :: internal
       type(ESMF_Alarm) :: lw_alarm
@@ -488,12 +479,6 @@ contains
       real, pointer, contiguous, dimension(:) :: p1d
 
       real, external :: getco2
-
-      ! Concerning what radiation to use (global to LW_driver and Update_Flx)
-      logical :: USE_RRTMGP, USE_RRTMGP_SORAD
-      logical :: USE_RRTMG,  USE_RRTMG_SORAD
-      logical :: USE_CHOU,   USE_CHOU_SORAD
-
       integer :: NB_IRRAD  ! Number of bands in IRRAD calcs
       integer :: TOTAL_RAD_BANDS, NUM_BANDS
 
@@ -529,10 +514,11 @@ contains
       ! the full transfer calculation, LW_Driver, is run below.
       call ESMF_ClockGetAlarm(clock, alarmname="irrad_lw_alarm", alarm=lw_alarm, _RC)
 
-      ! Decide which radiation to use:
-      ! These USE_ flags are shared globally by contained LW_Driver() and Update_Flx()
-      call choose_irrad_scheme(gc, USE_RRTMGP, USE_RRTMG, USE_CHOU, _RC)
-      call choose_solar_scheme(gc, USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD, _RC)
+      ! nameRATS/nRATS are parsed once in SetServices() and read from the private state
+      ! here; shared globally by contained LW_Driver() and Update_Flx() regardless of scheme
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      nRATS = rrtmgp_state%nRATS
+      nameRATS = rrtmgp_state%nameRATS
 
       ! Set number of IRRAD bands
       if (USE_RRTMGP) then
@@ -1475,7 +1461,6 @@ contains
                   ! condensate inhomogeneous?
                   ! see RadiationGC initialization
                   cond_inhomo = condensate_inhomogeneous()
-                  _HERE, "cond_inhomo = ", cond_inhomo
                   ! Compute decorrelation length scales [m]
                   allocate(adl(ncol), _STAT)
                   call correlation_length_cloud_fraction(ncol, ncol, DOY, reshape(lats,[ncol]), adl)
@@ -1732,10 +1717,6 @@ contains
             ! -- ideally, we could query the exports to find if any actually -need- computing
             !    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
             !    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
-            ! nameRATS/nRATS are parsed once in Initialize() and read from the private state
-            _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
-            nRATS = rrtmgp_state%nRATS
-            nameRATS = rrtmgp_state%nameRATS
             if (nRATS /= 0) then ! if the label was found...
                allocate(TMP_R(IM * JM, LM), _STAT)
             end if
@@ -2898,7 +2879,7 @@ contains
         rc)
 
       use mo_rte_kind, only: wp
-      use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
+      use mo_optical_props, only: ty_optical_props_arry
       use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
       use mo_cloud_sampling, only: draw_samples, sampled_mask_max_ran, &
            sampled_urand_gen_max_ran
@@ -3136,12 +3117,22 @@ contains
       class(ty_optical_props_arry), intent(inout), optional :: dirty_optical_props
       class(ty_optical_props_arry), intent(inout), optional :: aer_props
       class(ty_optical_props_arry), intent(inout), optional :: cloud_props_gpt
-      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa, flux_dn_clrnoa, dfupdts_clrnoa
-      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa, flux_dn_allnoa, dfupdts_allnoa
-      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky, flux_dn_clrsky, dfupdts_clrsky
-      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky, flux_dn_allsky, dfupdts_allsky
-      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa, bnd_dfupdts_allnoa
-      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_clrnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_allnoa
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_clrsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_up_allsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: flux_dn_allsky
+      real(kind=wp), dimension(:, :), intent(inout), target, optional :: dfupdts_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_dfupdts_allnoa
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky
+      real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_dfupdts_allsky
       integer, optional, intent(out) :: rc
 
       integer :: status
