@@ -3,9 +3,9 @@
 module GEOS_IrradGridCompMod
 
    !BOP
-   ! !MODULE: GEOS_Irrad -- Computes longwave radiative transfer through a cloudy atmosphere
+   !MODULE: GEOS_Irrad -- Computes longwave radiative transfer through a cloudy atmosphere
 
-   ! !DESCRIPTION:
+   !DESCRIPTION:
    !
    !   {\tt Irrad} is a light-weight gridded component to compute longwave
    ! radiative fluxes. It operates on the ESMF grid that appears in the
@@ -54,10 +54,8 @@ module GEOS_IrradGridCompMod
    !    and so a means is provided, through the logical attribute \texttt{CALL\_LAST} in
    !    configuration, of telling the component how it is being used. The
    !    default is \texttt{CALL\_LAST = "TRUE"}.
-   !
-   !
-   ! !USES:
 
+   !USES:
    use ESMF
    use MAPL
    use GEOS_UtilsMod
@@ -67,8 +65,7 @@ module GEOS_IrradGridCompMod
    use rrtmg_lw_init, only: rrtmg_lw_ini
    use parrrtm, only: ngptlw, nbndlw
    use rrlw_wvn, only: wavenum1, wavenum2
-   use rad_utils, only: Tbr_from_band_flux, &
-        choose_solar_scheme, choose_irrad_scheme
+   use rad_utils, only: Tbr_from_band_flux, choose_solar_scheme, choose_irrad_scheme
 
    ! for RRTMGP
    use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -78,7 +75,7 @@ module GEOS_IrradGridCompMod
    implicit none
    private
 
-   ! !PUBLIC MEMBER FUNCTIONS:
+   !PUBLIC MEMBER FUNCTIONS:
 
    public SetServices
 
@@ -161,16 +158,16 @@ module GEOS_IrradGridCompMod
 contains
 
    !BOP
-   ! !IROUTINE: SetServices -- Sets ESMF services for this component
+   !IROUTINE: SetServices -- Sets ESMF services for this component
 
-   ! !INTERFACE:
+   !INTERFACE:
    subroutine SetServices ( GC, RC )
 
-      ! !ARGUMENTS:
+      !ARGUMENTS:
       type(ESMF_GridComp), intent(INOUT) :: GC  ! gridded component
       integer, optional                  :: RC  ! return code
 
-      ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
+      !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
       !                the Initialize and Finalize services, as well as allocating
       !   our instance of a generic state and putting it in the
       !   gridded component (GC). Here we only need to set the run method and
@@ -195,10 +192,6 @@ contains
 
       type (ty_RRTMGP_state), pointer :: rrtmgp_state
       type (ty_RRTMGP_wrap)           :: wrap
-
-      ! for OLRBbbRG, TBRBbbRG
-      integer :: ibnd
-      character*2 :: bb
 
       ! <<>> MSL
       integer      :: i,n
@@ -237,221 +230,9 @@ contains
 
       !BOS
 
-      !  !IMPORT STATE:
+      !IMPORT STATE:
 
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'PLE',                               &
-           LONG_NAME          = 'air_pressure',                      &
-           UNITS              = 'Pa',                                &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationEdge,                  &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'T',                                 &
-           LONG_NAME          = 'air_temperature',                   &
-           UNITS              = 'K',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QV',                                &
-           LONG_NAME          = 'specific_humidity',                 &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QL',                                &
-           LONG_NAME          = 'mass_fraction_of_cloud_liquid_water_in_air', &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QI',                                &
-           LONG_NAME          = 'mass_fraction_of_cloud_ice_in_air', &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QR',                                &
-           LONG_NAME          = 'mass_fraction_of_rain_water_in_air',&
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QS',                                &
-           LONG_NAME          = 'mass_fraction_of_snow_in_air',      &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'QG',                                &
-           LONG_NAME          = 'mass_fraction_of_graupel_in_air',   &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'RL',                                &
-           LONG_NAME          = 'effective_radius_of_cloud_liquid_water_particles',      &
-           UNITS              = 'm',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'RI',                                &
-           LONG_NAME          = 'effective_radius_of_cloud_ice_particles',   &
-           UNITS              = 'm',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'RR',                                &
-           LONG_NAME          = 'effective_radius_of_rain_particles',&
-           UNITS              = 'm',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'RS',                                &
-           LONG_NAME          = 'effective_radius_of_snow_particles',&
-           UNITS              = 'm',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'RG',                                &
-           LONG_NAME          = 'effective_radius_of_graupel_particles',&
-           UNITS              = 'm',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'O3',                                &
-           LONG_NAME          = 'ozone_mass_mixing_ratio',           &
-           UNITS              = 'kg kg-1',                           &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'CH4',                               &
-           LONG_NAME          = 'methane_concentration',             &
-           UNITS              = 'pppv',                              &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'N2O',                               &
-           LONG_NAME          = 'nitrous_oxide_concentration',       &
-           UNITS              = 'pppv',                              &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'CFC11',                             &
-           LONG_NAME          = 'CFC11_concentration',               &
-           UNITS              = 'pppv',                              &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'CFC12',                             &
-           LONG_NAME          = 'CFC12_concentration',               &
-           UNITS              = 'pppv',                              &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'HCFC22',                            &
-           LONG_NAME          = 'HCFC22_concentration',              &
-           UNITS              = 'pppv',                              &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'FCLD',                              &
-           LONG_NAME          = 'cloud_area_fraction_in_atmosphere_layer', &
-           UNITS              = '1',                                 &
-           DIMS               = MAPL_DimsHorzVert,                   &
-           VLOCATION          = MAPL_VLocationCenter,                &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'TS',                                &
-           LONG_NAME          = 'surface_skin_temperature',          &
-           UNITS              = 'K',                                 &
-           DIMS               = MAPL_DimsHorzOnly,                   &
-           VLOCATION          = MAPL_VLocationNone,                  &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'EMIS',                              &
-           LONG_NAME          = 'surface_emissivity',                &
-           UNITS              = '1',                                 &
-           DIMS               = MAPL_DimsHorzOnly,                   &
-           VLOCATION          = MAPL_VLocationNone,                  &
-           AVERAGING_INTERVAL = ACCUMINT,                            &
-           REFRESH_INTERVAL   = MY_STEP,                      _RC )
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'PREF',                              &
-           LONG_NAME          = 'reference_air_pressure',            &
-           UNITS              = 'Pa',                                &
-           DIMS               = MAPL_DimsVertOnly,                   &
-           VLOCATION          = MAPL_VLocationEdge,           _RC )
-
-      ! Instantaneous TS is used only for updating the IR fluxes due to TS change
-
-      call MAPL_AddImportSpec(GC,                                  &
-           SHORT_NAME         = 'TSINST',                            &
-           LONG_NAME          = 'surface_skin_temperature',          &
-           UNITS              = 'K',                                 &
-           DIMS               = MAPL_DimsHorzOnly,                   &
-           VLOCATION          = MAPL_VLocationNone,           _RC )
+#include "Irrad_Import___.h"
 
       call MAPL_AddImportSpec(GC,                                   &
            LONG_NAME  = 'aerosols',                                   &
@@ -490,479 +271,17 @@ contains
               _RC)
       endif
 
-      !  !EXPORT STATE:
+      !EXPORT STATE:
 
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLX',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air',         &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLXA',                                      &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLXD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air',             &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLXAD',                                     &
-           LONG_NAME  = 'downward_longwave_flux_in_air_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLXU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air',               &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLXAU',                                     &
-           LONG_NAME  = 'upward_longwave_flux_in_air_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLC',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_assuming_clear_sky', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLCD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air_assuming_clear_sky', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLCU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air_assuming_clear_sky', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLA',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLAD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLAU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air_assuming_clear_sky_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'SFCEM',                                     &
-           LONG_NAME  = 'longwave_flux_emitted_from_surface',        &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'SFCEM0',                                    &
-           LONG_NAME  = 'longwave_flux_emitted_from_surface_at_reference_time',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LWS0',                                      &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation_at_reference_time',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'DSFDTS',                                    &
-           LONG_NAME  = 'sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature', &
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'DSFDTS0',                                   &
-           LONG_NAME  = 'sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature_at_reference_time', &
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'TSREFF',                                    &
-           LONG_NAME  = 'surface_temperature',                       &
-           UNITS      = 'K',                                         &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'OLR',                                       &
-           LONG_NAME  = 'upwelling_longwave_flux_at_toa',            &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'OLRA',                                      &
-           LONG_NAME  = 'upwelling_longwave_flux_at_toa_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'OLC',                                       &
-           LONG_NAME  = 'upwelling_longwave_flux_at_toa_assuming_clear_sky',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'OLCC5',                                     &
-           LONG_NAME  = 'upwelling_longwave_flux_at_toa_assuming_clear_sky_masked_using_cldtt_LE_5',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'OLA',                                       &
-           LONG_NAME  = 'upwelling_longwave_flux_at_toa_assuming_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      if (USE_RRTMG .or. USE_RRTMGP) then
-         ! Stating the obvious ...
-         _ASSERT(NB_RRTMG == nbndlw, 'Number of RRTMG bands error!')
-         _ASSERT(NB_RRTMGP == NB_RRTMG, 'Broken assumption for OLRB diagnostics')
-
-         do ibnd = 1,nbndlw
-            if (band_output_supported(ibnd)) then
-               write(bb,'(I0.2)') ibnd
-
-               call MAPL_AddExportSpec(GC,                                      &
-                    SHORT_NAME = 'OLRB'//bb//'RG',                                &
-                    LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RR_band'//bb, &
-                    UNITS      = 'W m-2',                                         &
-                    DIMS       = MAPL_DimsHorzOnly,                               &
-                    VLOCATION  = MAPL_VLocationNone,                       _RC )
-
-               call MAPL_AddExportSpec(GC,                                      &
-                    SHORT_NAME = 'TBRB'//bb//'RG',                                &
-                    LONG_NAME  = 'brightness_temperature_in_RR_LW_band'//bb,      &
-                    UNITS      = 'K',                                             &
-                    DIMS       = MAPL_DimsHorzOnly,                               &
-                    VLOCATION  = MAPL_VLocationNone,                       _RC )
-
-            end if
-         end do
-      end if
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLNS',                                      &
-           LONG_NAME  = 'surface_net_downward_longwave_flux',        &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLNSNA',                                    &
-           LONG_NAME  = 'surface_net_downward_longwave_flux_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLNSC',                                     &
-           LONG_NAME  = 'surface_net_downward_longwave_flux_assuming_clear_sky',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'FLNSA',                                     &
-           LONG_NAME  = 'surface_net_downward_longwave_flux_assuming_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LWS',                                       &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation',       &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LWSA',                                      &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation_and_no_aerosol', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LCS',                                       &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation_assuming_clear_sky',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LCSC5',                                     &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation_assuming_clear_sky_masked_using_cldtt_LE_5',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'LAS',                                       &
-           LONG_NAME  = 'surface_absorbed_longwave_radiation_assuming_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'CLDTMP',                                    &
-           LONG_NAME  = 'cloud_top_temperature',                     &
-           UNITS      = 'K',                                         &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'CLDPRS',                                    &
-           LONG_NAME  = 'cloud_top_pressure',                        &
-           UNITS      = 'Pa',                                        &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'TAUIR',                                     &
-           LONG_NAME  = 'longwave_cloud_optical_thickness_at_800_cm-1',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationCenter,                 _RC )
-
-      call MAPL_AddExportSpec(GC,                                   &
-           SHORT_NAME = 'CLDTT'  ,                                   &
-           LONG_NAME  = 'total_2D_cloud_area_fraction',              &
-           UNITS      = '1',                                         &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      ! Note: the four CLDxxLW diagnostics below represent super-layer cloud
-      ! fractions based on the subcolumn cloud generation called in RRTMG LW.
-      ! They are global fields but generated only at the LW REFRESH frequency,
-      ! NOT at the heartbeat. As such, they are useful for diagnostic comparisons
-      ! with CLDTT above and with the full CLDxx set from the Solar GC. But they
-      ! should NOT be used to subsample fields that are produced on the model
-      ! heartbeat (e.g. subsampling for cloud presence).
-
-      call MAPL_AddExportSpec(GC,                                         &
-           SHORT_NAME = 'CLDTTLW',                                         &
-           LONG_NAME  = 'total_cloud_area_fraction_rrtmg_lw_REFRESH',      &
-           UNITS      = '1',                                               &
-           DIMS       = MAPL_DimsHorzOnly,                                 &
-           VLOCATION  = MAPL_VLocationNone,                         _RC )
-
-      call MAPL_AddExportSpec(GC,                                         &
-           SHORT_NAME = 'CLDHILW',                                         &
-           LONG_NAME  = 'high-level_cloud_area_fraction_rrtmg_lw_REFRESH', &
-           UNITS      = '1',                                               &
-           DIMS       = MAPL_DimsHorzOnly,                                 &
-           VLOCATION  = MAPL_VLocationNone,                         _RC )
-
-      call MAPL_AddExportSpec(GC,                                         &
-           SHORT_NAME = 'CLDMDLW',                                         &
-           LONG_NAME  = 'mid-level_cloud_area_fraction_rrtmg_lw_REFRESH',  &
-           UNITS      = '1',                                               &
-           DIMS       = MAPL_DimsHorzOnly,                                 &
-           VLOCATION  = MAPL_VLocationNone,                         _RC )
-
-      call MAPL_AddExportSpec(GC,                                         &
-           SHORT_NAME = 'CLDLOLW',                                         &
-           LONG_NAME  = 'low_level_cloud_area_fraction_rrtmg_lw_REFRESH',  &
-           UNITS      = '1',                                               &
-           DIMS       = MAPL_DimsHorzOnly,                                 &
-           VLOCATION  = MAPL_VLocationNone,                         _RC )
+#include "Irrad_Export___.h"
 
       !  Irrad does not have a "real" internal state. To update the net_longwave_flux
       !  due to the change of surface temperature every time step, we keep
       !  several variables in the internal state.
 
-      !  !INTERNAL STATE:
+      !INTERNAL STATE:
 
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLX',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air',         &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLC',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_for_clear_sky',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLA',                                       &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_for_clear_sky_and_no_aerosol',  &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLXD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air',             &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLXU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air',               &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLCD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air_for_clear_sky',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLCU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air_for_clear_sky', &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLAD',                                      &
-           LONG_NAME  = 'downward_longwave_flux_in_air_for_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLAU',                                      &
-           LONG_NAME  = 'upward_longwave_flux_in_air_for_clear_sky_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'DFDTS',                                     &
-           LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature',&
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           add2export = .true., &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'DFDTSC',                                    &
-           LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_for_clear_sky',&
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'DFDTSNA',                                   &
-           LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_no_aerosol',&
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'DFDTSCNA',                                  &
-           LONG_NAME  = 'sensitivity_of_net_downward_longwave_flux_in_air_to_surface_temperature_for_clear_sky_no_aerosol',&
-           UNITS      = 'W m-2 K-1',                                 &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'SFCEM',                                     &
-           LONG_NAME  = 'longwave_flux_emitted_from_surface',        &
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'TS',                                        &
-           LONG_NAME  = 'surface_temperature',                       &
-           UNITS      = 'K',                                         &
-           DIMS       = MAPL_DimsHorzOnly,                           &
-           VLOCATION  = MAPL_VLocationNone,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLXA',                                      &
-           LONG_NAME  = 'net_downward_longwave_flux_in_air_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLXAD',                                     &
-           LONG_NAME  = 'downward_longwave_flux_in_air_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      call MAPL_AddInternalSpec(GC,                                 &
-           SHORT_NAME = 'FLXAU',                                     &
-           LONG_NAME  = 'upward_longwave_flux_in_air_and_no_aerosol',&
-           UNITS      = 'W m-2',                                     &
-           DIMS       = MAPL_DimsHorzVert,                           &
-           VLOCATION  = MAPL_VLocationEdge,                   _RC )
-
-      if (USE_RRTMG .or. USE_RRTMGP) then
-         do ibnd = 1,nbndlw
-            if (band_output_supported(ibnd)) then
-               write(bb,'(I0.2)') ibnd
-
-               call MAPL_AddInternalSpec(GC,                                    &
-                    SHORT_NAME = 'OLRB'//bb//'RG',                                &
-                    LONG_NAME  = 'upwelling_longwave_flux_at_TOA_in_RR_band'//bb, &
-                    UNITS      = 'W m-2',                                         &
-                    DIMS       = MAPL_DimsHorzOnly,                               &
-                    VLOCATION  = MAPL_VLocationNone,                       _RC )
-
-               call MAPL_AddInternalSpec(GC,                                    &
-                    SHORT_NAME = 'DOLRB'//bb//'RGDT',                             &
-                    LONG_NAME  = 'derivative_of_upwelling_longwave_flux_at_TOA'// &
-                    '_in_RR_band'//bb//'_wrt_surface_temp',       &
-                    UNITS      = 'W m-2 K-1',                                     &
-                    DIMS       = MAPL_DimsHorzOnly,                               &
-                    VLOCATION  = MAPL_VLocationNone,                       _RC )
-
-            end if
-         end do
-      end if
+#include "Irrad_Internal___.h"
 
       ! Settings for RATS-specific radiation diagnostics
       ! -- these will cause RRTMG_LW to be called multiple times toggling the named species
@@ -1153,19 +472,19 @@ contains
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    !BOP
-   ! !IROUTINE: RUN -- Run method for the LW component
+   !IROUTINE: RUN -- Run method for the LW component
 
-   ! !INTERFACE:
+   !INTERFACE:
    subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 
-      ! !ARGUMENTS:
+      !ARGUMENTS:
       type(ESMF_GridComp), intent(inout) :: GC     ! Gridded component
       type(ESMF_State),    intent(inout) :: IMPORT ! Import state
       type(ESMF_State),    intent(inout) :: EXPORT ! Export state
       type(ESMF_Clock),    intent(inout) :: CLOCK  ! The clock
       integer, optional,   intent(  out) :: RC     ! Error code:
 
-      ! !DESCRIPTION: Periodically refreshes the fluxes and their derivatives
+      !DESCRIPTION: Periodically refreshes the fluxes and their derivatives
       !                w.r.t surface skin temperature. On every step it produces
       !                a linear estimate of the fluxes based on the instantaneous
       !                surface temperature.
@@ -1392,8 +711,6 @@ contains
       _RETURN(_SUCCESS)
 
    contains
-
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       subroutine LW_Driver(IM,JM,LM,LATS,LONS,RC)
 
@@ -4422,4 +3739,3 @@ contains
    end subroutine RUN
 
 end module GEOS_IrradGridCompMod
-
