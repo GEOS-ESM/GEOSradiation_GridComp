@@ -534,6 +534,17 @@ contains
       call choose_irrad_scheme(gc, USE_RRTMGP, USE_RRTMG, USE_CHOU, _RC)
       call choose_solar_scheme(gc, USE_RRTMGP_SORAD, USE_RRTMG_SORAD, USE_CHOU_SORAD, _RC)
 
+      ! nameRATS/nRATS are parsed once in Initialize() and read from the
+      ! private state here, unconditionally (used by LW_Driver's RATS setup
+      ! for USE_RRTMG, and by Update_Flx's RATS diagnostic section for all
+      ! schemes) - must NOT be gated on USE_RRTMG, else nRATS is left
+      ! uninitialized (garbage) when USE_RRTMGP is selected, causing
+      ! Update_Flx to spuriously attempt to fetch the RATS-only
+      ! internal-state fields even when RATS_DIAGNOSTICS is empty.
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      nRATS = rrtmgp_state%nRATS
+      nameRATS = rrtmgp_state%nameRATS
+
       ! Set number of IRRAD bands
       if (USE_RRTMGP) then
          NB_IRRAD = NB_RRTMGP
@@ -1732,10 +1743,7 @@ contains
             ! -- ideally, we could query the exports to find if any actually -need- computing
             !    because if not (e.g. CO2 is listed as a RAT_DIAG, but HISTORY.rc has
             !    no diagnostic output for that RAT), there's no need to run an additional RRTMG_LW().
-            ! nameRATS/nRATS are parsed once in Initialize() and read from the private state
-            _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
-            nRATS = rrtmgp_state%nRATS
-            nameRATS = rrtmgp_state%nameRATS
+            ! nameRATS/nRATS are now parsed unconditionally near the top of Run()
             if (nRATS /= 0) then ! if the label was found...
                allocate(TMP_R(IM * JM, LM), _STAT)
             end if
