@@ -1,6 +1,10 @@
 ---
 mapl:
 
+  setServices:
+    sharedObj: libconfigurable_gridcomp
+    userRoutine: setservices_
+
   geometry:
     esmf_geom:
       class: CubedSphere
@@ -27,6 +31,7 @@ mapl:
     FakeGOCART:
       dso: libFakeGOCART_GridComp.so
       setservices: fakegocart_setservices_
+      config_file: fake-gocart.yaml
 
   connections:
     - src_name: PLE

@@ -3,6 +3,8 @@ run_history: false
 root_name: Root
 
 mapl:
+  setServices:
+    sharedObj: libMAPL.cap
   children:
     Root:
       dso: libconfigurable_gridcomp.so
