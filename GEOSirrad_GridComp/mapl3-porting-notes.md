@@ -916,3 +916,27 @@ trusting it compiles/links. Also not yet committed (left unstaged
 alongside an unrelated, pre-existing `NUM_BANDS` error-message refactor
 already sitting in this file's working tree - see git history/status,
 not this session's alarm work).
+
+### Bug: `nRATS` left uninitialized in `Run` when `USE_RRTMGP` selected
+`Run`'s local `nRATS`/`nameRATS` were only assigned from
+`rrtmgp_state%nRATS`/`%nameRATS` inside the `else if (USE_RRTMG)`
+branch of the `LW_Driver` scheme-select block. With `USE_RRTMGP=.true.`
+(the irrad-sa regression config, `RATS_DIAGNOSTICS: []`), that branch
+never runs, so `nRATS` (a plain, non-initialized local integer) holds
+garbage stack memory. Later, `Update_Flx`'s `if (nRATS > 0) then ...
+call MAPL_StateGetPointer(internal, DFDTS_RAT, 'DFDTS_RAT', _RC)` block
+(host-associated with `Run`'s locals) would spuriously evaluate true
+and try to fetch `DFDTS_RAT`/`FLX_RAT`/`FLXU_RAT`/`SFCEM_RAT` from
+`internal` - fields that `SetServices` never added, since it early-
+returns via `_RETURN_UNLESS(n > 0)` when `RATS_DIAGNOSTICS` is empty.
+Symptom: `get_array_ptr_template.H <expected field for shortname:
+<DFDTS_RAT>>` failure at runtime.
+
+Fix: moved the `_GET_NAMED_PRIVATE_STATE` + `nRATS =
+rrtmgp_state%nRATS` + `nameRATS = rrtmgp_state%nameRATS` assignment out
+of the `USE_RRTMG`-only branch to right after `choose_irrad_scheme`/
+`choose_solar_scheme` near the top of `Run`, so it always runs
+regardless of which LW scheme (RRTMG/RRTMGP/CHOU) is selected. This
+matches the intent already documented above (`nameRATS`/`nRATS` parsed
+once in `Initialize`, just *read* here) - the bug was that the read was
+incorrectly gated on `USE_RRTMG` instead of being unconditional.
