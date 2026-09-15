@@ -477,35 +477,34 @@ contains
       !=============================================================================
 
       ! Get my name and set-up traceback handle
-      call ESMF_GridCompGet(GC, NAME=comp_name, __RC__)
+      call ESMF_GridCompGet(GC, NAME=comp_name, _RC)
       IAm = trim(comp_name) // 'SetServices'
 
       ! save pointer to the wrapped RRTMGP internal state in the GC
-      allocate(rrtmgp_state, __STAT__)
+      allocate(rrtmgp_state, _STAT)
       wrap%ptr => rrtmgp_state
       call ESMF_UserCompSetInternalState(GC, 'RRTMGP_state', wrap, status)
-      VERIFY_(status)
+      _VERIFY(status)
 
       ! Get my internal MAPL_Generic state
-      call MAPL_GetObjectFromGC(GC, MAPL, __RC__)
+      call MAPL_GetObjectFromGC(GC, MAPL, _RC)
 
       ! Get the intervals; "heartbeat" must exist
-      call MAPL_GetResource(MAPL, dt, Label="RUN_DT:", __RC__)
+      call MAPL_GetResource(MAPL, dt, Label="RUN_DT:", _RC)
       run_dt = nint(dt)
 
       ! Refresh interval defaults to heartbeat.
-      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "_DT:", default=dt, __RC__)
+      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "_DT:", default=dt, _RC)
       my_step = nint(dt)
 
       ! Averaging interval defaults to refresh interval.
-      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "Avrg:", default=dt, __RC__)
+      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "Avrg:", default=dt, _RC)
       accumint = nint(dt)
 
       ! Decide which radiation to use:
       ! Needed in SetServices because we Export a per-band flux and the
       !   number of bands differs between codes.
-      !----------------------------------------------------------------------
-      call choose_solar_scheme(GC, USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
+      call choose_solar_scheme(GC, USE_RRTMGP, USE_RRTMG, USE_CHOU, _RC)
 
       ! Set number of solar bands
       if (USE_RRTMGP) then
@@ -518,7 +517,7 @@ contains
 
       ! Decide if should make OBIO exports
       call MAPL_GetResource(MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:", default=0, RC=status)
-      VERIFY_(status)
+      _VERIFY(status)
 
       SOLAR_TO_OBIO = (DO_OBIO/=0)
 
@@ -536,7 +535,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationEdge, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='surface_skin_temperature', &
@@ -545,7 +544,7 @@ contains
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='methane_concentration', &
@@ -554,7 +553,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='nitrous_oxide_concentration', &
@@ -563,7 +562,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='air_temperature', &
@@ -572,7 +571,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='specific_humidity', &
@@ -581,7 +580,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='mass_fraction_of_cloud_liquid_water_in_air', &
@@ -590,7 +589,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='mass_fraction_of_cloud_ice_in_air', &
@@ -599,7 +598,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='mass_fraction_of_rain_water_in_air', &
@@ -608,7 +607,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='mass_fraction_of_snow_in_air', &
@@ -617,7 +616,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='mass_fraction_of_graupel_in_air', &
@@ -626,7 +625,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='effective_radius_of_cloud_liquid_water_particles', &
@@ -635,7 +634,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='effective_radius_of_cloud_ice_particles', &
@@ -644,7 +643,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='effective_radius_of_rain_particles', &
@@ -653,7 +652,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='effective_radius_of_snow_particles', &
@@ -662,7 +661,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='effective_radius_of_graupel_particles', &
@@ -671,7 +670,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='odd-oxygen_volume_mixing_ratio', &
@@ -680,7 +679,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='cloud_area_fraction', &
@@ -689,7 +688,7 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            AVERAGING_INTERVAL=accumint, &
-           REFRESH_INTERVAL=my_step, __RC__)
+           REFRESH_INTERVAL=my_step, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='aerosols', &
@@ -698,42 +697,42 @@ contains
            DIMS=MAPL_DimsHorzVert, &
            VLOCATION=MAPL_VLocationCenter, &
            DATATYPE=MAPL_StateItem, &
-           RESTART=MAPL_RestartSkip, __RC__)
+           RESTART=MAPL_RestartSkip, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='surface_albedo_for_visible_beam', &
            UNITS='1', &
            SHORT_NAME='ALBVR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='surface_albedo_for_visible_diffuse', &
            UNITS='1', &
            SHORT_NAME='ALBVF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='surface_albedo_for_near_infrared_beam', &
            UNITS='1', &
            SHORT_NAME='ALBNR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddImportSpec(GC, &
            LONG_NAME='surface_albedo_for_near_infrared_diffuse', &
            UNITS='1', &
            SHORT_NAME='ALBNF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddImportSpec(GC, &
            SHORT_NAME='PREF', &
            LONG_NAME='reference_air_pressure', &
            UNITS='Pa', &
            DIMS=MAPL_DimsVertOnly, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       !  Solar does not have a "real" state. We keep an internal variable
       !  for each variable produced by solar during the compute steps.
@@ -755,28 +754,28 @@ contains
            UNITS='1', &
            SHORT_NAME='FSWN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_net_downward_shortwave_flux_in_air_assuming_clear_sky',&
            UNITS='1', &
            SHORT_NAME='FSCN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_upward_shortwave_flux_in_air', &
            UNITS='1', &
            SHORT_NAME='FSWUN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_upward_shortwave_flux_in_air_assuming_clear_sky',&
            UNITS='1', &
            SHORT_NAME='FSCUN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       if (USE_RRTMG .or. USE_RRTMGP) then
 
@@ -793,14 +792,14 @@ contains
                     LONG_NAME='normalized_upwelling_shortwave_flux_at_TOA_in_RR_band' // bb, &
                     UNITS='1', &
                     DIMS=MAPL_DimsHorzOnly, &
-                    VLOCATION=MAPL_VLocationNone, __RC__)
+                    VLOCATION=MAPL_VLocationNone, _RC)
 
                call MAPL_AddInternalSpec(GC, &
                     SHORT_NAME='ISRB' // bb // 'RGN', &
                     LONG_NAME='normalized_downwelling_shortwave_flux_at_TOA_in_RR_band' // bb, &
                     UNITS='1', &
                     DIMS=MAPL_DimsHorzOnly, &
-                    VLOCATION=MAPL_VLocationNone, __RC__)
+                    VLOCATION=MAPL_VLocationNone, _RC)
 
             end if
          end do
@@ -812,7 +811,7 @@ contains
            SHORT_NAME='FSWBANDN', &
            DIMS=MAPL_DimsHorzOnly, &
            UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_ultraviolet_beam_flux', &
@@ -820,7 +819,7 @@ contains
            SHORT_NAME='DRUVRN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_ultraviolet_diffuse_flux',&
@@ -828,7 +827,7 @@ contains
            SHORT_NAME='DFUVRN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_par_beam_flux', &
@@ -836,7 +835,7 @@ contains
            SHORT_NAME='DRPARN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_par_diffuse_flux', &
@@ -844,7 +843,7 @@ contains
            SHORT_NAME='DFPARN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_nearinfrared_beam_flux', &
@@ -852,7 +851,7 @@ contains
            SHORT_NAME='DRNIRN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_surface_downwelling_nearinfrared_diffuse_flux',&
@@ -860,7 +859,7 @@ contains
            SHORT_NAME='DFNIRN', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       if (SOLAR_TO_OBIO) then
 
@@ -870,7 +869,7 @@ contains
               SHORT_NAME='DRBANDN', &
               DIMS=MAPL_DimsHorzOnly, &
               UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-              VLOCATION=MAPL_VLocationNone, __RC__)
+              VLOCATION=MAPL_VLocationNone, _RC)
 
          call MAPL_AddInternalSpec(GC, &
               LONG_NAME='normalized_surface_downwelling_shortwave_diffuse_flux_per_band',&
@@ -878,7 +877,7 @@ contains
               SHORT_NAME='DFBANDN', &
               DIMS=MAPL_DimsHorzOnly, &
               UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-              VLOCATION=MAPL_VLocationNone, __RC__)
+              VLOCATION=MAPL_VLocationNone, _RC)
 
       end if
 
@@ -887,28 +886,28 @@ contains
            UNITS='1', &
            SHORT_NAME='FSWNAN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_net_downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
            UNITS='1', &
            SHORT_NAME='FSCNAN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_upward_shortwave_flux_in_air_assuming_no_aerosol',&
            UNITS='1', &
            SHORT_NAME='FSWUNAN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_upward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
            UNITS='1', &
            SHORT_NAME='FSCUNAN', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddInternalSpec(GC, &
            LONG_NAME='normalized_net_surface_downward_shortwave_flux_per_band_in_air_assuming_no_aerosol',&
@@ -916,7 +915,7 @@ contains
            SHORT_NAME='FSWBANDNAN', &
            DIMS=MAPL_DimsHorzOnly, &
            UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       !  NB: The following INTERNALs are really EXPORTs. As of 5/2022 MAPL only re-
@@ -940,7 +939,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! Note: the four CLDxxSW diagnostics below represent super-layer cloud
       ! fractions based on the subcolumn cloud generation called in RRTMG[P] SW.
@@ -963,7 +962,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='CLDHISW', &
@@ -972,7 +971,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='CLDMDSW', &
@@ -981,7 +980,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='CLDLOSW', &
@@ -990,7 +989,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! Note: The following TAUxxPAR and COTxxPAR are REFRESH-frequency fields.
       ! As such, all the important provisos given in the comment on CLDxxSW above
@@ -1009,7 +1008,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='TAUMDPAR', &
@@ -1018,7 +1017,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='TAUHIPAR', &
@@ -1027,7 +1026,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='TAUTTPAR', &
@@ -1036,7 +1035,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
       #endif
 
       ! These COTxxPAR are UNDEF for clear super-layers, whereas TAUxxPAR are ZERO.
@@ -1049,7 +1048,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTMDPAR', &
@@ -1058,7 +1057,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTHIPAR', &
@@ -1067,7 +1066,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTTTPAR', &
@@ -1076,7 +1075,7 @@ contains
            default=MAPL_UNDEF, &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! For COT[DEN|NUM]xxPAR see comments under COT[DEN|NUM]xx.
 
@@ -1086,7 +1085,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDENMDPAR', &
@@ -1094,7 +1093,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDENHIPAR', &
@@ -1102,7 +1101,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDENTTPAR', &
@@ -1110,7 +1109,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTNUMLOPAR', &
@@ -1118,7 +1117,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTNUMMDPAR', &
@@ -1126,7 +1125,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTNUMHIPAR', &
@@ -1134,7 +1133,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTNUMTTPAR', &
@@ -1142,7 +1141,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       #ifdef SOLAR_RADVAL
 
@@ -1154,7 +1153,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSDENMDPAR', &
@@ -1162,7 +1161,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSDENHIPAR', &
@@ -1170,7 +1169,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSDENTTPAR', &
@@ -1178,7 +1177,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSNUMLOPAR', &
@@ -1186,7 +1185,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSNUMMDPAR', &
@@ -1194,7 +1193,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSNUMHIPAR', &
@@ -1202,7 +1201,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTDSNUMTTPAR', &
@@ -1210,7 +1209,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! ditto for liquid clouds only
 
@@ -1220,7 +1219,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDENMDPAR', &
@@ -1228,7 +1227,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDENHIPAR', &
@@ -1236,7 +1235,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDENTTPAR', &
@@ -1244,7 +1243,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLNUMLOPAR', &
@@ -1252,7 +1251,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLNUMMDPAR', &
@@ -1260,7 +1259,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLNUMHIPAR', &
@@ -1268,7 +1267,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLNUMTTPAR', &
@@ -1276,7 +1275,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSDENLOPAR', &
@@ -1284,7 +1283,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSDENMDPAR', &
@@ -1292,7 +1291,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSDENHIPAR', &
@@ -1300,7 +1299,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSDENTTPAR', &
@@ -1308,7 +1307,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSNUMLOPAR', &
@@ -1316,7 +1315,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSNUMMDPAR', &
@@ -1324,7 +1323,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSNUMHIPAR', &
@@ -1332,7 +1331,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTLDSNUMTTPAR', &
@@ -1340,7 +1339,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! ditto for ice clouds only
 
@@ -1350,7 +1349,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDENMDPAR', &
@@ -1358,7 +1357,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDENHIPAR', &
@@ -1366,7 +1365,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDENTTPAR', &
@@ -1374,7 +1373,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTINUMLOPAR', &
@@ -1382,7 +1381,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTINUMMDPAR', &
@@ -1390,7 +1389,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTINUMHIPAR', &
@@ -1398,7 +1397,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTINUMTTPAR', &
@@ -1406,7 +1405,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSDENLOPAR', &
@@ -1414,7 +1413,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSDENMDPAR', &
@@ -1422,7 +1421,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSDENHIPAR', &
@@ -1430,7 +1429,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSDENTTPAR', &
@@ -1438,7 +1437,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSNUMLOPAR', &
@@ -1446,7 +1445,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSNUMMDPAR', &
@@ -1454,7 +1453,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSNUMHIPAR', &
@@ -1462,7 +1461,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='COTIDSNUMTTPAR', &
@@ -1470,7 +1469,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! super-layerized phase-split cloud SSA and ASM
 
@@ -1480,7 +1479,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALNUMLOPAR', &
@@ -1488,7 +1487,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDENLOPAR', &
@@ -1496,7 +1495,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAINUMLOPAR', &
@@ -1504,7 +1503,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDENLOPAR', &
@@ -1512,7 +1511,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLNUMLOPAR', &
@@ -1520,7 +1519,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDENLOPAR', &
@@ -1528,7 +1527,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMINUMLOPAR', &
@@ -1536,7 +1535,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDENMDPAR', &
@@ -1544,7 +1543,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALNUMMDPAR', &
@@ -1552,7 +1551,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDENMDPAR', &
@@ -1560,7 +1559,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAINUMMDPAR', &
@@ -1568,7 +1567,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDENMDPAR', &
@@ -1576,7 +1575,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLNUMMDPAR', &
@@ -1584,7 +1583,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDENMDPAR', &
@@ -1592,7 +1591,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMINUMMDPAR', &
@@ -1600,7 +1599,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDENHIPAR', &
@@ -1608,7 +1607,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALNUMHIPAR', &
@@ -1616,7 +1615,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDENHIPAR', &
@@ -1624,7 +1623,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAINUMHIPAR', &
@@ -1632,7 +1631,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDENHIPAR', &
@@ -1640,7 +1639,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLNUMHIPAR', &
@@ -1648,7 +1647,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDENHIPAR', &
@@ -1656,7 +1655,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMINUMHIPAR', &
@@ -1664,7 +1663,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDENTTPAR', &
@@ -1672,7 +1671,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALNUMTTPAR', &
@@ -1680,7 +1679,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDENTTPAR', &
@@ -1688,7 +1687,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAINUMTTPAR', &
@@ -1696,7 +1695,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDENTTPAR', &
@@ -1704,7 +1703,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLNUMTTPAR', &
@@ -1712,7 +1711,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDENTTPAR', &
@@ -1720,7 +1719,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMINUMTTPAR', &
@@ -1728,7 +1727,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSDENLOPAR', &
@@ -1737,7 +1736,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSNUMLOPAR', &
@@ -1746,7 +1745,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSDENLOPAR', &
@@ -1755,7 +1754,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSNUMLOPAR', &
@@ -1763,7 +1762,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSDENLOPAR', &
@@ -1771,7 +1770,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSNUMLOPAR', &
@@ -1779,7 +1778,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSDENLOPAR', &
@@ -1787,7 +1786,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSNUMLOPAR', &
@@ -1795,7 +1794,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSDENMDPAR', &
@@ -1804,7 +1803,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSNUMMDPAR', &
@@ -1813,7 +1812,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSDENMDPAR', &
@@ -1822,7 +1821,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSNUMMDPAR', &
@@ -1831,7 +1830,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSDENMDPAR', &
@@ -1840,7 +1839,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSNUMMDPAR', &
@@ -1848,7 +1847,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSDENMDPAR', &
@@ -1856,7 +1855,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSNUMMDPAR', &
@@ -1864,7 +1863,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSDENHIPAR', &
@@ -1873,7 +1872,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSNUMHIPAR', &
@@ -1882,7 +1881,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSDENHIPAR', &
@@ -1891,7 +1890,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSNUMHIPAR', &
@@ -1899,7 +1898,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSDENHIPAR', &
@@ -1907,7 +1906,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSNUMHIPAR', &
@@ -1915,7 +1914,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSDENHIPAR', &
@@ -1923,7 +1922,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSNUMHIPAR', &
@@ -1931,7 +1930,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSDENTTPAR', &
@@ -1940,7 +1939,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSALDSNUMTTPAR', &
@@ -1949,7 +1948,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSDENTTPAR', &
@@ -1958,7 +1957,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='SSAIDSNUMTTPAR', &
@@ -1966,7 +1965,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSDENTTPAR', &
@@ -1974,7 +1973,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMLDSNUMTTPAR', &
@@ -1982,7 +1981,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSDENTTPAR', &
@@ -1990,7 +1989,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='ASMIDSNUMTTPAR', &
@@ -1998,7 +1997,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       ! super-layerized phase-split cloud forward-scattering fraction
 
@@ -2008,7 +2007,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLNUMLOPAR', &
@@ -2016,7 +2015,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORIDENLOPAR', &
@@ -2024,7 +2023,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORINUMLOPAR', &
@@ -2032,7 +2031,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLDENMDPAR', &
@@ -2040,7 +2039,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLNUMMDPAR', &
@@ -2048,7 +2047,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORIDENMDPAR', &
@@ -2056,7 +2055,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORINUMMDPAR', &
@@ -2064,7 +2063,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLDENHIPAR', &
@@ -2072,7 +2071,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLNUMHIPAR', &
@@ -2080,7 +2079,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORIDENHIPAR', &
@@ -2088,7 +2087,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORINUMHIPAR', &
@@ -2096,7 +2095,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLDENTTPAR', &
@@ -2104,7 +2103,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORLNUMTTPAR', &
@@ -2112,7 +2111,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORIDENTTPAR', &
@@ -2120,7 +2119,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
 
       call MAPL_AddInternalSpec(GC, &
            SHORT_NAME='FORINUMTTPAR', &
@@ -2128,7 +2127,7 @@ contains
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
            VLOCATION=MAPL_VLocationNone, &
-           FRIENDLYTO=trim(comp_name), __RC__)
+           FRIENDLYTO=trim(comp_name), _RC)
       #endif
 
       !  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2142,84 +2141,84 @@ contains
            UNITS='W m-2', &
            SHORT_NAME='FSW', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='net_downward_shortwave_flux_in_air_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='FSC', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='net_downward_shortwave_flux_in_air_assuming_no_aerosol', &
            UNITS='W m-2', &
            SHORT_NAME='FSWNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='net_downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='FSCNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='downward_shortwave_flux_in_air', &
            UNITS='W m-2', &
            SHORT_NAME='FSWD', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='downward_shortwave_flux_in_air_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='FSCD', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='downward_shortwave_flux_in_air_assuming_no_aerosol', &
            UNITS='W m-2', &
            SHORT_NAME='FSWDNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='FSCDNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='upward_shortwave_flux_in_air', &
            UNITS='W m-2', &
            SHORT_NAME='FSWU', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='upward_shortwave_flux_in_air_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='FSCU', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='upward_shortwave_flux_in_air_assuming_no_aerosol', &
            UNITS='W m-2', &
            SHORT_NAME='FSWUNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='upward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='FSCUNA', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationEdge, __RC__)
+           VLOCATION=MAPL_VLocationEdge, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='net_surface_downward_shortwave_flux_per_band_in_air',&
@@ -2227,7 +2226,7 @@ contains
            SHORT_NAME='FSWBAND', &
            DIMS=MAPL_DimsHorzOnly, &
            UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='net_surface_downward_shortwave_flux_per_band_in_air_assuming_no_aerosol',&
@@ -2235,70 +2234,70 @@ contains
            SHORT_NAME='FSWBANDNA', &
            DIMS=MAPL_DimsHorzOnly, &
            UNGRIDDED_DIMS=(/ NUM_BANDS_SOLAR /), &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_ultraviolet_beam_normal_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRNUVR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_par_beam_normal_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRNPAR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_nearinfrared_beam_normal_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRNNIR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_ultraviolet_beam_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRUVR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_ultraviolet_diffuse_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DFUVR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_par_beam_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRPAR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_par_diffuse_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DFPAR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_nearinfrared_beam_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DRNIR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_downwelling_nearinfrared_diffuse_flux', &
            UNITS='W m-2', &
            SHORT_NAME='DFNIR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       if (SOLAR_TO_OBIO) then
 
@@ -2308,7 +2307,7 @@ contains
               SHORT_NAME='DROBIO', &
               DIMS=MAPL_DimsHorzOnly, &
               UNGRIDDED_DIMS=(/ NB_OBIO /), &
-              VLOCATION=MAPL_VLocationNone, __RC__)
+              VLOCATION=MAPL_VLocationNone, _RC)
 
          call MAPL_AddExportSpec(GC, &
               LONG_NAME='surface_downwelling_shortwave_diffuse_flux_per_OBIO_band',&
@@ -2316,7 +2315,7 @@ contains
               SHORT_NAME='DFOBIO', &
               DIMS=MAPL_DimsHorzOnly, &
               UNGRIDDED_DIMS=(/ NB_OBIO /), &
-              VLOCATION=MAPL_VLocationNone, __RC__)
+              VLOCATION=MAPL_VLocationNone, _RC)
 
       end if
 
@@ -2325,35 +2324,35 @@ contains
            UNITS='1', &
            SHORT_NAME='FCLD', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationCenter, __RC__)
+           VLOCATION=MAPL_VLocationCenter, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='cloud_area_fraction_for_low_clouds', &
            UNITS='1', &
            SHORT_NAME='CLDLO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='cloud_area_fraction_for_middle_clouds', &
            UNITS='1', &
            SHORT_NAME='CLDMD', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='cloud_area_fraction_for_high_clouds', &
            UNITS='1', &
            SHORT_NAME='CLDHI', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='total_cloud_area_fraction', &
            UNITS='1', &
            SHORT_NAME='CLDTT', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       #ifdef SOLAR_RADVAL
       ! Note: the four CLDxxSWHB diagnostics below represent super-layer cloud
@@ -2378,28 +2377,28 @@ contains
            LONG_NAME='total_cloud_area_fraction_rrtmg_sw_HEARTBEAT', &
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            SHORT_NAME='CLDHISWHB', &
            LONG_NAME='high-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT', &
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            SHORT_NAME='CLDMDSWHB', &
            LONG_NAME='mid-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT', &
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            SHORT_NAME='CLDLOSWHB', &
            LONG_NAME='low-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT', &
            UNITS='1', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
       #endif
 
       ! The TAUxx variants are ZERO when the super-layer is clear.
@@ -2410,35 +2409,35 @@ contains
            UNITS='1', &
            SHORT_NAME='TAULO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_middle_clouds', &
            UNITS='1', &
            SHORT_NAME='TAUMD', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_high_clouds', &
            UNITS='1', &
            SHORT_NAME='TAUHI', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_all_clouds__deprecated', &
            UNITS='1', &
            SHORT_NAME='TAUTT', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_all_clouds', &
            UNITS='1', &
            SHORT_NAME='TAUTX', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       ! The COTxx variants are UNDEF when the super-layer is clear.
       ! They are preferred over TAUxx.
@@ -2447,28 +2446,28 @@ contains
            UNITS='1', &
            SHORT_NAME='COTLO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_middle_clouds_clrundef', &
            UNITS='1', &
            SHORT_NAME='COTMD', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_high_clouds_clrundef', &
            UNITS='1', &
            SHORT_NAME='COTHI', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_all_clouds_clrundef', &
            UNITS='1', &
            SHORT_NAME='COTTT', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       ! COT[DEN|NUM]xx allow a true cloud-fraction-weighted in-cloud optical
       ! thickness to be calculated via COTNUMxx / COTDENxx. Like the COTxx, clear
@@ -2484,196 +2483,196 @@ contains
            UNITS='1', &
            SHORT_NAME='COTDENLO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_middle_clouds_denominator', &
            UNITS='1', &
            SHORT_NAME='COTDENMD', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_high_clouds_denominator', &
            UNITS='1', &
            SHORT_NAME='COTDENHI', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_all_clouds_denominator', &
            UNITS='1', &
            SHORT_NAME='COTDENTT', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_low_clouds_numerator', &
            UNITS='1', &
            SHORT_NAME='COTNUMLO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_middle_clouds_numerator', &
            UNITS='1', &
            SHORT_NAME='COTNUMMD', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_high_clouds_numerator', &
            UNITS='1', &
            SHORT_NAME='COTNUMHI', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_of_all_clouds_numerator', &
            UNITS='1', &
            SHORT_NAME='COTNUMTT', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_for_ice_clouds', &
            UNITS='1', &
            SHORT_NAME='TAUCLI', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationCenter, __RC__)
+           VLOCATION=MAPL_VLocationCenter, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_for_liquid_clouds', &
            UNITS='1', &
            SHORT_NAME='TAUCLW', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationCenter, __RC__)
+           VLOCATION=MAPL_VLocationCenter, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_for_falling_rain', &
            UNITS='1', &
            SHORT_NAME='TAUCLR', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationCenter, __RC__)
+           VLOCATION=MAPL_VLocationCenter, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='in_cloud_optical_thickness_for_falling_snow', &
            UNITS='1', &
            SHORT_NAME='TAUCLS', &
            DIMS=MAPL_DimsHorzVert, &
-           VLOCATION=MAPL_VLocationCenter, __RC__)
+           VLOCATION=MAPL_VLocationCenter, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_net_downward_shortwave_flux_assuming_clear_sky',&
            UNITS='W m-2', &
            SHORT_NAME='RSCS', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_net_downward_shortwave_flux', &
            UNITS='W m-2', &
            SHORT_NAME='RSRS', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_net_downward_shortwave_flux_assuming_clear_sky_and_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='RSCSNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_net_downward_shortwave_flux_assuming_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='RSRSNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_incoming_shortwave_flux', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_incoming_shortwave_flux_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSFC', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_incoming_shortwave_flux_assuming_clean_sky', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSFNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_incoming_shortwave_flux_assuming_clear_clean_sky',&
            UNITS='W m-2', &
            SHORT_NAME='SLRSFCNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_outgoing_shortwave_flux', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSUF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_outgoing_shortwave_flux_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSUFC', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_outgoing_shortwave_flux_assuming_clean_sky', &
            UNITS='W m-2', &
            SHORT_NAME='SLRSUFNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_outgoing_shortwave_flux_assuming_clear_clean_sky',&
            UNITS='W m-2', &
            SHORT_NAME='SLRSUFCNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_outgoing_shortwave_flux', &
            UNITS='W m-2', &
            SHORT_NAME='OSR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_outgoing_shortwave_flux_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='OSRCLR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_outgoing_shortwave_flux_no_aerosol', &
            UNITS='W m-2', &
            SHORT_NAME='OSRNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_outgoing_shortwave_flux_no_aerosol__clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='OSRCNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       if (USE_RRTMG .or. USE_RRTMGP) then
          do ibnd = 1, nbndsw
@@ -2685,21 +2684,21 @@ contains
                     LONG_NAME='upwelling_shortwave_flux_at_TOA_in_RR_band' // bb, &
                     UNITS='W m-2', &
                     DIMS=MAPL_DimsHorzOnly, &
-                    VLOCATION=MAPL_VLocationNone, __RC__)
+                    VLOCATION=MAPL_VLocationNone, _RC)
 
                call MAPL_AddExportSpec(GC, &
                     SHORT_NAME='ISRB' // bb // 'RG', &
                     LONG_NAME='downwelling_shortwave_flux_at_TOA_in_RR_band' // bb, &
                     UNITS='W m-2', &
                     DIMS=MAPL_DimsHorzOnly, &
-                    VLOCATION=MAPL_VLocationNone, __RC__)
+                    VLOCATION=MAPL_VLocationNone, _RC)
 
                call MAPL_AddExportSpec(GC, &
                     SHORT_NAME='TBRB' // bb // 'RG', &
                     LONG_NAME='brightness_temperature_in_RR_SW_band' // bb, &
                     UNITS='K', &
                     DIMS=MAPL_DimsHorzOnly, &
-                    VLOCATION=MAPL_VLocationNone, __RC__)
+                    VLOCATION=MAPL_VLocationNone, _RC)
 
             end if
          end do
@@ -2710,70 +2709,70 @@ contains
            UNITS='W m-2', &
            SHORT_NAME='RSR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_net_downward_shortwave_flux_assuming_clear_sky', &
            UNITS='W m-2', &
            SHORT_NAME='RSC', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_net_downward_shortwave_flux_assuming_no_aerosol', &
            UNITS='W m-2', &
            SHORT_NAME='RSRNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_net_downward_shortwave_flux_assuming_clear_sky_and_no_aerosol',&
            UNITS='W m-2', &
            SHORT_NAME='RSCNA', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='toa_incoming_shortwave_flux', &
            UNITS='W m-2', &
            SHORT_NAME='SLRTP', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_albedo', &
            UNITS='1', &
            SHORT_NAME='ALBEDO', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_albedo_for_visible_beam', &
            UNITS='1', &
            SHORT_NAME='ALBVR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_albedo_for_visible_diffuse', &
            UNITS='1', &
            SHORT_NAME='ALBVF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_albedo_for_near_infrared_beam', &
            UNITS='1', &
            SHORT_NAME='ALBNR', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            LONG_NAME='surface_albedo_for_near_infrared_diffuse', &
            UNITS='1', &
            SHORT_NAME='ALBNF', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       ! Three (one above now) different cos(SZA)s ...
 
@@ -2784,7 +2783,7 @@ contains
            UNITS='1', &
            SHORT_NAME='COSZ', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       ! This one is the mean over the update period, so it will be half
       ! a heartbeat behind the HISTORY file time. But this is the flux-
@@ -2794,29 +2793,29 @@ contains
            UNITS='1', &
            SHORT_NAME='MCOSZ', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            SHORT_NAME='CLDTMP', &
            LONG_NAME='cloud_top_temperature', &
            UNITS='K', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       call MAPL_AddExportSpec(GC, &
            SHORT_NAME='CLDPRS', &
            LONG_NAME='cloud_top_pressure', &
            UNITS='Pa', &
            DIMS=MAPL_DimsHorzOnly, &
-           VLOCATION=MAPL_VLocationNone, __RC__)
+           VLOCATION=MAPL_VLocationNone, _RC)
 
       !EOS
 
       ! Set Run method and use generic Initalize and Finalize methods
-      call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_RUN, Run, __RC__)
-      call MAPL_GenericSetServices(GC, __RC__)
+      call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_RUN, Run, _RC)
+      call MAPL_GenericSetServices(GC, _RC)
 
-      RETURN_(ESMF_SUCCESS)
+      _RETURN(ESMF_SUCCESS)
    end subroutine SetServices
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2979,14 +2978,14 @@ contains
       !=============================================================================
 
       ! Get the target components name and set-up traceback handle.
-      call ESMF_GridCompGet(GC, NAME=comp_name, GRID=esmfgrid, __RC__)
+      call ESMF_GridCompGet(GC, NAME=comp_name, GRID=esmfgrid, _RC)
       IAm = trim(comp_name) // "Run"
 
       ! Get my internal MAPL_Generic state
-      call MAPL_GetObjectFromGC(GC, MAPL, __RC__)
+      call MAPL_GetObjectFromGC(GC, MAPL, _RC)
 
-      call MAPL_TimerOn(MAPL, "TOTAL", __RC__)
-      call MAPL_TimerOn(MAPL, "PRELIMS", __RC__)
+      call MAPL_TimerOn(MAPL, "TOTAL", _RC)
+      call MAPL_TimerOn(MAPL, "PRELIMS", _RC)
 
       ! Get parameters from generic state.
       call MAPL_Get(MAPL, &
@@ -3001,21 +3000,20 @@ contains
            InternalSpec=InternalSpec, &
            ImportSpec=ImportSpec, &
            ExportSpec=ExportSpec, &
-           INTERNAL_ESMF_STATE=internal, __RC__)
+           INTERNAL_ESMF_STATE=internal, _RC)
 
       ! Get parameters from configuration
-      call MAPL_GetResource(MAPL, PRS_LOW_MID, 'PRS_LOW_MID_CLOUDS:', default=70000., __RC__)
-      call MAPL_GetResource(MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', default=40000., __RC__)
-      call MAPL_GetResource(MAPL, CO2, 'CO2:', __RC__)
-      call MAPL_GetResource(MAPL, SC, 'SOLAR_CONSTANT:', __RC__)
-      call MAPL_GetResource(MAPL, SUNFLAG, 'SUN_FLAG:', default=0, __RC__)
+      call MAPL_GetResource(MAPL, PRS_LOW_MID, 'PRS_LOW_MID_CLOUDS:', default=70000., _RC)
+      call MAPL_GetResource(MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', default=40000., _RC)
+      call MAPL_GetResource(MAPL, CO2, 'CO2:', _RC)
+      call MAPL_GetResource(MAPL, SC, 'SOLAR_CONSTANT:', _RC)
+      call MAPL_GetResource(MAPL, SUNFLAG, 'SUN_FLAG:', default=0, _RC)
 
       ! Should we load balance solar radiation?
       ! For the single-column model, we always use the DATMO DYCORE.
       ! If this is our DYCORE, turn off load balancing.
-      !---------------------------------------------
-      call MAPL_GetResource(MAPL, DYCORE, 'DYCORE:', __RC__)
-      call MAPL_GetResource(MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', default=1, __RC__)
+      call MAPL_GetResource(MAPL, DYCORE, 'DYCORE:', _RC)
+      call MAPL_GetResource(MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', default=1, _RC)
       if (adjustl(DYCORE) == "DATMO" .or. SOLAR_LOAD_BALANCE == 0) then
          LoadBalance = .false.
       else
@@ -3024,11 +3022,11 @@ contains
 
       ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
       ! would have been used if not passed in
-      call MAPL_GetResource(MAPL, MaxPasses, 'SOLAR_LB_MAX_PASSES:', default=100, __RC__)
+      call MAPL_GetResource(MAPL, MaxPasses, 'SOLAR_LB_MAX_PASSES:', default=100, _RC)
 
       ! Use time-varying co2
-      call ESMF_ClockGet(clock, currTIME=currentTime, __RC__)
-      call ESMF_TimeGet(currentTime, YY=YY, DayOfYear=DOY, __RC__)
+      call ESMF_ClockGet(clock, currTIME=currentTime, _RC)
+      call ESMF_TimeGet(currentTime, YY=YY, DayOfYear=DOY, _RC)
       if (CO2 < 0.0) then
          CO2 = getco2(YY, DOY)
          write(MSGSTRING, '(A,I4,A,I3,A,e12.5)') &
@@ -3041,16 +3039,15 @@ contains
                print *
             end if
          end if
-         call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, __RC__)
+         call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, _RC)
       end if
 
       ! Decide which radiation to use:
       ! These USE_ flags are shared globally by contained SORADCORE() and Update_Flx()
-      !-------------------------------------------------------------------------------
       call choose_solar_scheme(GC, &
-           USE_RRTMGP, USE_RRTMG, USE_CHOU, __RC__)
+           USE_RRTMGP, USE_RRTMG, USE_CHOU, _RC)
       call choose_irrad_scheme(GC, &
-           USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD, __RC__)
+           USE_RRTMGP_IRRAD, USE_RRTMG_IRRAD, USE_CHOU_IRRAD, _RC)
 
       ! Set number of solar bands
       if (USE_RRTMGP) then
@@ -3062,7 +3059,6 @@ contains
       end if
 
       ! Test to see if AGCM.rc is set up correctly for the Radiation selected
-      !----------------------------------------------------------------------
       TOTAL_RAD_BANDS = NUM_BANDS_SOLAR
       if (USE_RRTMGP_IRRAD) then
          TOTAL_RAD_BANDS = TOTAL_RAD_BANDS + NB_RRTMGP_IRRAD
@@ -3072,7 +3068,7 @@ contains
          TOTAL_RAD_BANDS = TOTAL_RAD_BANDS + NB_CHOU_IRRAD
       end if
 
-      call MAPL_GetResource(MAPL, NUM_BANDS, 'NUM_BANDS:', __RC__)
+      call MAPL_GetResource(MAPL, NUM_BANDS, 'NUM_BANDS:', _RC)
       if (NUM_BANDS /= TOTAL_RAD_BANDS) then
          if (MAPL_AM_I_ROOT()) then
             write(*, *) "NUM_BANDS is not set up correctly for the radiation combination selected:"
@@ -3092,17 +3088,17 @@ contains
             band_output(ibnd) = .false.
             if (.not. band_output_supported(ibnd)) cycle
             write(bb, '(I0.2)') ibnd
-            call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', __RC__)
+            call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
             end if
-            call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', __RC__)
+            call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
             end if
-            call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', __RC__)
+            call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
@@ -3111,24 +3107,22 @@ contains
       end if
 
       ! Decide if should make OBIO exports
-      !-----------------------------------
 
       call MAPL_GetResource(MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:", default=0, RC=status)
-      VERIFY_(status)
+      _VERIFY(status)
 
       SOLAR_TO_OBIO = (DO_OBIO/=0)
 
       ! Decide how to do solar forcing
-      !-------------------------------
 
-      call MAPL_GetResource(MAPL, SolCycFileName, "SOLAR_CYCLE_FILE_NAME:", default='/dev/null', __RC__)
+      call MAPL_GetResource(MAPL, SolCycFileName, "SOLAR_CYCLE_FILE_NAME:", default='/dev/null', _RC)
       if (SolCycFileName /= '/dev/null') then
 
          ! Solar forcing is from NRL SSI2 file for RRTMG[P].
          ! For chou-Suarez, the typical forcing is from internal tables, but a special
          ! file forcing is also possible.
 
-         call MAPL_GetResource(MAPL, USE_NRLSSI2, "USE_NRLSSI2:", default=.true., __RC__)
+         call MAPL_GetResource(MAPL, USE_NRLSSI2, "USE_NRLSSI2:", default=.true., _RC)
          if (USE_NRLSSI2) then
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3137,9 +3131,9 @@ contains
 
             _ASSERT(USE_RRTMG .or. USE_RRTMGP, 'only RRTMG[P] can use NRLSSI2 currently')
 
-            call MAPL_GetResource(MAPL, PersistSolar, "PERSIST_SOLAR:", default=.true., __RC__)
+            call MAPL_GetResource(MAPL, PersistSolar, "PERSIST_SOLAR:", default=.true., _RC)
             call MAPL_SunGetSolarConstant(clock, trim(SolCycFileName), &
-                 SC, MG, SB, PersistSolar=PersistSolar, __RC__)
+                 SC, MG, SB, PersistSolar=PersistSolar, _RC)
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             ! write(MSGSTRING,'(A,I4,A,I3,A,F8.3,A,F8.6,A,F9.4)') &                                          !
@@ -3154,11 +3148,11 @@ contains
             !       print *                                                                                  !
             !    endif                                                                                       !
             ! endif                                                                                          !
-            ! call ESMF_LogWrite (MSGSTRING, ESMF_LOGMSG_INFO, __RC__)                                       !
+            ! call ESMF_LogWrite (MSGSTRING, ESMF_LOGMSG_INFO, _RC)                                       !
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
          else
-            call MAPL_SunGetSolarConstant(clock, trim(SolCycFileName), SC, HK=HK, __RC__)
+            call MAPL_SunGetSolarConstant(clock, trim(SolCycFileName), SC, HK=HK, _RC)
 
             HK_UV_TEMP = HK(:5)
 
@@ -3169,7 +3163,7 @@ contains
 
       else if (SC < 0.) then
 
-         call MAPL_SunGetSolarConstant(currentTime, SC, HK, __RC__)
+         call MAPL_SunGetSolarConstant(currentTime, SC, HK, _RC)
 
          HK_UV_TEMP = HK(:5)
 
@@ -3187,7 +3181,7 @@ contains
                print *
             end if
          end if
-         call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, __RC__)
+         call ESMF_LogWrite(MSGSTRING, ESMF_LOGMSG_INFO, _RC)
 
       else
          HK_UV_TEMP = HK_UV_OLD
@@ -3195,10 +3189,9 @@ contains
       end if
 
       ! Determine the model level separating high-middle and low-middle clouds
-      !-----------------------------------------------------------------------
 
       ! Use the reference pressures to separate high, middle, and low clouds.
-      call MAPL_GetPointer(import, PREF, 'PREF', __RC__)
+      call MAPL_GetPointer(import, PREF, 'PREF', _RC)
 
       _ASSERT(PRS_MID_HIGH > PREF(1), 'mid-high pressure band boundary too high!')
       _ASSERT(PRS_LOW_MID > PRS_MID_HIGH, 'pressure band misordering!')
@@ -3237,82 +3230,81 @@ contains
       ! because GC needs this info to know when to set the alarm, last or first
       ! step of interval. Right now it is always the last, which is only correct
       ! for called_last=1.
-      !---------------------------
 
-      call MAPL_GetResource(MAPL, CalledLast, 'CALLED_LAST:', default=1, __RC__)
+      call MAPL_GetResource(MAPL, CalledLast, 'CALLED_LAST:', default=1, _RC)
       UPDATE_FIRST = CalledLast /= 0
 
-      call MAPL_TimerOff(MAPL, "PRELIMS", __RC__)
+      call MAPL_TimerOff(MAPL, "PRELIMS", _RC)
 
       ! Update the Sun position and weight the export variables
       ! -------------------------------------------------------
       if (UPDATE_FIRST) then
-         call MAPL_TimerOn(MAPL, "UPDATE", __RC__)
-         call UPDATE_EXPORT(IM, JM, LM, __RC__)
-         call MAPL_TimerOff(MAPL, "UPDATE", __RC__)
+         call MAPL_TimerOn(MAPL, "UPDATE", _RC)
+         call UPDATE_EXPORT(IM, JM, LM, _RC)
+         call MAPL_TimerOff(MAPL, "UPDATE", _RC)
       end if
 
       ! Periodically, refresh the internal state with a full solar calc
       ! ---------------------------------------------------------------
-      REFRESH_FLUXES = ESMF_AlarmIsRinging(alarm, __RC__)
+      REFRESH_FLUXES = ESMF_AlarmIsRinging(alarm, _RC)
 
       REFRESH: if (REFRESH_FLUXES) then
-         call MAPL_TimerOn(MAPL, "REFRESH", __RC__)
+         call MAPL_TimerOn(MAPL, "REFRESH", _RC)
 
-         call ESMF_AlarmRingerOff(alarm, __RC__)
-         call ESMF_ClockGet(clock, currTIME=currentTime, __RC__)
+         call ESMF_AlarmRingerOff(alarm, _RC)
+         call ESMF_ClockGet(clock, currTIME=currentTime, _RC)
 
          ! Beginning of REFRESH period is current time PLUS offset intDT
          ! -------------------------------------------------------------
          if (UPDATE_FIRST) then
             ! The UPDATE is already done, so the REFRESH interval should start one
             ! timestep beyond current time so it is consistent with the NEXT update.
-            call ESMF_ClockGet(clock, timeSTEP=intDT, __RC__)
+            call ESMF_ClockGet(clock, timeSTEP=intDT, _RC)
          else
             ! The UPDATE will occur after the REFRESH, so both update and refresh
             ! periods should begin at the current time.
-            call ESMF_TimeIntervalSet(intDT, s=0, __RC__)
+            call ESMF_TimeIntervalSet(intDT, s=0, _RC)
          end if
 
          ! Get optical properties of radiatively active aerosols
          ! -----------------------------------------------------
-         call MAPL_TimerOn(MAPL, "-AEROSOLS", __RC__)
-         call ESMF_StateGet(import, 'AERO', AERO, __RC__)
+         call MAPL_TimerOn(MAPL, "-AEROSOLS", _RC)
+         call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call ESMF_AttributeGet(AERO, &
               NAME='implements_aerosol_optics_method', &
-              value=implements_aerosol_optics, __RC__)
+              value=implements_aerosol_optics, _RC)
          if (implements_aerosol_optics) then
 
             ! set RH for aerosol optics
             call ESMF_AttributeGet(AERO, &
                  NAME='relative_humidity_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, __RC__)
+                 value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', __RC__)
-               call MAPL_GetPointer(import, AS_PTR_Q, 'QV', __RC__)
-               call MAPL_GetPointer(import, AS_PTR_T, 'T', __RC__)
-               allocate(AS_ARR_RH(IM, JM, LM), AS_ARR_PL(IM, JM, LM), __STAT__)
+               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', _RC)
+               call MAPL_GetPointer(import, AS_PTR_Q, 'QV', _RC)
+               call MAPL_GetPointer(import, AS_PTR_T, 'T', _RC)
+               allocate(AS_ARR_RH(IM, JM, LM), AS_ARR_PL(IM, JM, LM), _STAT)
                AS_ARR_PL = 0.5 * (AS_PTR_PLE(:, :, 1:LM) + AS_PTR_PLE(:, :, 0:LM - 1))
                AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
+               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                AS_PTR_3D = AS_ARR_RH
-               deallocate(AS_ARR_RH, AS_ARR_PL, __STAT__)
+               deallocate(AS_ARR_RH, AS_ARR_PL, _STAT)
             end if
 
             ! set PLE for aerosol optics
             call ESMF_AttributeGet(AERO, &
                  NAME='air_pressure_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, __RC__)
+                 value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', __RC__)
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
+               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', _RC)
+               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                AS_PTR_3D = AS_PTR_PLE
             end if
 
             ! allocate memory for TOTAL aerosol ext, ssa and asy at all solar bands
             allocate(AEROSOL_EXT(IM, JM, LM, NUM_BANDS_SOLAR), &
                  AEROSOL_SSA(IM, JM, LM, NUM_BANDS_SOLAR), &
-                 AEROSOL_ASY(IM, JM, LM, NUM_BANDS_SOLAR), __STAT__)
+                 AEROSOL_ASY(IM, JM, LM, NUM_BANDS_SOLAR), _STAT)
 
             ! zero by default
             ! (in case aero provider cant provide some of them)
@@ -3324,48 +3316,48 @@ contains
             SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
                call ESMF_AttributeSet(AERO, &
                     NAME='band_for_aerosol_optics', &
-                    value=(BANDS_SOLAR_OFFSET + band), __RC__)
+                    value=(BANDS_SOLAR_OFFSET + band), _RC)
 
                ! execute the aero provider's optics method
                call MAPL_TimerOn(MAPL, "---AEROSOL_OPTICS")
                call ESMF_MethodExecute(AERO, &
                     Label="run_aerosol_optics", &
                     userRC=AS_STATUS, RC=status)
-               VERIFY_(AS_STATUS)
-               VERIFY_(status)
+               _VERIFY(AS_STATUS)
+               _VERIFY(status)
                call MAPL_TimerOff(MAPL, "---AEROSOL_OPTICS")
 
                ! EXT from AERO_PROVIDER
                call ESMF_AttributeGet(AERO, &
                     NAME='extinction_in_air_due_to_ambient_aerosol', &
-                    value=AS_FIELD_NAME, __RC__)
+                    value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
+                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_EXT(:, :, :, band) = MAX(AS_PTR_3D, 0.0)
                end if
 
                ! SSA from AERO_PROVIDER (actually EXT * SSA)
                call ESMF_AttributeGet(AERO, &
                     NAME='single_scattering_albedo_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, __RC__)
+                    value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
+                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_SSA(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), SSA_MAX)
                end if
 
                ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
                call ESMF_AttributeGet(AERO, &
                     NAME='asymmetry_parameter_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, __RC__)
+                    value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), __RC__)
+                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_ASY(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), ASY_MAX)
                end if
 
             end do SOLAR_BANDS
 
          end if ! implements_aerosol_optics
-         call MAPL_TimerOff(MAPL, "-AEROSOLS", __RC__)
+         call MAPL_TimerOff(MAPL, "-AEROSOLS", _RC)
 
          ! Optional without-aerosol diagnostics
          ! ------------------------------------
@@ -3384,7 +3376,7 @@ contains
          string_vec_iter = string_vec%begin()
          do while (string_vec_iter /= string_vec%end())
             string_pointer => string_vec_iter%get()
-            call MAPL_GetPointer(export, ptr3d, string_pointer, __RC__)
+            call MAPL_GetPointer(export, ptr3d, string_pointer, _RC)
             do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
             call string_vec_iter%next()
          end do
@@ -3408,7 +3400,7 @@ contains
 
             do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_GetPointer(export, ptr2d, string_pointer, __RC__)
+               call MAPL_GetPointer(export, ptr2d, string_pointer, _RC)
                do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -3424,7 +3416,7 @@ contains
                  currTIME=currentTime + intDT, &
                  MaxPasses=MaxPasses, &
                  LoadBalance=LoadBalance, &
-                 __RC__)
+                 _RC)
          else
 
             ! otherwise, zero the no-aerosol internals
@@ -3438,7 +3430,7 @@ contains
             string_vec_iter = string_vec%begin()
             do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_GetPointer(internal, ptr3d, string_pointer, __RC__)
+               call MAPL_GetPointer(internal, ptr3d, string_pointer, _RC)
                ptr3d = 0.
                call string_vec_iter%next()
             end do
@@ -3452,29 +3444,29 @@ contains
               currTIME=currentTime + intDT,&
               MaxPasses=MaxPasses, &
               LoadBalance=LoadBalance, &
-              __RC__)
+              _RC)
 
          ! Clean up aerosol optical properties
          ! -----------------------------------
          if (implements_aerosol_optics) then
-            deallocate(AEROSOL_EXT, __STAT__)
-            deallocate(AEROSOL_SSA, __STAT__)
-            deallocate(AEROSOL_ASY, __STAT__)
+            deallocate(AEROSOL_EXT, _STAT)
+            deallocate(AEROSOL_SSA, _STAT)
+            deallocate(AEROSOL_ASY, _STAT)
          end if
 
-         call MAPL_TimerOff(MAPL, "REFRESH", __RC__)
+         call MAPL_TimerOff(MAPL, "REFRESH", _RC)
       end if REFRESH
 
       ! Update the Sun position and weight the export variables
       ! -------------------------------------------------------
       if (.not. UPDATE_FIRST) then
-         call MAPL_TimerOn(MAPL, "UPDATE", __RC__)
-         call UPDATE_EXPORT(IM, JM, LM, __RC__)
-         call MAPL_TimerOff(MAPL, "UPDATE", __RC__)
+         call MAPL_TimerOn(MAPL, "UPDATE", _RC)
+         call UPDATE_EXPORT(IM, JM, LM, _RC)
+         call MAPL_TimerOff(MAPL, "UPDATE", _RC)
       end if
 
-      call MAPL_TimerOff(MAPL, "TOTAL", __RC__)
-      RETURN_(ESMF_SUCCESS)
+      call MAPL_TimerOff(MAPL, "TOTAL", _RC)
+      _RETURN(ESMF_SUCCESS)
 
    contains
 
@@ -3817,7 +3809,6 @@ contains
          call MAPL_TimerOn(MAPL, "-MISC")
 
          ! Get the average insolation for the next alarm "REFRESH" interval
-         !-----------------------------------------------------------------
          ! @ In standard (legacy) mode, this longer REFRESH interval forms the basis of
          ! a normalized full solar calculation that is simply scaled at each hearbeat (in
          ! UPDATE_EXPORTS) by the TOA projected solar input. This scaled update is extremely
@@ -3826,7 +3817,7 @@ contains
          ! changes caused by variations in surface albedo and atmospheric properties within
          ! the REFRESH period.
 
-         call ESMF_AlarmGet(alarm, RINGINTERVAL=TINT, __RC__)
+         call ESMF_AlarmGet(alarm, RINGINTERVAL=TINT, _RC)
          call MAPL_SunGetInsolation( &
               LONS, LATS, &
               orbit, ZTH, SLR, &
@@ -3834,7 +3825,7 @@ contains
               currTIME=currTIME, &
               TIME=SUNFLAG, &
               DIST=DIST, &
-              __RC__)
+              _RC)
 
          ! convert SLR to an ABSOLUTE downward flux [W/m2] for normalization purposes later
          ! (SLR from MAPL_SunGetInsolation() already contains the DIST and ZTH effects)
@@ -3842,7 +3833,7 @@ contains
 
          ! prepare global gridcolumn indicies needed by random number generators
          ! get indicies of local rectangular grid
-         call MAPL_GridGet(esmfgrid, globalCellCountPerDim=Gdims, __RC__)
+         call MAPL_GridGet(esmfgrid, globalCellCountPerDim=Gdims, _RC)
          IM_World = Gdims(1)
          JM_World = Gdims(2)
          call MAPL_GridGetInterior(esmfgrid, iBeg, iEnd, jBeg, jEnd)
@@ -3856,18 +3847,15 @@ contains
          call MAPL_TimerOff(MAPL, "-MISC")
 
          !  Load balancing by packing the lit points and sharing work with night regions
-         !------------------------------------------------------------------------------
 
          call MAPL_TimerOn(MAPL, "-BALANCE")
 
          !  Identify lit soundings with the daytime mask
-         !----------------------------------------------
 
          !  The load balancer does not work if there are no lit points. This is only
          !  important model-wise with the single-column model. Note we must protect
          !  ZTH since in solar, we divide by ZTH and, thus, we will get a divide-by-
          !  zero if not protected.
-         !--------------------------------------------------------------------------
 
          if (adjustl(DYCORE) == "DATMO") ZTH = MAX(.0001, ZTH)
 
@@ -3884,17 +3872,16 @@ contains
          !  done "in place", the in-out buffer must be large enough to accomodate the data
          !  held at each stage (pass) of the balancing. This can be larger than the max of
          !  the initial and final sizes; so the required size is passed back in BufLen.
-         !------------------------------------------------------------------------------------
 
-         call ESMF_VMGetCurrent(VM, __RC__)
-         call ESMF_VMGet(VM, mpiCommunicator=COMM, __RC__)
+         call ESMF_VMGetCurrent(VM, _RC)
+         call ESMF_VMGet(VM, mpiCommunicator=COMM, _RC)
 
          call MAPL_TimerOn(MAPL, "--CREATE")
 
          if (LoadBalance) then
             call MAPL_BalanceCreate( &
                  OrgLen=NumLit, COMM=COMM, MaxPasses=MaxPasses, Handle=SolarBalanceHandle, &
-                 BalLen=Num2do, BufLen=NumMax, __RC__)
+                 BalLen=Num2do, BufLen=NumMax, _RC)
          else
             Num2do = NumLit
             NumMax = NumLit
@@ -3907,7 +3894,6 @@ contains
          !  component needs the LATS, SLR and ZTH from MAPL and the global grid-
          !  column indicies Ig and Jg.
          !    The Outputs and InOuts are all INTERNAL variables.
-         !--------------------------------------------------------------
 
          NumImp = size(ImportSpec)
          NumInt = size(InternalSpec)
@@ -3921,7 +3907,7 @@ contains
               SlicesInp(NumInp), NamesInp(NumInp), &
               SlicesInt(NumInt), NamesInt(NumInt), &
               IntInOut(NumInt), rgDim(NumInt), ugDim(NumInt), &
-              __STAT__)
+              _STAT)
 
          HorzDims = (/IM, JM/)
 
@@ -3944,7 +3930,7 @@ contains
             ! Get names and dimensions of Inputs
             if (K <= NumImp) then
                call MAPL_VarSpecGet(ImportSpec(K), &
-                    DIMS=DIMS, SHORT_NAME=NamesInp(K), __RC__)
+                    DIMS=DIMS, SHORT_NAME=NamesInp(K), _RC)
             else
                DIMS = MAPL_DimsHorzOnly
                if (K == NumImp + 1) then
@@ -3980,7 +3966,7 @@ contains
                select case (DIMS)
                case (MAPL_DimsHorzVert)
                   ! We currently assume this case is 3D
-                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), __RC__)
+                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), _RC)
                   SlicesInp(K) = size(ptr3, 3)
 
                case (MAPL_DimsHorzOnly)
@@ -3998,7 +3984,7 @@ contains
          ! and balanced data on the local PE for Input vars. The inner
          ! dimension of its 2D representation must be NumMax.
          ! -------------------------------------------------------------
-         allocate(BufInp(NumMax * sum(SlicesInp)), __STAT__)
+         allocate(BufInp(NumMax * sum(SlicesInp)), _STAT)
          BufInp = MAPL_UNDEF
 
          ! Loop over imports, packing into the buffer that will be
@@ -4018,7 +4004,7 @@ contains
 
                allocate(BUF_AEROSOL(size(AEROSOL_EXT, 1), &
                     size(AEROSOL_EXT, 2), &
-                    size(AEROSOL_EXT, 3)), __STAT__)
+                    size(AEROSOL_EXT, 3)), _STAT)
 
                ! pack extinctions
                BUF_AEROSOL = MAPL_UNDEF
@@ -4052,14 +4038,14 @@ contains
                ptr3(1:NumMax, 1:LM, 1:NUM_BANDS_SOLAR) => BufInp(i1:iN)
                BUFIMP_AEROSOL_ASY => ptr3(1:Num2do, :, :)
 
-               deallocate(BUF_AEROSOL, __STAT__)
+               deallocate(BUF_AEROSOL, _STAT)
 
             else ! Non-aerosol imports
 
                if (SlicesInp(K) /= 1) then
 
                   ! pack 3D imports
-                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), __RC__)
+                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), _RC)
                   call PackIt(BufInp(i1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   iN = i1 + NumMax * size(ptr3, 3) - 1
 
@@ -4078,7 +4064,7 @@ contains
                      call PackIt(BufInp(i1), ZTH, daytime, NumMax, HorzDims, 1)
                   else
                      ! pack 2D imports
-                     call ESMFL_StateGetPointerToData(import, ptr2, NamesInp(K), __RC__)
+                     call ESMFL_StateGetPointerToData(import, ptr2, NamesInp(K), _RC)
                      call PackIt(BufInp(i1), ptr2, daytime, NumMax, HorzDims, 1)
                   end if
                   iN = i1 + NumMax - 1
@@ -4088,7 +4074,6 @@ contains
                ! Handles for the working input (Import) variables.
                ! These use Fortran 2003 syntax for reshaping a 1D
                ! vector into a higher rank array.
-               !--------------------------------------------------
                ptr2(1:NumMax, 1:SlicesInp(K)) => BufInp(i1:iN)
 
                select case (NamesInp(K))
@@ -4157,7 +4142,7 @@ contains
 
          call MAPL_TimerOn(MAPL, "--DISTRIBUTE")
          if (LoadBalance) call MAPL_BalanceWork(BufInp, NumMax, Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
-              __RC__)
+              _RC)
          call MAPL_TimerOff(MAPL, "--DISTRIBUTE")
 
          ! @@@@@@@@@@@@@@@@@@@@@@
@@ -4171,7 +4156,7 @@ contains
 
             ! InOut or Out?
             call MAPL_VarSpecGet(InternalSpec(K), &
-                 SHORT_NAME=SHORT_NAME, DIMS=DIMS, UNGRIDDED_DIMS=ugdims, __RC__)
+                 SHORT_NAME=SHORT_NAME, DIMS=DIMS, UNGRIDDED_DIMS=ugdims, _RC)
             ! later FAR variables will be InOut ... for now there are no InOut vars
             IntInOut(K) = .false.
 
@@ -4229,7 +4214,7 @@ contains
                ugDim(K) = ugdims(1)
                select case (DIMS)
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
                   SlicesInt(K) = size(ptr4, 3) * ugDim(K)
                case (MAPL_DimsHorzOnly)
                   SlicesInt(K) = ugDim(K)
@@ -4241,7 +4226,7 @@ contains
                ugDim(K) = 0
                select case (DIMS)
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
                   SlicesInt(K) = size(ptr3, 3)
                case (MAPL_DimsHorzOnly)
                   SlicesInt(K) = 1
@@ -4255,9 +4240,9 @@ contains
          ! Allocate buffers with enough space to hold both the unbalanced
          ! and balanced data on the local PE for InOut/Out vars
          ! --------------------------------------------------------------
-         allocate(BufInOut(NumMax * sum(SlicesInt, MASK=IntInOut)), __STAT__)
+         allocate(BufInOut(NumMax * sum(SlicesInt, MASK=IntInOut)), _STAT)
          BufInOut = MAPL_UNDEF
-         allocate(BufOut(NumMax * sum(SlicesInt, MASK=.not. IntInOut)), __STAT__)
+         allocate(BufOut(NumMax * sum(SlicesInt, MASK=.not. IntInOut)), _STAT)
          BufOut = MAPL_UNDEF
 
          ! Loop over Internals (InOuts/Outs), packing them into buffers
@@ -4283,7 +4268,7 @@ contains
 
                select case (rgDim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
                   do J = 1, ugDim(K)
                      !pmn compiler       call
                      !PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
@@ -4298,7 +4283,7 @@ contains
                   piN = pi1 + NumMax * size(ptr4, 3) * ugDim(K) - 1
                   ptr3(1:NumMax, 1:size(ptr4, 3), 1:ugDim(K)) => buf(pi1:piN)
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
                   if (IntInOut(K)) then
                      call PackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K))
@@ -4313,7 +4298,7 @@ contains
 
                select case (rgDim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                   if (IntInOut(K)) then
                      call PackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
@@ -4322,7 +4307,7 @@ contains
                   end if
                   piN = pi1 + NumMax * size(ptr3, 3) - 1
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
                   if (IntInOut(K)) then
                      call PackIt(BufInOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
@@ -4725,11 +4710,10 @@ contains
          end do INT_VARS_2
 
          ! Load balance the InOuts for Input
-         !----------------------------------
          call MAPL_TimerOn(MAPL, "--DISTRIBUTE")
          if (size(BufInOut) > 0) then
             if (LoadBalance) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Distribute, Handle=&
-                 SolarBalanceHandle, __RC__)
+                 SolarBalanceHandle, _RC)
          end if
          call MAPL_TimerOff(MAPL, "--DISTRIBUTE")
 
@@ -4739,7 +4723,6 @@ contains
          call MAPL_TimerOff(MAPL, "-BALANCE")
 
          ! Do shortwave calculations on a list of soundings
-         !-------------------------------------------------
 
          call MAPL_TimerOn(MAPL, "-MISC")
 
@@ -4756,26 +4739,25 @@ contains
          end if
 
          ! Option to force binary clouds for SW
-         call MAPL_GetResource(MAPL, ibinary, "RADSW_BINARY_CLOUDS:", default=0, __RC__)
+         call MAPL_GetResource(MAPL, ibinary, "RADSW_BINARY_CLOUDS:", default=0, _RC)
          if (ibinary /= 0) where (CL > 0.) CL = 1.
 
          ! Prepare auxilliary variables
          ! ----------------------------
 
-         allocate(RH(NCOL, LM), __STAT__)
-         allocate(PL(NCOL, LM), __STAT__)
-         allocate(PLhPa(size(PLE, 1), size(PLE, 2)), __STAT__)
+         allocate(RH(NCOL, LM), _STAT)
+         allocate(PL(NCOL, LM), _STAT)
+         allocate(PLhPa(size(PLE, 1), size(PLE, 2)), _STAT)
 
          PL = 0.5 * (PLE(:, :UBOUND(PLE, 2) - 1) + PLE(:, LBOUND(PLE, 2) + 1:))
          RH = Q / MAPL_EQSAT(T, PL=PL)
          PLhPa = PLE * 0.01
 
          ! Water amounts and effective radii are in arrays indexed by species
-         !-------------------------------------------------------------------
 
-         allocate(QQ3(NCOL, LM, 5), __STAT__)
-         allocate(RR3(NCOL, LM, 5), __STAT__)
-         allocate(ILWT(NCOL), __STAT__)
+         allocate(QQ3(NCOL, LM, 5), _STAT)
+         allocate(RR3(NCOL, LM, 5), _STAT)
+         allocate(ILWT(NCOL), _STAT)
 
          ! In-cloud water contents
          QQ3(:, :, 1) = QI
@@ -4797,9 +4779,8 @@ contains
          where (RG == MAPL_UNDEF) RR3(:, :, 5) = 50.
 
          ! Convert odd oxygen, which is the model prognostic, to ozone
-         !------------------------------------------------------------
 
-         allocate(O3(NCOL, LM), __STAT__)
+         allocate(O3(NCOL, LM), _STAT)
 
          O3 = OX
          where (PL < 100.)
@@ -4807,7 +4788,6 @@ contains
          end where
 
          ! SORAD expects non-negative ozone fraction by MASS
-         !--------------------------------------------------
 
          O3 = O3 * (MAPL_O3MW / MAPL_AIRMW)
          O3 = MAX(O3, 0.00)
@@ -4816,9 +4796,9 @@ contains
          ! Begin aerosol code
          ! ------------------
 
-         allocate(taua(NCOL, LM, NUM_BANDS_SOLAR), __STAT__)
-         allocate(ssaa(NCOL, LM, NUM_BANDS_SOLAR), __STAT__)
-         allocate(asya(NCOL, LM, NUM_BANDS_SOLAR), __STAT__)
+         allocate(taua(NCOL, LM, NUM_BANDS_SOLAR), _STAT)
+         allocate(ssaa(NCOL, LM, NUM_BANDS_SOLAR), _STAT)
+         allocate(asya(NCOL, LM, NUM_BANDS_SOLAR), _STAT)
 
          ! Zero out aerosol arrays.
          ! If num_aero_vars == 0, these zeroes are used inside code.
@@ -4852,7 +4832,7 @@ contains
                  FSWBAND, &
                  SOLAR_TO_OBIO .and. include_aerosols, &
                  DRBAND, DFBAND, &
-                 __RC__)
+                 _RC)
 
          else if (USE_RRTMGP) then
 
@@ -4860,17 +4840,17 @@ contains
             ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
-            call MAPL_TimerOn(MAPL, "-RRTMGP", __RC__)
+            call MAPL_TimerOn(MAPL, "-RRTMGP", _RC)
 
             ! absorbing gas names
             error_msg = gas_concs%init([character(3) :: &
                  'h2o', 'co2', 'o3', 'n2o', 'co', 'ch4', 'o2', 'n2'])
 TEST_(error_msg)
 
-            allocate(Q_R(NCOL, LM), __STAT__)
-            allocate(O3_R(NCOL, LM), __STAT__)
-            allocate(N2O_R(NCOL, LM), __STAT__)
-            allocate(CH4_R(NCOL, LM), __STAT__)
+            allocate(Q_R(NCOL, LM), _STAT)
+            allocate(O3_R(NCOL, LM), _STAT)
+            allocate(N2O_R(NCOL, LM), _STAT)
+            allocate(CH4_R(NCOL, LM), _STAT)
 
             Q_R = Q / (1. - Q) * (MAPL_AIRMW / MAPL_H2OMW)
             O3_R = O3 * (MAPL_AIRMW / MAPL_O3MW)
@@ -4896,25 +4876,25 @@ TEST_(gas_concs%set_vmr('o3', real(O3_R, kind=wp)))
 TEST_(gas_concs%set_vmr('n2o', real(N2O_R, kind=wp)))
 TEST_(gas_concs%set_vmr('ch4', real(CH4_R, kind=wp)))
 
-            deallocate(Q_R, __STAT__)
-            deallocate(O3_R, __STAT__)
-            deallocate(N2O_R, __STAT__)
-            deallocate(CH4_R, __STAT__)
+            deallocate(Q_R, _STAT)
+            deallocate(O3_R, _STAT)
+            deallocate(N2O_R, _STAT)
+            deallocate(CH4_R, _STAT)
 
             ! access RRTMGP internal state from the GC
             call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-            VERIFY_(status)
+            _VERIFY(status)
             rrtmgp_state => wrap%ptr
 
             ! initialize k-distribution if not already done
             call MAPL_GetResource( &
                  MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
-                 default='rrtmgp-gas-sw-g112.nc', __RC__)
+                 default='rrtmgp-gas-sw-g112.nc', _RC)
             if (.not. rrtmgp_state%initialized) then
                ! gas_concs needed only to access required gas names
-               call MAPL_TimerOn(MAPL, "--RRTMGP_IO_GAS", __RC__)
+               call MAPL_TimerOn(MAPL, "--RRTMGP_IO_GAS", _RC)
                call load_and_init(rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
-               call MAPL_TimerOff(MAPL, "--RRTMGP_IO_GAS", __RC__)
+               call MAPL_TimerOff(MAPL, "--RRTMGP_IO_GAS", _RC)
                if (.not. rrtmgp_state%k_dist%source_is_external()) then
 TEST_('RRTMGP-SW: does not seem to be SW')
                end if
@@ -4953,18 +4933,18 @@ TEST_(error_msg)
             ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
             ! gpoint limits for each band
-            allocate(band_lims_gpt(2, nbnd), __STAT__)
+            allocate(band_lims_gpt(2, nbnd), _STAT)
             band_lims_gpt = k_dist%get_band_lims_gpoint()
 
             ! dummy array (see later)
-            allocate(dummy_wp(NCOL, LM), source=0._wp, __STAT__)
+            allocate(dummy_wp(NCOL, LM), source=0._wp, _STAT)
 
             ! allocate input arrays
-            allocate(tsi(NCOL), mu0(NCOL), __STAT__)
-            allocate(sfc_alb_dir(nbnd, NCOL), sfc_alb_dif(nbnd, NCOL), __STAT__)
-            allocate(p_lay(NCOL, LM), t_lay(NCOL, LM), dp_wp(NCOL, LM), __STAT__)
-            allocate(dzmid(NCOL, LM - 1), __STAT__)
-            allocate(p_lev(NCOL, LM + 1), __STAT__)
+            allocate(tsi(NCOL), mu0(NCOL), _STAT)
+            allocate(sfc_alb_dir(nbnd, NCOL), sfc_alb_dif(nbnd, NCOL), _STAT)
+            allocate(p_lay(NCOL, LM), t_lay(NCOL, LM), dp_wp(NCOL, LM), _STAT)
+            allocate(dzmid(NCOL, LM - 1), _STAT)
+            allocate(p_lev(NCOL, LM + 1), _STAT)
 
             ! load input arrays ...
 
@@ -5041,21 +5021,21 @@ TEST_(error_msg)
             ! pmn: note that the dzmid calculation depends on the t_lev. Though t_lev is a temporary here, it
             ! is an important variable in the LW, where its calculation must occur after the t_lay KLUGE. So,
             ! for consistency with the LW, this t_lev and dzmid calculation is placed after the t_lay KLUGE.
-            allocate(t_lev(NCOL), __STAT__)
+            allocate(t_lev(NCOL), _STAT)
             do K = 1, LM - 1
                ! t_lev are interior interface temperatures at level k+1
                t_lev = (t_lay(:, K) * dp_wp(:, K + 1) + t_lay(:, K + 1) * dp_wp(:, K)) / (dp_wp(:, K + 1) + dp_wp(:, K))
                dzmid(:, K) = t_lev * real(MAPL_RGAS / MAPL_GRAV, kind=wp) * (p_lay(:, K + 1) - p_lay(:, K)) &
                     / p_lev(:, K + 1)
             end do
-            deallocate(t_lev, __STAT__)
+            deallocate(t_lev, _STAT)
 
             ! allocation of output arrays
-            allocate(flux_up_clrsky(NCOL, LM + 1), flux_net_clrsky(NCOL, LM + 1), __STAT__)
-            allocate(flux_up_allsky(NCOL, LM + 1), flux_net_allsky(NCOL, LM + 1), __STAT__)
+            allocate(flux_up_clrsky(NCOL, LM + 1), flux_net_clrsky(NCOL, LM + 1), _STAT)
+            allocate(flux_up_allsky(NCOL, LM + 1), flux_net_allsky(NCOL, LM + 1), _STAT)
             allocate(bnd_flux_dn_allsky(NCOL, LM + 1, nbnd), &
                  bnd_flux_net_allsky(NCOL, LM + 1, nbnd), &
-                 bnd_flux_dir_allsky(NCOL, LM + 1, nbnd), __STAT__)
+                 bnd_flux_dir_allsky(NCOL, LM + 1, nbnd), _STAT)
 
             ! =====================================================================================
             ! IMPORTANT: Specify the type (#streams) of the SW RT calculations in optical_props
@@ -5082,11 +5062,11 @@ TEST_(error_msg)
             ! cloud optical properties from cloud physical properties
             call MAPL_GetResource( &
                  MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_SW:", &
-                 default='rrtmgp-clouds-sw.nc', __RC__)
+                 default='rrtmgp-clouds-sw.nc', _RC)
             call MAPL_GetResource( &
                  MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
-                 default='LUT', __RC__)
-            call MAPL_TimerOn(MAPL, "--RRTMGP_IO_CLOUDS", __RC__)
+                 default='LUT', _RC)
+            call MAPL_TimerOn(MAPL, "--RRTMGP_IO_CLOUDS", _RC)
             if (trim(cloud_optics_type) == 'LUT') then
                call load_cld_lutcoeff(cloud_optics, cloud_optics_file)
             elseif (trim(cloud_optics_type) == 'PADE') then
@@ -5094,29 +5074,29 @@ TEST_(error_msg)
             else
 TEST_('unknown cloud_optics_type: ' // trim(cloud_optics_file))
             end if
-            call MAPL_TimerOff(MAPL, "--RRTMGP_IO_CLOUDS", __RC__)
+            call MAPL_TimerOff(MAPL, "--RRTMGP_IO_CLOUDS", _RC)
 
             ! ice surface roughness category for Yang (2013) ice optics
             ! icergh: 1 = none, 2 = medium, 3 = high
             call MAPL_GetResource( &
                  MAPL, icergh, "RRTMGP_ICE_ROUGHNESS_SW:", &
-                 default=2, __RC__)
+                 default=2, _RC)
 TEST_(cloud_optics%set_ice_roughness(icergh))
 
             ! delta-scaling if of course applied by default
             ! ... you can turn it off for debugging purposes
             call MAPL_GetResource( &
                  MAPL, rrtmgp_delta_scale, Label='RRTMGP_DELTA_SCALE:', &
-                 default=.true., __RC__)
+                 default=.true., _RC)
             call MAPL_GetResource( &
                  MAPL, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
                  Label='RRTMGP_USE_RRTMG_ICEFLG3_LIKE_FORWICE:', &
-                 default=.true., __RC__)
+                 default=.true., _RC)
 
             ! read desired cloud overlap type
             call MAPL_GetResource( &
                  MAPL, cloud_overlap_type, "RRTMGP_CLOUD_OVERLAP_TYPE_SW:", &
-                 default='GEN_MAX_RAN_OVERLAP', __RC__)
+                 default='GEN_MAX_RAN_OVERLAP', _RC)
 
             ! GEN_MAX_RAN_OVERLAP uses correlation lengths
             !   and possibly inhomogeneous condensate
@@ -5128,10 +5108,10 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                cond_inhomo = condensate_inhomogeneous()
 
                ! Compute decorrelation length scales [m]
-               allocate(adl(NCOL), __STAT__)
+               allocate(adl(NCOL), _STAT)
                call correlation_length_cloud_fraction(NCOL, NCOL, DOY, ALAT, adl)
                if (cond_inhomo) then
-                  allocate(rdl(NCOL), __STAT__)
+                  allocate(rdl(NCOL), _STAT)
                   call correlation_length_condensate(NCOL, NCOL, DOY, ALAT, rdl)
                end if
 
@@ -5185,13 +5165,13 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! LM * ngpt <~ 132 * 256 = 33,792 < 2^16 = 65,536
             ! ===============================================================================
 
-            allocate(seeds(3), __STAT__) ! 2-word key plus word1 of counter
+            allocate(seeds(3), _STAT) ! 2-word key plus word1 of counter
 
             ! seed(1), the column part (word1) of key is set later
 
             ! get time part (word2) of key
-            call ESMF_TimeSet(ReferenceTime, YY=2000, mm=1, dd=1, __RC__)
-            call ESMF_AlarmGet(alarm, RINGINTERVAL=RefreshInterval, __RC__)
+            call ESMF_TimeSet(ReferenceTime, YY=2000, mm=1, dd=1, _RC)
+            call ESMF_AlarmGet(alarm, RINGINTERVAL=RefreshInterval, _RC)
             seeds(2) = int((currTIME - ReferenceTime) / RefreshInterval)
 
             ! for SW start at counter=65,536
@@ -5208,7 +5188,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             !-------------------------------------------------------!
 
             call MAPL_GetResource(MAPL, &
-                 rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", default=4, __RC__)
+                 rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", default=4, _RC)
             _ASSERT(rrtmgp_blockSize >= 1, 'bad RRTMGP_SW_BLOCKSIZE')
 
             ! Total number of blocks, including any final partial block.
@@ -5275,15 +5255,15 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                     FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
                     FORINTP, FORINHP, FORINMP, FORINLP, &
                #endif
-                    MAPL, __RC__)
+                    MAPL, _RC)
 
             end do ! loop over blocks
             !$OMP END PARALLEL DO
 
-            call MAPL_TimerOn(MAPL, "--RRTMGP_POST", __RC__)
+            call MAPL_TimerOn(MAPL, "--RRTMGP_POST", _RC)
 
             ! normalize by incoming solar radiation
-            allocate(flux_dn_top(NCOL), __STAT__)
+            allocate(flux_dn_top(NCOL), _STAT)
             flux_dn_top(:) = real(MAX(SLR1D, 1e-7), kind=wp)
             do K = 1, LM + 1
                flux_up_clrsky(:, K) = flux_up_clrsky(:, K) / flux_dn_top(:)
@@ -5300,7 +5280,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                   bnd_flux_dir_allsky(:, K, ib) = bnd_flux_dir_allsky(:, K, ib) / flux_dn_top(:)
                end do
             end do
-            deallocate(flux_dn_top, __STAT__)
+            deallocate(flux_dn_top, _STAT)
 
             ! load output arrays
             ! clear-sky fluxes
@@ -5365,26 +5345,26 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             PARF = PARF + 0.5 * real(bnd_flux_dn_allsky(:, LM + 1, 10) - bnd_flux_dir_allsky(:, LM + 1, 10))
 
             ! clean up
-            deallocate(band_lims_gpt, __STAT__)
-            deallocate(tsi, mu0, sfc_alb_dir, sfc_alb_dif, __STAT__)
-            deallocate(dummy_wp, p_lay, t_lay, p_lev, dp_wp, dzmid, __STAT__)
-            deallocate(flux_up_clrsky, flux_net_clrsky, __STAT__)
-            deallocate(flux_up_allsky, flux_net_allsky, __STAT__)
-            deallocate(bnd_flux_dn_allsky, bnd_flux_net_allsky, bnd_flux_dir_allsky, __STAT__)
-            deallocate(seeds, __STAT__)
+            deallocate(band_lims_gpt, _STAT)
+            deallocate(tsi, mu0, sfc_alb_dir, sfc_alb_dif, _STAT)
+            deallocate(dummy_wp, p_lay, t_lay, p_lev, dp_wp, dzmid, _STAT)
+            deallocate(flux_up_clrsky, flux_net_clrsky, _STAT)
+            deallocate(flux_up_allsky, flux_net_allsky, _STAT)
+            deallocate(bnd_flux_dn_allsky, bnd_flux_net_allsky, bnd_flux_dir_allsky, _STAT)
+            deallocate(seeds, _STAT)
             if (gen_mro) then
-               deallocate(adl, __STAT__)
+               deallocate(adl, _STAT)
                if (cond_inhomo) then
-                  deallocate(rdl, __STAT__)
+                  deallocate(rdl, _STAT)
                end if
             end if
             call cloud_optics%finalize()
             ! cloud_props_gpt/bnd, aer_props, optical_props are local to PROCESS_RRTMGP_BLOCK
             ! and are finalized automatically when that subroutine returns.
 
-            call MAPL_TimerOff(MAPL, "--RRTMGP_POST", __RC__)
+            call MAPL_TimerOff(MAPL, "--RRTMGP_POST", _RC)
 
-            call MAPL_TimerOff(MAPL, "-RRTMGP", __RC__)
+            call MAPL_TimerOff(MAPL, "-RRTMGP", _RC)
 
 #undef TEST_
 
@@ -5397,55 +5377,55 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! -------------------------------------------------------------------
 
             ! interface (between layer) variables
-            allocate(TLEV(NCOL, LM + 1), __STAT__)
-            allocate(TLEV_R(NCOL, LM + 1), __STAT__)
-            allocate(PLE_R(NCOL, LM + 1), __STAT__)
+            allocate(TLEV(NCOL, LM + 1), _STAT)
+            allocate(TLEV_R(NCOL, LM + 1), _STAT)
+            allocate(PLE_R(NCOL, LM + 1), _STAT)
             ! cloud physical properties
-            allocate(FCLD_R(NCOL, LM), __STAT__)
-            allocate(CLIQWP(NCOL, LM), __STAT__)
-            allocate(CICEWP(NCOL, LM), __STAT__)
-            allocate(RELIQ(NCOL, LM), __STAT__)
-            allocate(REICE(NCOL, LM), __STAT__)
+            allocate(FCLD_R(NCOL, LM), _STAT)
+            allocate(CLIQWP(NCOL, LM), _STAT)
+            allocate(CICEWP(NCOL, LM), _STAT)
+            allocate(RELIQ(NCOL, LM), _STAT)
+            allocate(REICE(NCOL, LM), _STAT)
             ! aerosol optical properties
-            allocate(TAUAER(NCOL, LM, NB_RRTMG), __STAT__)
-            allocate(SSAAER(NCOL, LM, NB_RRTMG), __STAT__)
-            allocate(ASMAER(NCOL, LM, NB_RRTMG), __STAT__)
+            allocate(TAUAER(NCOL, LM, NB_RRTMG), _STAT)
+            allocate(SSAAER(NCOL, LM, NB_RRTMG), _STAT)
+            allocate(ASMAER(NCOL, LM, NB_RRTMG), _STAT)
             ! layer variables
-            allocate(DPR(NCOL, LM), __STAT__)
-            allocate(PL_R(NCOL, LM), __STAT__)
-            allocate(ZL_R(NCOL, LM), __STAT__)
-            allocate(T_R(NCOL, LM), __STAT__)
-            allocate(Q_R(NCOL, LM), __STAT__)
-            allocate(O2_R(NCOL, LM), __STAT__)
-            allocate(O3_R(NCOL, LM), __STAT__)
-            allocate(CO2_R(NCOL, LM), __STAT__)
-            allocate(CH4_R(NCOL, LM), __STAT__)
+            allocate(DPR(NCOL, LM), _STAT)
+            allocate(PL_R(NCOL, LM), _STAT)
+            allocate(ZL_R(NCOL, LM), _STAT)
+            allocate(T_R(NCOL, LM), _STAT)
+            allocate(Q_R(NCOL, LM), _STAT)
+            allocate(O2_R(NCOL, LM), _STAT)
+            allocate(O3_R(NCOL, LM), _STAT)
+            allocate(CO2_R(NCOL, LM), _STAT)
+            allocate(CH4_R(NCOL, LM), _STAT)
             ! super-layer cloud fractions
-            allocate(CLEARCOUNTS(NCOL, 4), __STAT__)
+            allocate(CLEARCOUNTS(NCOL, 4), _STAT)
             ! output fluxes
-            allocate(SWUFLX(NCOL, LM + 1), __STAT__)
-            allocate(SWDFLX(NCOL, LM + 1), __STAT__)
-            allocate(SWUFLXC(NCOL, LM + 1), __STAT__)
-            allocate(SWDFLXC(NCOL, LM + 1), __STAT__)
+            allocate(SWUFLX(NCOL, LM + 1), _STAT)
+            allocate(SWDFLX(NCOL, LM + 1), _STAT)
+            allocate(SWUFLXC(NCOL, LM + 1), _STAT)
+            allocate(SWDFLXC(NCOL, LM + 1), _STAT)
             ! un-flipped outputs
-            allocate(SWUFLXR(NCOL, LM + 1), __STAT__)
-            allocate(SWDFLXR(NCOL, LM + 1), __STAT__)
-            allocate(SWUFLXCR(NCOL, LM + 1), __STAT__)
-            allocate(SWDFLXCR(NCOL, LM + 1), __STAT__)
+            allocate(SWUFLXR(NCOL, LM + 1), _STAT)
+            allocate(SWDFLXR(NCOL, LM + 1), _STAT)
+            allocate(SWUFLXCR(NCOL, LM + 1), _STAT)
+            allocate(SWDFLXCR(NCOL, LM + 1), _STAT)
 
             ! Set flags related to cloud properties (see RRTMG_SW)
             ! ----------------------------------------------------
-            call MAPL_GetResource(MAPL, ICEFLGSW, 'RRTMG_ICEFLG:', default=3, __RC__)
-            call MAPL_GetResource(MAPL, LIQFLGSW, 'RRTMG_LIQFLG:', default=1, __RC__)
+            call MAPL_GetResource(MAPL, ICEFLGSW, 'RRTMG_ICEFLG:', default=3, _RC)
+            call MAPL_GetResource(MAPL, LIQFLGSW, 'RRTMG_LIQFLG:', default=1, _RC)
 
             if (LM > 72) then
                call MAPL_GetResource(MAPL, USE_PRECIP_IN_RADIATION, 'RRTMGSW_USE_PRECIP_IN_RADIATION:', default=.true.&
                     &, RC=status)
-               VERIFY_(status)
+               _VERIFY(status)
             else
                call MAPL_GetResource(MAPL, USE_PRECIP_IN_RADIATION, 'RRTMGSW_USE_PRECIP_IN_RADIATION:', default=.false.&
                     , RC=status)
-               VERIFY_(status)
+               _VERIFY(status)
             end if
 
             ! Normalize aerosol inputs
@@ -5594,7 +5574,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_TimerOn(MAPL, "--RRTMG_RUN")
 
             ! partition size for columns (profiles) used to improve efficiency
-            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, __RC__)
+            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, _RC)
 
             ! various RRTMG configuration options ...
 
@@ -5607,7 +5587,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
             DYOFYR = DOY ! Day of year
 
-            call MAPL_GetResource(MAPL, ISOLVAR, 'ISOLVAR:', default=0, __RC__)
+            call MAPL_GetResource(MAPL, ISOLVAR, 'ISOLVAR:', default=0, _RC)
 
             ! ISOLVAR:
             ! Flag for solar variability method
@@ -5671,8 +5651,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
             else
 
-               call MAPL_GetResource(MAPL, INDSOLVAR(1), 'INDSOLVAR_1:', default=1.0, __RC__)
-               call MAPL_GetResource(MAPL, INDSOLVAR(2), 'INDSOLVAR_2:', default=1.0, __RC__)
+               call MAPL_GetResource(MAPL, INDSOLVAR(1), 'INDSOLVAR_1:', default=1.0, _RC)
+               call MAPL_GetResource(MAPL, INDSOLVAR(2), 'INDSOLVAR_2:', default=1.0, _RC)
 
             end if
 
@@ -5688,7 +5668,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! MAT: Note while we don't currently use SOLCYCFRAC, we set it to something
             !      to avoid an optional variable on GPUs
 
-            call MAPL_GetResource(MAPL, SOLCYCFRAC, 'SOLCYCFRAC:', default=1.0, __RC__)
+            call MAPL_GetResource(MAPL, SOLCYCFRAC, 'SOLCYCFRAC:', default=1.0, _RC)
 
             ! call RRTMG SW
             ! -------------
@@ -5750,7 +5730,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                  SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
                  band_output .and. include_aerosols, ISRBRGN, OSRBRGN, &
                  BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
-                 __RC__)
+                 _RC)
 
             call MAPL_TimerOff(MAPL, "--RRTMG_RUN")
             call MAPL_TimerOn(MAPL, "--RRTMG_FLIP")
@@ -5820,40 +5800,39 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             FSCU = SWUFLXCR
 
             ! Deallocate the working inputs
-            !------------------------------
-            deallocate(TLEV, __STAT__)
-            deallocate(TLEV_R, __STAT__)
-            deallocate(PLE_R, __STAT__)
-            deallocate(FCLD_R, __STAT__)
-            deallocate(CLIQWP, __STAT__)
-            deallocate(CICEWP, __STAT__)
-            deallocate(RELIQ, __STAT__)
-            deallocate(REICE, __STAT__)
+            deallocate(TLEV, _STAT)
+            deallocate(TLEV_R, _STAT)
+            deallocate(PLE_R, _STAT)
+            deallocate(FCLD_R, _STAT)
+            deallocate(CLIQWP, _STAT)
+            deallocate(CICEWP, _STAT)
+            deallocate(RELIQ, _STAT)
+            deallocate(REICE, _STAT)
 
-            deallocate(TAUAER, __STAT__)
-            deallocate(SSAAER, __STAT__)
-            deallocate(ASMAER, __STAT__)
-            deallocate(DPR, __STAT__)
-            deallocate(PL_R, __STAT__)
-            deallocate(ZL_R, __STAT__)
-            deallocate(T_R, __STAT__)
-            deallocate(Q_R, __STAT__)
-            deallocate(O2_R, __STAT__)
-            deallocate(O3_R, __STAT__)
-            deallocate(CO2_R, __STAT__)
-            deallocate(CH4_R, __STAT__)
+            deallocate(TAUAER, _STAT)
+            deallocate(SSAAER, _STAT)
+            deallocate(ASMAER, _STAT)
+            deallocate(DPR, _STAT)
+            deallocate(PL_R, _STAT)
+            deallocate(ZL_R, _STAT)
+            deallocate(T_R, _STAT)
+            deallocate(Q_R, _STAT)
+            deallocate(O2_R, _STAT)
+            deallocate(O3_R, _STAT)
+            deallocate(CO2_R, _STAT)
+            deallocate(CH4_R, _STAT)
 
-            deallocate(CLEARCOUNTS, __STAT__)
+            deallocate(CLEARCOUNTS, _STAT)
 
-            deallocate(SWUFLX, __STAT__)
-            deallocate(SWDFLX, __STAT__)
-            deallocate(SWUFLXC, __STAT__)
-            deallocate(SWDFLXC, __STAT__)
+            deallocate(SWUFLX, _STAT)
+            deallocate(SWDFLX, _STAT)
+            deallocate(SWUFLXC, _STAT)
+            deallocate(SWDFLXC, _STAT)
 
-            deallocate(SWUFLXR, __STAT__)
-            deallocate(SWDFLXR, __STAT__)
-            deallocate(SWUFLXCR, __STAT__)
-            deallocate(SWDFLXCR, __STAT__)
+            deallocate(SWUFLXR, _STAT)
+            deallocate(SWDFLXR, _STAT)
+            deallocate(SWUFLXCR, _STAT)
+            deallocate(SWDFLXCR, _STAT)
 
             call MAPL_TimerOff(MAPL, "-RRTMG")
 
@@ -5864,7 +5843,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          end if SCHEME
 
          ! Deallocate the working inputs
-         !------------------------------
 
          deallocate(PL, RH, PLhPa)
          deallocate(QQ3, RR3)
@@ -5873,21 +5851,19 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(taua, ssaa, asya)
 
          ! Complete load balancing by retrieving work done remotely
-         !---------------------------------------------------------
 
          call MAPL_TimerOn(MAPL, "-BALANCE")
 
          call MAPL_TimerOn(MAPL, "--RETRIEVE")
          if (LoadBalance) then
             if (size(BufOut) > 0) call MAPL_BalanceWork(BufOut, NumMax, Direction=MAPL_Retrieve, Handle=&
-                 SolarBalanceHandle, __RC__)
+                 SolarBalanceHandle, _RC)
             if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Retrieve, Handle=&
-                 SolarBalanceHandle, __RC__)
+                 SolarBalanceHandle, _RC)
          end if
          call MAPL_TimerOff(MAPL, "--RETRIEVE")
 
          ! Unpack the results. Fills "masked" (night) locations with default value from internal state
-         !--------------------------------------------------------------------------------------------
          ! resulting internals are then contiguous versions
          ! Note: InOut variables do not fill unmasked locations with a default,
          ! since the unmasked locations may contain potentially useful aged data.
@@ -5901,13 +5877,13 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                pi1 => i1InOut
             else
                pi1 => i1Out
-               call MAPL_VarSpecGet(InternalSpec(K), default=def, __RC__)
+               call MAPL_VarSpecGet(InternalSpec(K), default=def, _RC)
             end if
 
             if (ugDim(K) > 0) then
                select case (rgDim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      do J = 1, ugDim(K)
                         call UnPackIt(BufInOut(pi1 + (J - 1) * size(ptr4, 3) * NumMax), ptr4(:, :, :, J), &
@@ -5920,7 +5896,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                      end do
                   end if
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K))
                   else
@@ -5930,14 +5906,14 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             else
                select case (rgDim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   else
                      call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3), def)
                   end if
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), __RC__)
+                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
                   else
@@ -5950,17 +5926,17 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          end do INT_VARS_3
 
          ! clean up
-         deallocate(SlicesInp, NamesInp, __STAT__)
-         deallocate(SlicesInt, NamesInt, __STAT__)
-         deallocate(IntInOut, rgDim, ugDim, __STAT__)
-         deallocate(BufInp, BufInOut, BufOut, __STAT__)
+         deallocate(SlicesInp, NamesInp, _STAT)
+         deallocate(SlicesInt, NamesInt, _STAT)
+         deallocate(IntInOut, rgDim, ugDim, _STAT)
+         deallocate(BufInp, BufInOut, BufOut, _STAT)
          call MAPL_TimerOn(MAPL, "--DESTROY")
-         if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, __RC__)
+         if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, _RC)
          call MAPL_TimerOff(MAPL, "--DESTROY")
 
          call MAPL_TimerOff(MAPL, "-BALANCE")
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine SORADCORE
 
@@ -5993,7 +5969,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          integer :: status
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_GAS_OPTICS",_RC)
 
 TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
 
@@ -6004,9 +5980,9 @@ TEST_(gas_concs%get_subset(colS, ncols_block, gas_concs_block))
 TEST_(error_msg)
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_GAS_OPTICS",_RC)
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_gas_optics
 #undef TEST_
@@ -6032,7 +6008,7 @@ TEST_(error_msg)
          integer :: status
 
          if (.not. need_aer_optical_props) then
-            RETURN_(ESMF_SUCCESS)
+            _RETURN(ESMF_SUCCESS)
          end if
 
          select type (aer_props)
@@ -6075,7 +6051,7 @@ TEST_(error_msg)
 TEST_('aerosol optical properties hardwired 2-stream for now')
          end select
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_aer_optics
 #undef TEST_
@@ -6166,7 +6142,7 @@ TEST_('aerosol optical properties hardwired 2-stream for now')
          seeds(3) = 65536
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_CLOUD_OPTICS",_RC)
 
          ! Make band in-cloud optical props from cloud_optics and mean in-cloud cloud water paths.
          ! These can be scaled later to account for sub-gridscale condensate inhomogeneity.
@@ -6193,10 +6169,10 @@ TEST_(error_msg)
 TEST_(error_msg)
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_CLOUD_OPTICS",_RC)
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_MCICA",_RC)
 
          !!TODO: need to resolve diff between prob of max vs ran and correlation coeff in both paper and code
 
@@ -6316,9 +6292,9 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
          end if
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_MCICA",_RC)
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_cloud_optics_mcica
 #undef TEST_
@@ -6404,7 +6380,7 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
          integer :: status
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",_RC)
 
          if (include_aerosols) then
 
@@ -6734,9 +6710,9 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
          end if ! include_aerosols
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",_RC)
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_sprlyr_diags_predelta
 #undef TEST_
@@ -6778,7 +6754,7 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
          integer :: status
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_DELTA_SCALE",_RC)
 
          forwliq = 0.
          forwice = 0. ! default for no delta-scaling
@@ -6844,9 +6820,9 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
          end if
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_DELTA_SCALE",_RC)
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_delta_scale
 #undef TEST_
@@ -6932,7 +6908,7 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
          integer :: status
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_SPRLYR_DIAGS",_RC)
 
          if (include_aerosols) then
 
@@ -7253,9 +7229,9 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
          end if ! include_aerosols
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_SPRLYR_DIAGS",_RC)
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine compute_sprlyr_diags_postdelta
 #undef TEST_
@@ -7302,7 +7278,7 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
          integer :: status
 
          ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOn(MAPL,"--RRTMGP_RT",__RC__)
+         ! call MAPL_TimerOn(MAPL,"--RRTMGP_RT",_RC)
 
          ! scale to our tsi
          ! (both toa_flux and tsi are NORMAL to solar beam, [W/m2])
@@ -7335,7 +7311,7 @@ TEST_(cloud_props_gpt_liq%increment(optical_props))
 TEST_(error_msg)
 
          ! MAPL_TimerOff disabled inside OMP parallel region (not thread-safe)
-         ! call MAPL_TimerOff(MAPL,"--RRTMGP_RT",__RC__)
+         ! call MAPL_TimerOff(MAPL,"--RRTMGP_RT",_RC)
 
          return
       end subroutine compute_rte_sw
@@ -7496,31 +7472,31 @@ TEST_(error_msg)
          colE = colS + ncols_block - 1
 
          ! allocate per-block arrays
-         allocate(toa_flux(ncols_block, ngpt), __STAT__)
-         allocate(forwliq(ncols_block, LM, ngpt), __STAT__)
-         allocate(forwice(ncols_block, LM, ngpt), __STAT__)
+         allocate(toa_flux(ncols_block, ngpt), _STAT)
+         allocate(forwliq(ncols_block, LM, ngpt), _STAT)
+         allocate(forwice(ncols_block, LM, ngpt), _STAT)
          if (include_aerosols) &
-              allocate(CLEARCOUNTS(4, ncols_block), __STAT__)
+              allocate(CLEARCOUNTS(4, ncols_block), _STAT)
 
          ! instantiate optical_props with desired streams
-         allocate(ty_optical_props_2str :: optical_props, __STAT__) ! <-- choose 2-stream SW
+         allocate(ty_optical_props_2str :: optical_props, _STAT) ! <-- choose 2-stream SW
 TEST_(optical_props%init(k_dist))
 
          ! cloud optics: band-space and g-point allocatables (thread-private)
-         allocate(ty_optical_props_2str :: cloud_props_bnd_liq, __STAT__)
-         allocate(ty_optical_props_2str :: cloud_props_bnd_ice, __STAT__)
+         allocate(ty_optical_props_2str :: cloud_props_bnd_liq, _STAT)
+         allocate(ty_optical_props_2str :: cloud_props_bnd_ice, _STAT)
 TEST_(cloud_props_bnd_liq%init(k_dist%get_band_lims_wavenumber()))
 TEST_(cloud_props_bnd_ice%init(k_dist%get_band_lims_wavenumber()))
 
          select type (cloud_props_bnd_liq)
          class is (ty_optical_props_2str)
-            allocate(ty_optical_props_2str :: cloud_props_gpt_liq, __STAT__)
+            allocate(ty_optical_props_2str :: cloud_props_gpt_liq, _STAT)
          class default
 TEST_('cloud optical properties (liq) hardwired 2-stream for now')
          end select
          select type (cloud_props_bnd_ice)
          class is (ty_optical_props_2str)
-            allocate(ty_optical_props_2str :: cloud_props_gpt_ice, __STAT__)
+            allocate(ty_optical_props_2str :: cloud_props_gpt_ice, _STAT)
          class default
 TEST_('cloud optical properties (ice) hardwired 2-stream for now')
          end select
@@ -7529,7 +7505,7 @@ TEST_(cloud_props_gpt_ice%init(k_dist))
 
          ! aerosol optical properties (thread-private)
          if (need_aer_optical_props) then
-            allocate(ty_optical_props_2str :: aer_props, __STAT__)
+            allocate(ty_optical_props_2str :: aer_props, _STAT)
 TEST_(aer_props%init(k_dist%get_band_lims_wavenumber()))
          end if
 
@@ -7567,11 +7543,11 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
 
          call compute_gas_optics(colS, colE, ncols_block, LM, &
               gas_concs, k_dist, p_lay, p_lev, t_lay, &
-              optical_props, toa_flux, MAPL, __RC__)
+              optical_props, toa_flux, MAPL, _RC)
 
          if (need_aer_optical_props) then
             call compute_aer_optics(colS, colE, need_aer_optical_props, &
-                 taua, ssaa, asya, aer_props, __RC__)
+                 taua, ssaa, asya, aer_props, _RC)
          end if
 
          call compute_cloud_optics_mcica( &
@@ -7583,7 +7559,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
               cloud_props_bnd_liq, cloud_props_bnd_ice, &
               cloud_props_gpt_liq, cloud_props_gpt_ice, &
               cld_mask, &
-              MAPL, __RC__)
+              MAPL, _RC)
 
          ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
          ! ** Calculated from subcolumn ensemble, so stochastic **
@@ -7612,7 +7588,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
               ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
               ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
          #endif
-              MAPL, __RC__)
+              MAPL, _RC)
 
          ! delta-scaling of cloud optical properties (accounts for forward scattering)
          call compute_delta_scale( &
@@ -7621,7 +7597,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
               CL, RR3, band_lims_gpt, &
               cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
               forwliq, forwice, &
-              MAPL, __RC__)
+              MAPL, _RC)
 
          #ifdef SOLAR_RADVAL
          ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
@@ -7651,7 +7627,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
               FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
               FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
               FORINTP, FORINHP, FORINMP, FORINLP, &
-              MAPL, __RC__)
+              MAPL, _RC)
          #endif
 
          ! add in aerosol optical properties if requested and available
@@ -7670,15 +7646,15 @@ TEST_(aer_props%increment(optical_props))
               bnd_flux_dn_allsky(colS:colE, :, :), bnd_flux_dir_allsky(colS:colE, :, :), &
               bnd_flux_net_allsky(colS:colE, :, :), &
               cloud_props_gpt_liq, cloud_props_gpt_ice, &
-              MAPL, __RC__)
+              MAPL, _RC)
 
          ! deallocate per-block arrays
-         deallocate(toa_flux, __STAT__)
-         deallocate(cld_mask, __STAT__)
-         deallocate(forwliq, __STAT__)
-         deallocate(forwice, __STAT__)
+         deallocate(toa_flux, _STAT)
+         deallocate(cld_mask, _STAT)
+         deallocate(forwliq, _STAT)
+         deallocate(forwice, _STAT)
          if (include_aerosols) &
-              deallocate(CLEARCOUNTS, __STAT__)
+              deallocate(CLEARCOUNTS, _STAT)
          ! cloud_props_*, aer_props, optical_props are local allocatables;
          ! they are automatically finalized/deallocated on return.
 
@@ -7727,13 +7703,11 @@ TEST_(aer_props%increment(optical_props))
          integer, optional, intent(out) :: RC
 
          ! Locals
-         !-------
 
          integer :: IRUN, LN
          integer :: status
 
          ! Begin
-         !------
 
          call MAPL_TimerOn(MAPL, "-MISC")
 
@@ -7744,7 +7718,7 @@ TEST_(aer_props%increment(optical_props))
 
          call MAPL_TimerOn(MAPL, "-SORAD")
 
-         call MAPL_TimerOn(MAPL, "--SORAD_RUN", __RC__)
+         call MAPL_TimerOn(MAPL, "--SORAD_RUN", _RC)
          call SORAD(IRUN, LN, NB_CHOU, COSZ, PLhPa, TA, WA, OA, CO2, &
               CWC, FCLD, ICT, ICB, REFF, HK_UV_TEMP, HK_IR_TEMP, &
               taua, ssaa, asya, &
@@ -7753,11 +7727,11 @@ TEST_(aer_props%increment(optical_props))
               FLXU, FLCU, &
               FLXBAND, &
               do_drfband, DRBAND, DFBAND)
-         call MAPL_TimerOff(MAPL, "--SORAD_RUN", __RC__)
+         call MAPL_TimerOff(MAPL, "--SORAD_RUN", _RC)
 
          call MAPL_TimerOff(MAPL, "-SORAD")
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
 
       end subroutine shrtwave
 
@@ -7956,7 +7930,7 @@ TEST_(aer_props%increment(optical_props))
 
          IAm = trim(comp_name) // "SolarUpdateExport"
 
-         call ESMF_ClockGet(clock, timeSTEP=DELT, currTIME=currentTime, __RC__)
+         call ESMF_ClockGet(clock, timeSTEP=DELT, currTIME=currentTime, _RC)
 
          call MAPL_SunGetInsolation(LONS, LATS, &
               orbit, ZTH, SLR, &
@@ -7964,7 +7938,7 @@ TEST_(aer_props%increment(optical_props))
               clock=clock, &
               TIME=SUNFLAG, &
               ZTHN=ZTHN, &
-              __RC__)
+              _RC)
 
          ZTH = MAX(ZTH, 0.0)
          SLR = SLR * SC
@@ -7975,127 +7949,127 @@ TEST_(aer_props%increment(optical_props))
             SLN = 0.0
          end where
 
-         call MAPL_GetPointer(internal, FSWN, 'FSWN', __RC__)
-         call MAPL_GetPointer(internal, FSCN, 'FSCN', __RC__)
-         call MAPL_GetPointer(internal, FSWNAN, 'FSWNAN', __RC__)
-         call MAPL_GetPointer(internal, FSCNAN, 'FSCNAN', __RC__)
-         call MAPL_GetPointer(internal, FSWUN, 'FSWUN', __RC__)
-         call MAPL_GetPointer(internal, FSCUN, 'FSCUN', __RC__)
-         call MAPL_GetPointer(internal, FSWUNAN, 'FSWUNAN', __RC__)
-         call MAPL_GetPointer(internal, FSCUNAN, 'FSCUNAN', __RC__)
-         call MAPL_GetPointer(internal, FSWBANDN, 'FSWBANDN', __RC__)
-         call MAPL_GetPointer(internal, FSWBANDNAN, 'FSWBANDNAN', __RC__)
+         call MAPL_GetPointer(internal, FSWN, 'FSWN', _RC)
+         call MAPL_GetPointer(internal, FSCN, 'FSCN', _RC)
+         call MAPL_GetPointer(internal, FSWNAN, 'FSWNAN', _RC)
+         call MAPL_GetPointer(internal, FSCNAN, 'FSCNAN', _RC)
+         call MAPL_GetPointer(internal, FSWUN, 'FSWUN', _RC)
+         call MAPL_GetPointer(internal, FSCUN, 'FSCUN', _RC)
+         call MAPL_GetPointer(internal, FSWUNAN, 'FSWUNAN', _RC)
+         call MAPL_GetPointer(internal, FSCUNAN, 'FSCUNAN', _RC)
+         call MAPL_GetPointer(internal, FSWBANDN, 'FSWBANDN', _RC)
+         call MAPL_GetPointer(internal, FSWBANDNAN, 'FSWBANDNAN', _RC)
 
-         call MAPL_GetPointer(internal, DRUVRN, 'DRUVRN', __RC__)
-         call MAPL_GetPointer(internal, DFUVRN, 'DFUVRN', __RC__)
-         call MAPL_GetPointer(internal, DRPARN, 'DRPARN', __RC__)
-         call MAPL_GetPointer(internal, DFPARN, 'DFPARN', __RC__)
-         call MAPL_GetPointer(internal, DRNIRN, 'DRNIRN', __RC__)
-         call MAPL_GetPointer(internal, DFNIRN, 'DFNIRN', __RC__)
+         call MAPL_GetPointer(internal, DRUVRN, 'DRUVRN', _RC)
+         call MAPL_GetPointer(internal, DFUVRN, 'DFUVRN', _RC)
+         call MAPL_GetPointer(internal, DRPARN, 'DRPARN', _RC)
+         call MAPL_GetPointer(internal, DFPARN, 'DFPARN', _RC)
+         call MAPL_GetPointer(internal, DRNIRN, 'DRNIRN', _RC)
+         call MAPL_GetPointer(internal, DFNIRN, 'DFNIRN', _RC)
 
-         call MAPL_GetPointer(export, FSW, 'FSW', __RC__)
-         call MAPL_GetPointer(export, FSC, 'FSC', __RC__)
-         call MAPL_GetPointer(export, FSWNA, 'FSWNA', __RC__)
-         call MAPL_GetPointer(export, FSCNA, 'FSCNA', __RC__)
-         call MAPL_GetPointer(export, FSWD, 'FSWD', __RC__)
-         call MAPL_GetPointer(export, FSCD, 'FSCD', __RC__)
-         call MAPL_GetPointer(export, FSWDNA, 'FSWDNA', __RC__)
-         call MAPL_GetPointer(export, FSCDNA, 'FSCDNA', __RC__)
-         call MAPL_GetPointer(export, FSWU, 'FSWU', __RC__)
-         call MAPL_GetPointer(export, FSCU, 'FSCU', __RC__)
-         call MAPL_GetPointer(export, FSWUNA, 'FSWUNA', __RC__)
-         call MAPL_GetPointer(export, FSCUNA, 'FSCUNA', __RC__)
-         call MAPL_GetPointer(export, FSWBAND, 'FSWBAND', __RC__)
-         call MAPL_GetPointer(export, FSWBANDNA, 'FSWBANDNA', __RC__)
+         call MAPL_GetPointer(export, FSW, 'FSW', _RC)
+         call MAPL_GetPointer(export, FSC, 'FSC', _RC)
+         call MAPL_GetPointer(export, FSWNA, 'FSWNA', _RC)
+         call MAPL_GetPointer(export, FSCNA, 'FSCNA', _RC)
+         call MAPL_GetPointer(export, FSWD, 'FSWD', _RC)
+         call MAPL_GetPointer(export, FSCD, 'FSCD', _RC)
+         call MAPL_GetPointer(export, FSWDNA, 'FSWDNA', _RC)
+         call MAPL_GetPointer(export, FSCDNA, 'FSCDNA', _RC)
+         call MAPL_GetPointer(export, FSWU, 'FSWU', _RC)
+         call MAPL_GetPointer(export, FSCU, 'FSCU', _RC)
+         call MAPL_GetPointer(export, FSWUNA, 'FSWUNA', _RC)
+         call MAPL_GetPointer(export, FSCUNA, 'FSCUNA', _RC)
+         call MAPL_GetPointer(export, FSWBAND, 'FSWBAND', _RC)
+         call MAPL_GetPointer(export, FSWBANDNA, 'FSWBANDNA', _RC)
 
-         call MAPL_GetPointer(export, DRUVR, 'DRUVR', __RC__)
-         call MAPL_GetPointer(export, DFUVR, 'DFUVR', __RC__)
-         call MAPL_GetPointer(export, DRPAR, 'DRPAR', __RC__)
-         call MAPL_GetPointer(export, DFPAR, 'DFPAR', __RC__)
-         call MAPL_GetPointer(export, DRNIR, 'DRNIR', __RC__)
-         call MAPL_GetPointer(export, DFNIR, 'DFNIR', __RC__)
-         call MAPL_GetPointer(export, RSR, 'RSR', __RC__)
-         call MAPL_GetPointer(export, RSC, 'RSC', __RC__)
-         call MAPL_GetPointer(export, RSRNA, 'RSRNA', __RC__)
-         call MAPL_GetPointer(export, RSCNA, 'RSCNA', __RC__)
-         call MAPL_GetPointer(export, SLRTP, 'SLRTP', __RC__)
-         call MAPL_GetPointer(export, RSCS, 'RSCS', __RC__)
-         call MAPL_GetPointer(export, RSRS, 'RSRS', __RC__)
-         call MAPL_GetPointer(export, RSCSNA, 'RSCSNA', __RC__)
-         call MAPL_GetPointer(export, RSRSNA, 'RSRSNA', __RC__)
-         call MAPL_GetPointer(export, SLRSF, 'SLRSF', __RC__)
-         call MAPL_GetPointer(export, SLRSFC, 'SLRSFC', __RC__)
-         call MAPL_GetPointer(export, SLRSFNA, 'SLRSFNA', __RC__)
-         call MAPL_GetPointer(export, SLRSFCNA, 'SLRSFCNA', __RC__)
-         call MAPL_GetPointer(export, SLRSUF, 'SLRSUF', __RC__)
-         call MAPL_GetPointer(export, SLRSUFC, 'SLRSUFC', __RC__)
-         call MAPL_GetPointer(export, SLRSUFNA, 'SLRSUFNA', __RC__)
-         call MAPL_GetPointer(export, SLRSUFCNA, 'SLRSUFCNA', __RC__)
-         call MAPL_GetPointer(export, OSR, 'OSR', __RC__)
-         call MAPL_GetPointer(export, OSRCLR, 'OSRCLR', __RC__)
-         call MAPL_GetPointer(export, OSRNA, 'OSRNA', __RC__)
-         call MAPL_GetPointer(export, OSRCNA, 'OSRCNA', __RC__)
-         call MAPL_GetPointer(export, ALBEDO, 'ALBEDO', __RC__)
-         call MAPL_GetPointer(export, COSZ, 'COSZ', __RC__)
-         call MAPL_GetPointer(export, MCOSZ, 'MCOSZ', __RC__)
-         call MAPL_GetPointer(export, DRNUVR, 'DRNUVR', __RC__)
-         call MAPL_GetPointer(export, DRNPAR, 'DRNPAR', __RC__)
-         call MAPL_GetPointer(export, DRNNIR, 'DRNNIR', __RC__)
+         call MAPL_GetPointer(export, DRUVR, 'DRUVR', _RC)
+         call MAPL_GetPointer(export, DFUVR, 'DFUVR', _RC)
+         call MAPL_GetPointer(export, DRPAR, 'DRPAR', _RC)
+         call MAPL_GetPointer(export, DFPAR, 'DFPAR', _RC)
+         call MAPL_GetPointer(export, DRNIR, 'DRNIR', _RC)
+         call MAPL_GetPointer(export, DFNIR, 'DFNIR', _RC)
+         call MAPL_GetPointer(export, RSR, 'RSR', _RC)
+         call MAPL_GetPointer(export, RSC, 'RSC', _RC)
+         call MAPL_GetPointer(export, RSRNA, 'RSRNA', _RC)
+         call MAPL_GetPointer(export, RSCNA, 'RSCNA', _RC)
+         call MAPL_GetPointer(export, SLRTP, 'SLRTP', _RC)
+         call MAPL_GetPointer(export, RSCS, 'RSCS', _RC)
+         call MAPL_GetPointer(export, RSRS, 'RSRS', _RC)
+         call MAPL_GetPointer(export, RSCSNA, 'RSCSNA', _RC)
+         call MAPL_GetPointer(export, RSRSNA, 'RSRSNA', _RC)
+         call MAPL_GetPointer(export, SLRSF, 'SLRSF', _RC)
+         call MAPL_GetPointer(export, SLRSFC, 'SLRSFC', _RC)
+         call MAPL_GetPointer(export, SLRSFNA, 'SLRSFNA', _RC)
+         call MAPL_GetPointer(export, SLRSFCNA, 'SLRSFCNA', _RC)
+         call MAPL_GetPointer(export, SLRSUF, 'SLRSUF', _RC)
+         call MAPL_GetPointer(export, SLRSUFC, 'SLRSUFC', _RC)
+         call MAPL_GetPointer(export, SLRSUFNA, 'SLRSUFNA', _RC)
+         call MAPL_GetPointer(export, SLRSUFCNA, 'SLRSUFCNA', _RC)
+         call MAPL_GetPointer(export, OSR, 'OSR', _RC)
+         call MAPL_GetPointer(export, OSRCLR, 'OSRCLR', _RC)
+         call MAPL_GetPointer(export, OSRNA, 'OSRNA', _RC)
+         call MAPL_GetPointer(export, OSRCNA, 'OSRCNA', _RC)
+         call MAPL_GetPointer(export, ALBEDO, 'ALBEDO', _RC)
+         call MAPL_GetPointer(export, COSZ, 'COSZ', _RC)
+         call MAPL_GetPointer(export, MCOSZ, 'MCOSZ', _RC)
+         call MAPL_GetPointer(export, DRNUVR, 'DRNUVR', _RC)
+         call MAPL_GetPointer(export, DRNPAR, 'DRNPAR', _RC)
+         call MAPL_GetPointer(export, DRNNIR, 'DRNNIR', _RC)
 
-         call MAPL_GetPointer(import, CLIN, 'FCLD', __RC__)
-         call MAPL_GetPointer(import, PLL, 'PLE', __RC__)
-         call MAPL_GetPointer(import, RRI, 'RI', __RC__)
-         call MAPL_GetPointer(import, RRL, 'RL', __RC__)
-         call MAPL_GetPointer(import, RRR, 'RR', __RC__)
-         call MAPL_GetPointer(import, RRS, 'RS', __RC__)
-         call MAPL_GetPointer(import, RQI, 'QI', __RC__)
-         call MAPL_GetPointer(import, RQL, 'QL', __RC__)
-         call MAPL_GetPointer(import, RQR, 'QR', __RC__)
-         call MAPL_GetPointer(import, RQS, 'QS', __RC__)
-         call MAPL_GetPointer(import, T, 'T', __RC__)
-         call MAPL_GetPointer(import, Q, 'QV', __RC__)
+         call MAPL_GetPointer(import, CLIN, 'FCLD', _RC)
+         call MAPL_GetPointer(import, PLL, 'PLE', _RC)
+         call MAPL_GetPointer(import, RRI, 'RI', _RC)
+         call MAPL_GetPointer(import, RRL, 'RL', _RC)
+         call MAPL_GetPointer(import, RRR, 'RR', _RC)
+         call MAPL_GetPointer(import, RRS, 'RS', _RC)
+         call MAPL_GetPointer(import, RQI, 'QI', _RC)
+         call MAPL_GetPointer(import, RQL, 'QL', _RC)
+         call MAPL_GetPointer(import, RQR, 'QR', _RC)
+         call MAPL_GetPointer(import, RQS, 'QS', _RC)
+         call MAPL_GetPointer(import, T, 'T', _RC)
+         call MAPL_GetPointer(import, Q, 'QV', _RC)
 
-         call MAPL_GetPointer(export, FCLD, 'FCLD', __RC__)
-         call MAPL_GetPointer(export, TAUI, 'TAUCLI', __RC__)
-         call MAPL_GetPointer(export, TAUW, 'TAUCLW', __RC__)
-         call MAPL_GetPointer(export, TAUR, 'TAUCLR', __RC__)
-         call MAPL_GetPointer(export, TAUS, 'TAUCLS', __RC__)
-         call MAPL_GetPointer(export, CLDL, 'CLDLO', __RC__)
-         call MAPL_GetPointer(export, CLDM, 'CLDMD', __RC__)
-         call MAPL_GetPointer(export, CLDH, 'CLDHI', __RC__)
-         call MAPL_GetPointer(export, CLDT, 'CLDTT', __RC__)
-         call MAPL_GetPointer(export, TAUL, 'TAULO', __RC__)
-         call MAPL_GetPointer(export, TAUM, 'TAUMD', __RC__)
-         call MAPL_GetPointer(export, TAUH, 'TAUHI', __RC__)
-         call MAPL_GetPointer(export, TAUT, 'TAUTT', __RC__)
-         call MAPL_GetPointer(export, TAUX, 'TAUTX', __RC__)
-         call MAPL_GetPointer(export, COTL, 'COTLO', __RC__)
-         call MAPL_GetPointer(export, COTM, 'COTMD', __RC__)
-         call MAPL_GetPointer(export, COTH, 'COTHI', __RC__)
-         call MAPL_GetPointer(export, COTT, 'COTTT', __RC__)
-         call MAPL_GetPointer(export, CLDTMP, 'CLDTMP', __RC__)
-         call MAPL_GetPointer(export, CLDPRS, 'CLDPRS', __RC__)
-         call MAPL_GetPointer(export, COTDL, 'COTDENLO', __RC__)
-         call MAPL_GetPointer(export, COTDM, 'COTDENMD', __RC__)
-         call MAPL_GetPointer(export, COTDH, 'COTDENHI', __RC__)
-         call MAPL_GetPointer(export, COTDT, 'COTDENTT', __RC__)
-         call MAPL_GetPointer(export, COTNL, 'COTNUMLO', __RC__)
-         call MAPL_GetPointer(export, COTNM, 'COTNUMMD', __RC__)
-         call MAPL_GetPointer(export, COTNH, 'COTNUMHI', __RC__)
-         call MAPL_GetPointer(export, COTNT, 'COTNUMTT', __RC__)
+         call MAPL_GetPointer(export, FCLD, 'FCLD', _RC)
+         call MAPL_GetPointer(export, TAUI, 'TAUCLI', _RC)
+         call MAPL_GetPointer(export, TAUW, 'TAUCLW', _RC)
+         call MAPL_GetPointer(export, TAUR, 'TAUCLR', _RC)
+         call MAPL_GetPointer(export, TAUS, 'TAUCLS', _RC)
+         call MAPL_GetPointer(export, CLDL, 'CLDLO', _RC)
+         call MAPL_GetPointer(export, CLDM, 'CLDMD', _RC)
+         call MAPL_GetPointer(export, CLDH, 'CLDHI', _RC)
+         call MAPL_GetPointer(export, CLDT, 'CLDTT', _RC)
+         call MAPL_GetPointer(export, TAUL, 'TAULO', _RC)
+         call MAPL_GetPointer(export, TAUM, 'TAUMD', _RC)
+         call MAPL_GetPointer(export, TAUH, 'TAUHI', _RC)
+         call MAPL_GetPointer(export, TAUT, 'TAUTT', _RC)
+         call MAPL_GetPointer(export, TAUX, 'TAUTX', _RC)
+         call MAPL_GetPointer(export, COTL, 'COTLO', _RC)
+         call MAPL_GetPointer(export, COTM, 'COTMD', _RC)
+         call MAPL_GetPointer(export, COTH, 'COTHI', _RC)
+         call MAPL_GetPointer(export, COTT, 'COTTT', _RC)
+         call MAPL_GetPointer(export, CLDTMP, 'CLDTMP', _RC)
+         call MAPL_GetPointer(export, CLDPRS, 'CLDPRS', _RC)
+         call MAPL_GetPointer(export, COTDL, 'COTDENLO', _RC)
+         call MAPL_GetPointer(export, COTDM, 'COTDENMD', _RC)
+         call MAPL_GetPointer(export, COTDH, 'COTDENHI', _RC)
+         call MAPL_GetPointer(export, COTDT, 'COTDENTT', _RC)
+         call MAPL_GetPointer(export, COTNL, 'COTNUMLO', _RC)
+         call MAPL_GetPointer(export, COTNM, 'COTNUMMD', _RC)
+         call MAPL_GetPointer(export, COTNH, 'COTNUMHI', _RC)
+         call MAPL_GetPointer(export, COTNT, 'COTNUMTT', _RC)
 
          #ifdef SOLAR_RADVAL
-         call MAPL_GetPointer(export, CLDLOSWHB, 'CLDLOSWHB', __RC__)
-         call MAPL_GetPointer(export, CLDMDSWHB, 'CLDMDSWHB', __RC__)
-         call MAPL_GetPointer(export, CLDHISWHB, 'CLDHISWHB', __RC__)
-         call MAPL_GetPointer(export, CLDTTSWHB, 'CLDTTSWHB', __RC__)
+         call MAPL_GetPointer(export, CLDLOSWHB, 'CLDLOSWHB', _RC)
+         call MAPL_GetPointer(export, CLDMDSWHB, 'CLDMDSWHB', _RC)
+         call MAPL_GetPointer(export, CLDHISWHB, 'CLDHISWHB', _RC)
+         call MAPL_GetPointer(export, CLDTTSWHB, 'CLDTTSWHB', _RC)
          #endif
 
          if (SOLAR_TO_OBIO) then
-            call MAPL_GetPointer(internal, DRBANDN, 'DRBANDN', __RC__)
-            call MAPL_GetPointer(internal, DFBANDN, 'DFBANDN', __RC__)
-            call MAPL_GetPointer(export, DROBIO, 'DROBIO', __RC__)
-            call MAPL_GetPointer(export, DFOBIO, 'DFOBIO', __RC__)
+            call MAPL_GetPointer(internal, DRBANDN, 'DRBANDN', _RC)
+            call MAPL_GetPointer(internal, DFBANDN, 'DFBANDN', _RC)
+            call MAPL_GetPointer(export, DROBIO, 'DROBIO', _RC)
+            call MAPL_GetPointer(export, DFOBIO, 'DFOBIO', _RC)
          end if
 
          if (associated(FCLD)) FCLD = CLIN
@@ -8105,7 +8079,7 @@ TEST_(aer_props%increment(optical_props))
               associated(COTDH) .or. associated(COTNH) .or. &
               associated(COTDT) .or. associated(COTNT)) &
               then
-            allocate(aCLDH(IM, JM), __STAT__)
+            allocate(aCLDH(IM, JM), _STAT)
             aCLDH = 0.
             do L = 1, LCLDMH - 1
                aCLDH = MAX(aCLDH, CLIN(:, :, L))
@@ -8119,7 +8093,7 @@ TEST_(aer_props%increment(optical_props))
               associated(COTDM) .or. associated(COTNM) .or. &
               associated(COTDT) .or. associated(COTNT)) &
               then
-            allocate(aCLDM(IM, JM), __STAT__)
+            allocate(aCLDM(IM, JM), _STAT)
             aCLDM = 0.
             do L = LCLDMH, LCLDLM - 1
                aCLDM = MAX(aCLDM, CLIN(:, :, L))
@@ -8133,7 +8107,7 @@ TEST_(aer_props%increment(optical_props))
               associated(COTDL) .or. associated(COTNL) .or. &
               associated(COTDT) .or. associated(COTNT)) &
               then
-            allocate(aCLDL(IM, JM), __STAT__)
+            allocate(aCLDL(IM, JM), _STAT)
             aCLDL = 0.
             do L = LCLDLM, LM
                aCLDL = MAX(aCLDL, CLIN(:, :, L))
@@ -8146,7 +8120,7 @@ TEST_(aer_props%increment(optical_props))
               associated(TAUX) .or. associated(COTT) .or. &
               associated(COTDT) .or. associated(COTNT)) &
               then
-            allocate(aCLDT(IM, JM), __STAT__)
+            allocate(aCLDT(IM, JM), _STAT)
             aCLDT = 1. - (1 - aCLDH) * (1 - aCLDM) * (1 - aCLDL)
             if (associated(CLDT)) CLDT = aCLDT
             if (associated(COTDT)) COTDT = aCLDT
@@ -8175,7 +8149,7 @@ TEST_(aer_props%increment(optical_props))
             if (associated(CLDTTSWHB)) CLDTTSWHB = 0.
 
             ! partition size pncol for cloudy columns to conserve memory & improve efficiency
-            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, __RC__)
+            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, _RC)
             if (RPART > 0) then
                pncol = RPART
             else
@@ -8184,18 +8158,18 @@ TEST_(aer_props%increment(optical_props))
 
             ! space for partition:
             ! The partition stores up cloudy gridcolumns to process in batch
-            allocate(icld(pncol), __STAT__)
-            allocate(jcld(pncol), __STAT__)
-            allocate(zmid(LM, pncol), __STAT__)
-            allocate(ALAT(pncol), __STAT__)
-            allocate(play(LM, pncol), __STAT__)
-            allocate(cldfrac(LM, pncol), __STAT__)
-            allocate(ciwp(LM, pncol), __STAT__)
-            allocate(clwp(LM, pncol), __STAT__)
-            allocate(cldymcl(LM, ngptsw, pncol), __STAT__)
-            allocate(ciwpmcl(LM, ngptsw, pncol), __STAT__)
-            allocate(clwpmcl(LM, ngptsw, pncol), __STAT__)
-            allocate(CLEARCOUNTS(4, pncol), __STAT__)
+            allocate(icld(pncol), _STAT)
+            allocate(jcld(pncol), _STAT)
+            allocate(zmid(LM, pncol), _STAT)
+            allocate(ALAT(pncol), _STAT)
+            allocate(play(LM, pncol), _STAT)
+            allocate(cldfrac(LM, pncol), _STAT)
+            allocate(ciwp(LM, pncol), _STAT)
+            allocate(clwp(LM, pncol), _STAT)
+            allocate(cldymcl(LM, ngptsw, pncol), _STAT)
+            allocate(ciwpmcl(LM, ngptsw, pncol), _STAT)
+            allocate(clwpmcl(LM, ngptsw, pncol), _STAT)
+            allocate(CLEARCOUNTS(4, pncol), _STAT)
 
             ! start with empty partition
             ncld = 0
@@ -8310,10 +8284,10 @@ TEST_(aer_props%increment(optical_props))
             end do ! j
 
             ! clean up
-            deallocate(icld, jcld, __STAT__)
-            deallocate(zmid, ALAT, play, cldfrac, ciwp, clwp, __STAT__)
-            deallocate(cldymcl, ciwpmcl, clwpmcl, __STAT__)
-            deallocate(CLEARCOUNTS, __STAT__)
+            deallocate(icld, jcld, _STAT)
+            deallocate(zmid, ALAT, play, cldfrac, ciwp, clwp, _STAT)
+            deallocate(cldymcl, ciwpmcl, clwpmcl, _STAT)
+            deallocate(CLEARCOUNTS, _STAT)
 
          end if ! CLD??SWHB
          #endif
@@ -8326,10 +8300,10 @@ TEST_(aer_props%increment(optical_props))
               associated(CLDTMP) .or. associated(CLDPRS)) &
               then
 
-            allocate(TAUCLD(IM, JM, LM, 4), __STAT__)
-            allocate(HYDROMETS(IM, JM, LM, 4), __STAT__)
-            allocate(REFF(IM, JM, LM, 4), __STAT__)
-            allocate(DP(IM, JM, LM), __STAT__)
+            allocate(TAUCLD(IM, JM, LM, 4), _STAT)
+            allocate(HYDROMETS(IM, JM, LM, 4), _STAT)
+            allocate(REFF(IM, JM, LM, 4), _STAT)
+            allocate(DP(IM, JM, LM), _STAT)
 
             DP = PLL(:, :, 1:LM) - PLL(:, :, 0:LM - 1)
 
@@ -8386,7 +8360,7 @@ TEST_(aer_props%increment(optical_props))
             if (associated(TAUH) .or. associated(COTH) .or. associated(COTNH) .or. &
                  associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
                  then
-               allocate(aTAUH(IM, JM), __STAT__)
+               allocate(aTAUH(IM, JM), _STAT)
                aTAUH = 0.
                do L = 1, LCLDMH - 1
                   aTAUH = aTAUH + TAUCLD(:, :, L, 1)
@@ -8402,7 +8376,7 @@ TEST_(aer_props%increment(optical_props))
             if (associated(TAUM) .or. associated(COTM) .or. associated(COTNM) .or. &
                  associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
                  then
-               allocate(aTAUM(IM, JM), __STAT__)
+               allocate(aTAUM(IM, JM), _STAT)
                aTAUM = 0.
                do L = LCLDMH, LCLDLM - 1
                   aTAUM = aTAUM + TAUCLD(:, :, L, 1)
@@ -8418,7 +8392,7 @@ TEST_(aer_props%increment(optical_props))
             if (associated(TAUL) .or. associated(COTL) .or. associated(COTNL) .or. &
                  associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
                  then
-               allocate(aTAUL(IM, JM), __STAT__)
+               allocate(aTAUL(IM, JM), _STAT)
                aTAUL = 0.
                do L = LCLDLM, LM
                   aTAUL = aTAUL + TAUCLD(:, :, L, 1)
@@ -8456,7 +8430,7 @@ TEST_(aer_props%increment(optical_props))
             ! its the best we SIMPLY can do.
 
             if (associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) then
-               allocate(aTAUT(IM, JM), __STAT__)
+               allocate(aTAUT(IM, JM), _STAT)
                aTAUT = 0.
                where (aCLDT > 0.) aTAUT = (aTAUL * aCLDL + aTAUM * aCLDM + aTAUH * aCLDH) / aCLDT
                if (associated(TAUX)) TAUX = aTAUT
@@ -8467,13 +8441,13 @@ TEST_(aer_props%increment(optical_props))
                if (associated(COTNT)) COTNT = aCLDT * aTAUT
             end if
 
-            if (allocated(aTAUH)) deallocate(aTAUH, __STAT__)
-            if (allocated(aTAUM)) deallocate(aTAUM, __STAT__)
-            if (allocated(aTAUL)) deallocate(aTAUL, __STAT__)
-            if (allocated(aTAUT)) deallocate(aTAUT, __STAT__)
+            if (allocated(aTAUH)) deallocate(aTAUH, _STAT)
+            if (allocated(aTAUM)) deallocate(aTAUM, _STAT)
+            if (allocated(aTAUL)) deallocate(aTAUL, _STAT)
+            if (allocated(aTAUT)) deallocate(aTAUT, _STAT)
 
             if (associated(CLDTMP) .or. associated(CLDPRS)) then
-               call MAPL_GetResource(MAPL, TAUCRIT, 'TAUCRIT:', default=0.10, __RC__)
+               call MAPL_GetResource(MAPL, TAUCRIT, 'TAUCRIT:', default=0.10, _RC)
 
                if (associated(CLDTMP)) CLDTMP = MAPL_UNDEF
                if (associated(CLDPRS)) CLDPRS = MAPL_UNDEF
@@ -8495,21 +8469,20 @@ TEST_(aer_props%increment(optical_props))
 
          end if
 
-         if (allocated(aCLDH)) deallocate(aCLDH, __STAT__)
-         if (allocated(aCLDM)) deallocate(aCLDM, __STAT__)
-         if (allocated(aCLDL)) deallocate(aCLDL, __STAT__)
-         if (allocated(aCLDT)) deallocate(aCLDT, __STAT__)
+         if (allocated(aCLDH)) deallocate(aCLDH, _STAT)
+         if (allocated(aCLDM)) deallocate(aCLDM, _STAT)
+         if (allocated(aCLDL)) deallocate(aCLDL, _STAT)
+         if (allocated(aCLDT)) deallocate(aCLDT, _STAT)
 
          ! Fill Albedos
-         !-------------
 
          FAC = 1.
 
          ! Visible/UV diffuse
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBVF', __RC__)
+         call MAPL_GetPointer(export, ALBEXP, 'ALBVF', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBVF', __RC__)
+            call MAPL_GetPointer(import, ALBIMP, 'ALBVF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
                elsewhere
@@ -8519,9 +8492,9 @@ TEST_(aer_props%increment(optical_props))
 
          ! Visible/UV direct
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBVR', __RC__)
+         call MAPL_GetPointer(export, ALBEXP, 'ALBVR', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBVR', __RC__)
+            call MAPL_GetPointer(import, ALBIMP, 'ALBVR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
                elsewhere
@@ -8531,9 +8504,9 @@ TEST_(aer_props%increment(optical_props))
 
          ! NIR diffuse
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBNF', __RC__)
+         call MAPL_GetPointer(export, ALBEXP, 'ALBNF', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBNF', __RC__)
+            call MAPL_GetPointer(import, ALBIMP, 'ALBNF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
                elsewhere
@@ -8543,9 +8516,9 @@ TEST_(aer_props%increment(optical_props))
 
          ! NIR direct
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBNR', __RC__)
+         call MAPL_GetPointer(export, ALBEXP, 'ALBNR', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBNR', __RC__)
+            call MAPL_GetPointer(import, ALBIMP, 'ALBNR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
                elsewhere
@@ -8554,7 +8527,6 @@ TEST_(aer_props%increment(optical_props))
          end if
 
          ! Total surface albedo
-         !---------------------
 
          ALB = DRUVRN + DFUVRN + DRPARN + DFPARN + DRNIRN + DFNIRN
          where (SLR > 0.0 .and. ALB > 0.0)
@@ -8566,7 +8538,6 @@ TEST_(aer_props%increment(optical_props))
          if (associated(ALBEDO)) ALBEDO = ALB
 
          ! Fill incident fluxes
-         !---------------------
 
          if (associated(SLRTP)) SLRTP = SLR
          if (associated(DRUVR)) DRUVR = DRUVRN * SLR
@@ -8632,7 +8603,6 @@ TEST_(aer_props%increment(optical_props))
          end if
 
          ! Fill 3D FLuxes
-         !---------------
 
          do L = 0, LM
             ! Fill Export Net Fluxes from Internal
@@ -8666,7 +8636,6 @@ TEST_(aer_props%increment(optical_props))
          end do
 
          ! Fill 2D Fluxes
-         !---------------
 
          if (associated(RSR)) RSR = FSWN(:, :, 0) * SLR
          if (associated(RSC)) RSC = FSCN(:, :, 0) * SLR
@@ -8690,13 +8659,13 @@ TEST_(aer_props%increment(optical_props))
                if (band_output(ibnd)) then
 
                   write(bb, '(I0.2)') ibnd
-                  allocate(OSRB(IM, JM), __STAT__)
-                  allocate(ISRB(IM, JM), __STAT__)
+                  allocate(OSRB(IM, JM), _STAT)
+                  allocate(ISRB(IM, JM), _STAT)
 
                   ! get last full calculation
-                  call MAPL_GetPointer(internal, ptr2d, 'OSRB' // bb // 'RGN', __RC__)
+                  call MAPL_GetPointer(internal, ptr2d, 'OSRB' // bb // 'RGN', _RC)
                   OSRB = ptr2d
-                  call MAPL_GetPointer(internal, ptr2d, 'ISRB' // bb // 'RGN', __RC__)
+                  call MAPL_GetPointer(internal, ptr2d, 'ISRB' // bb // 'RGN', _RC)
                   ISRB = ptr2d
 
                   ! scale to current solar input
@@ -8704,7 +8673,7 @@ TEST_(aer_props%increment(optical_props))
                   ISRB = ISRB * SLR
 
                   ! fill OSRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', __RC__)
+                  call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (all(OSRB == 0.)) then
                         ! handles pre-first-full-calc case
@@ -8715,7 +8684,7 @@ TEST_(aer_props%increment(optical_props))
                   end if
 
                   ! fill ISRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', __RC__)
+                  call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (all(ISRB == 0.)) then
                         ! handles pre-first-full-calc case
@@ -8726,7 +8695,7 @@ TEST_(aer_props%increment(optical_props))
                   end if
 
                   ! calculate TBRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', __RC__)
+                  call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (USE_RRTMG) then
 
@@ -8734,7 +8703,7 @@ TEST_(aer_props%increment(optical_props))
                         ! The index jpb1:jpb2 (16:29) is over the 14 bands. Band 14 is OUT of order.
                         wn1 = wavenum1(jpb1 - 1 + ibnd) * 100.
                         wn2 = wavenum2(jpb1 - 1 + ibnd) * 100. ! [m-1]
-                        call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+                        call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, _RC)
 
                      else ! USE_RRTMGP
 
@@ -8744,7 +8713,7 @@ TEST_(aer_props%increment(optical_props))
                            ! access RRTMGP internal state from the GC
                            if (.not. rrtmgp_state_set) then
                               call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-                              VERIFY_(status)
+                              _VERIFY(status)
                               rrtmgp_state => wrap%ptr
                               rrtmgp_state_set = .true.
                            end if
@@ -8758,7 +8727,7 @@ TEST_(aer_props%increment(optical_props))
                            if (.not. rrtmgp_state%initialized) then
                               call MAPL_GetResource( &
                                    MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
-                                   default='rrtmgp-gas-sw-g112.nc', __RC__)
+                                   default='rrtmgp-gas-sw-g112.nc', _RC)
                               ! gas_concs needed only to access required gas names
                               error_msg = gas_concs%init([character(3) :: &
                                    'h2o', 'co2', 'o3', 'n2o', 'co', 'ch4', 'o2', 'n2'])
@@ -8779,12 +8748,12 @@ TEST_('RRTMGP-SW: does not seem to be SW')
                         ! get brightness temperature
                         wn1 = SOLAR_bands_wavenum(1, ibnd) * 100. ! [m-1]
                         wn2 = SOLAR_bands_wavenum(2, ibnd) * 100. ! [m-1]
-                        call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, __RC__)
+                        call Tbr_from_band_flux(IM, JM, OSRB, wn1, wn2, ptr2d, _RC)
 
                      end if
                   end if
 
-                  deallocate(OSRB, ISRB, __STAT__)
+                  deallocate(OSRB, ISRB, _STAT)
 
                end if
             end do
@@ -8809,7 +8778,7 @@ TEST_('RRTMGP-SW: does not seem to be SW')
                      ! access RRTMGP internal state from the GC
                      if (.not. rrtmgp_state_set) then
                         call ESMF_UserCompGetInternalState(GC, 'RRTMGP_state', wrap, status)
-                        VERIFY_(status)
+                        _VERIFY(status)
                         rrtmgp_state => wrap%ptr
                         rrtmgp_state_set = .true.
                      end if
@@ -8823,7 +8792,7 @@ TEST_('RRTMGP-SW: does not seem to be SW')
                      if (.not. rrtmgp_state%initialized) then
                         call MAPL_GetResource( &
                              MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
-                             default='rrtmgp-gas-sw-g112.nc', __RC__)
+                             default='rrtmgp-gas-sw-g112.nc', _RC)
                         ! gas_concs needed only to access required gas names
                         error_msg = gas_concs%init([character(3) :: &
                              'h2o', 'co2', 'o3', 'n2o', 'co', 'ch4', 'o2', 'n2'])
@@ -8951,12 +8920,11 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 
          ! Solar zenith angles: mean for time step and at end of time step.
          !  Note SLR should not be used after this point!!
-         !-----------------------------------------------------------------
 
          if (associated(MCOSZ)) MCOSZ = ZTH
          if (associated(COSZ)) COSZ = ZTHN
 
-         RETURN_(ESMF_SUCCESS)
+         _RETURN(ESMF_SUCCESS)
       end subroutine UPDATE_EXPORT
 
    end subroutine Run
