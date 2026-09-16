@@ -130,6 +130,12 @@ category: EXPORT
  CLDPRS   | Pa        | xy   | N    |                           | cloud_top_pressure
  TAUIR    | W m-2     | xyz  | C    |                           | longwave_cloud_optical_thickness_at_800_cm-1
  CLDTT    | 1         | xy   | N    |                           | total_2D_cloud_area_fraction
+#-- The four CLDxxLW diagnostics below represent super-layer cloud fractions based
+#-- on the subcolumn cloud generation called in RRTMG LW. They are global fields
+#-- but generated only at the LW REFRESH frequency, NOT at the heartbeat. As such,
+#-- they are useful for diagnostic comparisons with CLDTT above and with the full
+#-- CLDxx set from the Solar GC. But they should NOT be used to subsample fields
+#-- that are produced on the model heartbeat (e.g. subsampling for cloud presence).
  CLDTTLW  | 1         | xy   | N    |                           | total_cloud_area_fraction_rrtmg_lw_REFRESH
  CLDHILW  | 1         | xy   | N    |                           | high-level_cloud_area_fraction_rrtmg_lw_REFRESH
  CLDMDLW  | 1         | xy   | N    |                           | mid-level_cloud_area_fraction_rrtmg_lw_REFRESH
