@@ -40,21 +40,25 @@ PRINT_OUTPUT_MINMAX = True
 # Paths
 # -----------------------------------------------------------------------------
 THIS_FILE = Path(__file__).resolve()
-MLRAD_COMPONENT_DIR = THIS_FILE.parent.parent
-GEOS_SOLAR_DIR = MLRAD_COMPONENT_DIR.parent
-GEOS_RADIATION_DIR = GEOS_SOLAR_DIR.parent
-GEOS_PHYSICS_DIR = GEOS_RADIATION_DIR.parent
-GEOS_AGCM_DIR = GEOS_PHYSICS_DIR.parent
 
-MODEL_DIR = MLRAD_COMPONENT_DIR / "models"
-NORM_DIR = MLRAD_COMPONENT_DIR / "norms"
+# ML radiation models and normalization data are installed with GEOS.
+DEFAULT_MLRAD_DATA_DIR = (
+    THIS_FILE.parent.parent.parent / "share" / "GEOSmlrad"
+)
+
+MLRAD_DATA_DIR = Path(
+    os.environ.get("GEOS_MLRAD_DATA_DIR", DEFAULT_MLRAD_DATA_DIR)
+).resolve()
+
+MODEL_DIR = MLRAD_DATA_DIR / "models"
+NORM_DIR = MLRAD_DATA_DIR / "norms"
 
 NORM_PATH = NORM_DIR / "NormalizationStats_GEOSgrid_2000-2010.npz"
 
-F107_AP_PATH = (
-    GEOS_AGCM_DIR
-    / "GEOSsuperdyn_GridComp/@FVdycoreCubed_GridComp/@fvdycore/NRL_MSIS/F107_ap_appended.txt"
-)
+# Space-weather forcing is staged into the runtime directory by gcm_run.j.
+F107_AP_PATH = Path(
+    os.environ.get("GEOS_MLRAD_F107_AP_PATH", "F107_ap_appended.txt")
+).resolve()
 
 
 # -----------------------------------------------------------------------------
