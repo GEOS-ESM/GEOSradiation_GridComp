@@ -1,0 +1,361 @@
+schema_version: 2.0.0
+component: SOLAR
+
+category: IMPORT
+#----------------------------------------------------------------------------------
+ NAME  | UNITS     | DIMS | VLOC | LONG NAME                                       
+#----------------------------------------------------------------------------------
+ PLE   | Pa        | xyz  | E    | air_pressure                                    
+ TS    | K         | xy   | N    | surface_skin_temperature                        
+ CH4   | pppv      | xyz  | C    | methane_concentration                           
+ N2O   | pppv      | xyz  | C    | nitrous_oxide_concentration                     
+ T     | K         | xyz  | C    | air_temperature                                 
+ QV    | kg kg-1   | xyz  | C    | specific_humidity                               
+ QL    | kg kg-1   | xyz  | C    | mass_fraction_of_cloud_liquid_water_in_air      
+ QI    | kg kg-1   | xyz  | C    | mass_fraction_of_cloud_ice_in_air               
+ QR    | kg kg-1   | xyz  | C    | mass_fraction_of_rain_water_in_air              
+ QS    | kg kg-1   | xyz  | C    | mass_fraction_of_snow_in_air                    
+ QG    | kg kg-1   | xyz  | C    | mass_fraction_of_graupel_in_air                 
+ RL    | m         | xyz  | C    | effective_radius_of_cloud_liquid_water_particles
+ RI    | m         | xyz  | C    | effective_radius_of_cloud_ice_particles         
+ RR    | m         | xyz  | C    | effective_radius_of_rain_particles              
+ RS    | m         | xyz  | C    | effective_radius_of_snow_particles              
+ RG    | m         | xyz  | C    | effective_radius_of_graupel_particles           
+ OX    | mol mol-1 | xyz  | C    | odd-oxygen_volume_mixing_ratio                  
+ FCLD  | 1         | xyz  | C    | cloud_area_fraction                             
+ ALBVR | 1         | xy   | N    | surface_albedo_for_visible_beam                 
+ ALBVF | 1         | xy   | N    | surface_albedo_for_visible_diffuse              
+ ALBNR | 1         | xy   | N    | surface_albedo_for_near_infrared_beam           
+ ALBNF | 1         | xy   | N    | surface_albedo_for_near_infrared_diffuse        
+ PREF  | Pa        | z    | E    | reference_air_pressure                          
+
+category: INTERNAL
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ NAME           | UNITS | DIMS | VLOC | UNGRIDDED             | ADD2EXPORT | FILL       | COND             | LONG NAME                                                                                             
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ FSWN           | 1     | xyz  | E    |                       |            |            |                  | normalized_net_downward_shortwave_flux_in_air                                                         
+ FSCN           | 1     | xyz  | E    |                       |            |            |                  | normalized_net_downward_shortwave_flux_in_air_assuming_clear_sky                                      
+ FSWUN          | 1     | xyz  | E    |                       |            |            |                  | normalized_upward_shortwave_flux_in_air                                                               
+ FSCUN          | 1     | xyz  | E    |                       |            |            |                  | normalized_upward_shortwave_flux_in_air_assuming_clear_sky                                            
+ FSWBANDN       | 1     | xy   | N    | ungrd_num_bands_solar |            |            |                  | normalized_net_surface_downward_shortwave_flux_per_band_in_air                                        
+ DRUVRN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_ultraviolet_beam_flux                                                  
+ DFUVRN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_ultraviolet_diffuse_flux                                               
+ DRPARN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_par_beam_flux                                                          
+ DFPARN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_par_diffuse_flux                                                       
+ DRNIRN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_nearinfrared_beam_flux                                                 
+ DFNIRN         | 1     | xy   | N    |                       | .TRUE.     |            |                  | normalized_surface_downwelling_nearinfrared_diffuse_flux                                              
+ DRBANDN        | 1     | xy   | N    | ungrd_num_bands_solar |            |            | SOLAR_TO_OBIO    | normalized_surface_downwelling_shortwave_beam_flux_per_band                                           
+ DFBANDN        | 1     | xy   | N    | ungrd_num_bands_solar |            |            | SOLAR_TO_OBIO    | normalized_surface_downwelling_shortwave_diffuse_flux_per_band                                        
+ FSWNAN         | 1     | xyz  | E    |                       |            |            |                  | normalized_net_downward_shortwave_flux_in_air_assuming_no_aerosol                                     
+ FSCNAN         | 1     | xyz  | E    |                       |            |            |                  | normalized_net_downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol                       
+ FSWUNAN        | 1     | xyz  | E    |                       |            |            |                  | normalized_upward_shortwave_flux_in_air_assuming_no_aerosol                                           
+ FSCUNAN        | 1     | xyz  | E    |                       |            |            |                  | normalized_upward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol                             
+ FSWBANDNAN     | 1     | xy   | N    | ungrd_num_bands_solar |            |            |                  | normalized_net_surface_downward_shortwave_flux_per_band_in_air_assuming_no_aerosol                    
+# The following ADD2EXPORT INTERNALs (through FORINUMTTPAR) are really EXPORTs.
+# As of 5/2022 MAPL only re-loads IMPORTs/INTERNALs at the start of the replay
+# Corrector phase, not EXPORTs, so intermittent EXPORTs (such as these solar
+# REFRESH exports) would otherwise show stale Predictor-phase values. Making
+# them ADD2EXPORT INTERNALs ensures they are reloaded and time-synced
+# correctly, at the cost of INTERNAL storage even when not requested.
+#
+# COSZSW is the flux-weighted, time-averaged value over the REFRESH
+# interval; use it for sub-sampling/analysing REFRESH diagnostics like
+# CLDxxSW (e.g. subsample both with COSZSW >= cmin, e.g. 0.25, for a fair
+# apples-to-apples comparison against heartbeat-frequency CLDxx).
+ COSZSW         | 1     | xy   | N    |                       | .TRUE.     |            |                  | cosine_of_the_solar_zenith_angle_of_Solar_REFRESH                                                     
+# The four CLDxxSW diagnostics represent super-layer cloud fractions based
+# on the subcolumn cloud generation called in RRTMG[P] SW. They are sunlit
+# only and generated only at the SW REFRESH frequency, NOT at the heartbeat.
+# Useful for diagnostic comparisons with the heartbeat-frequency CLDxx set,
+# but should NOT be used to subsample heartbeat-frequency fields.
+ CLDTTSW        | 1     | xy   | N    |                       | .TRUE.     |            |                  | total_cloud_area_fraction_RRTMG_P_SW_REFRESH                                                          
+ CLDHISW        | 1     | xy   | N    |                       | .TRUE.     |            |                  | high-level_cloud_area_fraction_RRTMG_P_SW_REFRESH                                                     
+ CLDMDSW        | 1     | xy   | N    |                       | .TRUE.     |            |                  | mid-level_cloud_area_fraction_RRTMG_P_SW_REFRESH                                                      
+ CLDLOSW        | 1     | xy   | N    |                       | .TRUE.     |            |                  | low-level_cloud_area_fraction_RRTMG_P_SW_REFRESH                                                      
+# The following TAUxxPAR and COTxxPAR are REFRESH-frequency fields; the
+# CLDxxSW provisos above apply to these too. Their advantage is that they
+# use the subcolumn cloud generation called in RRTMG[P].
+#
+# TAUxxPAR are ZERO for clear super-layers, an anti-pattern for *in-cloud*
+# optical thicknesses, and deprecated (reserved for developer usage, see
+# TAULOPAR etc. below, COND=USE_SOLAR_RADVAL). They may later be removed.
+#
+# COTxxPAR are UNDEF for clear super-layers, whereas TAUxxPAR are ZERO, so
+# COTxxPAR are a better in-cloud diagnostic.
+#
+# COT[DEN|NUM]xxPAR allow a true cloud-fraction-weighted in-cloud optical
+# thickness via COTNUMxxPAR / COTDENxxPAR (see comments under COT[DEN|NUM]xx
+# in the EXPORT category below).
+#
+# COTDS[DEN|NUM]xxPAR are like COT[DEN|NUM]xxPAR but delta-scaled.
+#
+# COTDS[DEN|NUM]xx, COTL[DEN|NUM]xx, COTLDS[DEN|NUM]xx, COTI[DEN|NUM]xx,
+# COTIDS[DEN|NUM]xx, SSAL/SSAI/ASML/ASMI [DEN|NUM]xx (and their delta-scaled
+# variants), and FORL/FORI [DEN|NUM]xx PAR fields below are all gated with
+# COND=USE_SOLAR_RADVAL.
+ COTLOPAR       | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_clrundef                                 
+ COTMDPAR       | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_clrundef                              
+ COTHIPAR       | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_clrundef                                
+ COTTTPAR       | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_clrundef                                 
+ COTDENLOPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                              
+ COTDENMDPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                           
+ COTDENHIPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                             
+ COTDENTTPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                              
+ COTNUMLOPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                                
+ COTNUMMDPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                             
+ COTNUMHIPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                               
+ COTNUMTTPAR    | 1     | xy   | N    |                       | .TRUE.     |            |                  | in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                                
+ TAULOPAR       | 1     | xy   | N    |                       | .TRUE.     | MAPL_UNDEF | USE_SOLAR_RADVAL | in_cloud_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH__deprecated                              
+ TAUMDPAR       | 1     | xy   | N    |                       | .TRUE.     | MAPL_UNDEF | USE_SOLAR_RADVAL | in_cloud_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH__deprecated                           
+ TAUHIPAR       | 1     | xy   | N    |                       | .TRUE.     | MAPL_UNDEF | USE_SOLAR_RADVAL | in_cloud_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH__deprecated                             
+ TAUTTPAR       | 1     | xy   | N    |                       | .TRUE.     | MAPL_UNDEF | USE_SOLAR_RADVAL | in_cloud_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH__deprecated                              
+ COTDSDENLOPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                 
+ COTDSDENMDPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator              
+ COTDSDENHIPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ COTDSDENTTPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                 
+ COTDSNUMLOPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                   
+ COTDSNUMMDPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                
+ COTDSNUMHIPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ COTDSNUMTTPAR  | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                   
+# ditto for liquid clouds only
+ COTLDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                       
+ COTLDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                    
+ COTLDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                      
+ COTLDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                       
+ COTLNUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                         
+ COTLNUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                      
+ COTLNUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                        
+ COTLNUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                         
+ COTLDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator          
+ COTLDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator       
+ COTLDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator         
+ COTLDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator          
+ COTLDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator            
+ COTLDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator         
+ COTLDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator           
+ COTLDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator            
+# ditto for ice clouds only
+ COTIDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                          
+ COTIDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                       
+ COTIDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                         
+ COTIDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                          
+ COTINUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                            
+ COTINUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                         
+ COTINUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                           
+ COTINUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                            
+ COTIDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ COTIDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator          
+ COTIDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator            
+ COTIDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ COTIDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator               
+ COTIDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator            
+ COTIDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator              
+ COTIDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_optical_thickness_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator               
+# super-layerized phase-split cloud SSA and ASM
+ SSALDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ SSALNUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ SSAIDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                   
+ SSAINUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                     
+ ASMLDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                     
+ ASMLNUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                       
+ ASMIDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                        
+ ASMINUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                          
+ SSALDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ SSALNUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator               
+ SSAIDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ SSAINUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ ASMLDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                  
+ ASMLNUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                    
+ ASMIDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator                     
+ ASMINUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator                       
+ SSALDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator               
+ SSALNUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                 
+ SSAIDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                  
+ SSAINUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                    
+ ASMLDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                    
+ ASMLNUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                      
+ ASMIDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator                       
+ ASMINUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                         
+ SSALDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ SSALNUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ SSAIDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                   
+ SSAINUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                     
+ ASMLDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                     
+ ASMLNUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                       
+ ASMIDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                        
+ ASMINUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                          
+ SSALDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator   
+ SSALDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator     
+ SSAIDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator      
+ SSAIDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator        
+ ASMLDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator        
+ ASMLDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator          
+ ASMIDSDENLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator           
+ ASMIDSNUMLOPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator             
+ SSALDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator
+ SSALDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator  
+ SSAIDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator   
+ SSAIDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator     
+ ASMLDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator     
+ ASMLDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator       
+ ASMIDSDENMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_denominator        
+ ASMIDSNUMMDPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_middle_clouds_RRTMG_P_PAR_REFRESH_numerator          
+ SSALDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator  
+ SSALDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator    
+ SSAIDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator     
+ SSAIDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator       
+ ASMLDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator       
+ ASMLDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator         
+ ASMIDSDENHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator          
+ ASMIDSNUMHIPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator            
+ SSALDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator   
+ SSALDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_single_scattering_albedo_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator     
+ SSAIDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator      
+ SSAIDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_single_scattering_albedo_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator        
+ ASMLDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator        
+ ASMLDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_asymmetry_parameter_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator          
+ ASMIDSDENTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator           
+ ASMIDSNUMTTPAR | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_asymmetry_parameter_delta_scaled_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator             
+# super-layerized phase-split cloud forward-scattering fraction
+ FORLDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ FORLNUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator               
+ FORIDENLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ FORINUMLOPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_low_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ FORLDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ FORLNUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_numerator               
+ FORIDENMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ FORINUMMDPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_mid_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+ FORLDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator            
+ FORLNUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator              
+ FORIDENHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_denominator               
+ FORINUMHIPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_high_clouds_RRTMG_P_PAR_REFRESH_numerator                 
+ FORLDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator             
+ FORLNUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_liquid_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator               
+ FORIDENTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_denominator                
+ FORINUMTTPAR   | 1     | xy   | N    |                       | .TRUE.     |            | USE_SOLAR_RADVAL | in_cloud_ice_forward_scattering_fraction_of_all_clouds_RRTMG_P_PAR_REFRESH_numerator                  
+# END of EXPORTs masquerading as INTERNALs
+
+category: EXPORT
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+ NAME      | UNITS | DIMS | VLOC | UNGRIDDED             | COND             | LONG NAME                                                              
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+ FSW       | W m-2 | xyz  | E    |                       |                  | net_downward_shortwave_flux_in_air                                     
+ FSC       | W m-2 | xyz  | E    |                       |                  | net_downward_shortwave_flux_in_air_assuming_clear_sky                  
+ FSWNA     | W m-2 | xyz  | E    |                       |                  | net_downward_shortwave_flux_in_air_assuming_no_aerosol                 
+ FSCNA     | W m-2 | xyz  | E    |                       |                  | net_downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol   
+ FSWD      | W m-2 | xyz  | E    |                       |                  | downward_shortwave_flux_in_air                                         
+ FSCD      | W m-2 | xyz  | E    |                       |                  | downward_shortwave_flux_in_air_assuming_clear_sky                      
+ FSWDNA    | W m-2 | xyz  | E    |                       |                  | downward_shortwave_flux_in_air_assuming_no_aerosol                     
+ FSCDNA    | W m-2 | xyz  | E    |                       |                  | downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol       
+ FSWU      | W m-2 | xyz  | E    |                       |                  | upward_shortwave_flux_in_air                                           
+ FSCU      | W m-2 | xyz  | E    |                       |                  | upward_shortwave_flux_in_air_assuming_clear_sky                        
+ FSWUNA    | W m-2 | xyz  | E    |                       |                  | upward_shortwave_flux_in_air_assuming_no_aerosol                       
+ FSCUNA    | W m-2 | xyz  | E    |                       |                  | upward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol         
+ FSWBAND   | W m-2 | xy   | N    | ungrd_num_bands_solar |                  | net_surface_downward_shortwave_flux_per_band_in_air                    
+ FSWBANDNA | W m-2 | xy   | N    | ungrd_num_bands_solar |                  | net_surface_downward_shortwave_flux_per_band_in_air_assuming_no_aerosol
+ DRNUVR    | W m-2 | xy   | N    |                       |                  | surface_downwelling_ultraviolet_beam_normal_flux                       
+ DRNPAR    | W m-2 | xy   | N    |                       |                  | surface_downwelling_par_beam_normal_flux                               
+ DRNNIR    | W m-2 | xy   | N    |                       |                  | surface_downwelling_nearinfrared_beam_normal_flux                      
+ DRUVR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_ultraviolet_beam_flux                              
+ DFUVR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_ultraviolet_diffuse_flux                           
+ DRPAR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_par_beam_flux                                      
+ DFPAR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_par_diffuse_flux                                   
+ DRNIR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_nearinfrared_beam_flux                             
+ DFNIR     | W m-2 | xy   | N    |                       |                  | surface_downwelling_nearinfrared_diffuse_flux                          
+ DROBIO    | W m-2 | xy   | N    | ungrd_nb_obio         | SOLAR_TO_OBIO    | surface_downwelling_shortwave_beam_flux_per_OBIO_band                  
+ DFOBIO    | W m-2 | xy   | N    | ungrd_nb_obio         | SOLAR_TO_OBIO    | surface_downwelling_shortwave_diffuse_flux_per_OBIO_band               
+ FCLD      | 1     | xyz  | C    |                       |                  | cloud_area_fraction                                                    
+ CLDLO     | 1     | xy   | N    |                       |                  | cloud_area_fraction_for_low_clouds                                     
+ CLDMD     | 1     | xy   | N    |                       |                  | cloud_area_fraction_for_middle_clouds                                  
+ CLDHI     | 1     | xy   | N    |                       |                  | cloud_area_fraction_for_high_clouds                                    
+ CLDTT     | 1     | xy   | N    |                       |                  | total_cloud_area_fraction                                              
+# The TAUxx variants are ZERO when the super-layer is clear. These are the
+# HISTORICAL exports, but are non-ideal as *in-cloud* diagnostics. The
+# COTxx are to be prefered.
+ TAULO     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_low_clouds                               
+ TAUMD     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_middle_clouds                            
+ TAUHI     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_high_clouds                              
+ TAUTT     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_all_clouds__deprecated                   
+ TAUTX     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_all_clouds                               
+# The COTxx variants are UNDEF when the super-layer is clear. They are
+# preferred over TAUxx.
+ COTLO     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_low_clouds_clrundef                      
+ COTMD     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_middle_clouds_clrundef                   
+ COTHI     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_high_clouds_clrundef                     
+ COTTT     | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_all_clouds_clrundef                      
+# COT[DEN|NUM]xx allow a true cloud-fraction-weighted in-cloud optical
+# thickness to be calculated via COTNUMxx / COTDENxx. Like the COTxx, clear
+# values make no contribution, but unlike COTxx, each COT is weighted by a
+# cloud fraction so that small clouds, which have a small radiative effect,
+# get weighted accordingly. These provide the best estimate of radiatively
+# effective in-cloud optical thicknesses, but require more advance post-
+# processing (summing both NUM and DEN fields over the time-period required,
+# and only then taking their quotient.)
+ COTDENLO  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_low_clouds_denominator                   
+ COTDENMD  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_middle_clouds_denominator                
+ COTDENHI  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_high_clouds_denominator                  
+ COTDENTT  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_all_clouds_denominator                   
+ COTNUMLO  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_low_clouds_numerator                     
+ COTNUMMD  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_middle_clouds_numerator                  
+ COTNUMHI  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_high_clouds_numerator                    
+ COTNUMTT  | 1     | xy   | N    |                       |                  | in_cloud_optical_thickness_of_all_clouds_numerator                     
+ TAUCLI    | 1     | xyz  | C    |                       |                  | in_cloud_optical_thickness_for_ice_clouds                              
+ TAUCLW    | 1     | xyz  | C    |                       |                  | in_cloud_optical_thickness_for_liquid_clouds                           
+ TAUCLR    | 1     | xyz  | C    |                       |                  | in_cloud_optical_thickness_for_falling_rain                            
+ TAUCLS    | 1     | xyz  | C    |                       |                  | in_cloud_optical_thickness_for_falling_snow                            
+ RSCS      | W m-2 | xy   | N    |                       |                  | surface_net_downward_shortwave_flux_assuming_clear_sky                 
+ RSRS      | W m-2 | xy   | N    |                       |                  | surface_net_downward_shortwave_flux                                    
+ RSCSNA    | W m-2 | xy   | N    |                       |                  | surface_net_downward_shortwave_flux_assuming_clear_sky_and_no_aerosol  
+ RSRSNA    | W m-2 | xy   | N    |                       |                  | surface_net_downward_shortwave_flux_assuming_no_aerosol                
+ SLRSF     | W m-2 | xy   | N    |                       |                  | surface_incoming_shortwave_flux                                        
+ SLRSFC    | W m-2 | xy   | N    |                       |                  | surface_incoming_shortwave_flux_assuming_clear_sky                     
+ SLRSFNA   | W m-2 | xy   | N    |                       |                  | surface_incoming_shortwave_flux_assuming_clean_sky                     
+ SLRSFCNA  | W m-2 | xy   | N    |                       |                  | surface_incoming_shortwave_flux_assuming_clear_clean_sky               
+ SLRSUF    | W m-2 | xy   | N    |                       |                  | surface_outgoing_shortwave_flux                                        
+ SLRSUFC   | W m-2 | xy   | N    |                       |                  | surface_outgoing_shortwave_flux_assuming_clear_sky                     
+ SLRSUFNA  | W m-2 | xy   | N    |                       |                  | surface_outgoing_shortwave_flux_assuming_clean_sky                     
+ SLRSUFCNA | W m-2 | xy   | N    |                       |                  | surface_outgoing_shortwave_flux_assuming_clear_clean_sky               
+ OSR       | W m-2 | xy   | N    |                       |                  | toa_outgoing_shortwave_flux                                            
+ OSRCLR    | W m-2 | xy   | N    |                       |                  | toa_outgoing_shortwave_flux_assuming_clear_sky                         
+ OSRNA     | W m-2 | xy   | N    |                       |                  | toa_outgoing_shortwave_flux_no_aerosol                                 
+ OSRCNA    | W m-2 | xy   | N    |                       |                  | toa_outgoing_shortwave_flux_no_aerosol__clear_sky                      
+ RSR       | W m-2 | xy   | N    |                       |                  | toa_net_downward_shortwave_flux                                        
+ RSC       | W m-2 | xy   | N    |                       |                  | toa_net_downward_shortwave_flux_assuming_clear_sky                     
+ RSRNA     | W m-2 | xy   | N    |                       |                  | toa_net_downward_shortwave_flux_assuming_no_aerosol                    
+ RSCNA     | W m-2 | xy   | N    |                       |                  | toa_net_downward_shortwave_flux_assuming_clear_sky_and_no_aerosol      
+ SLRTP     | W m-2 | xy   | N    |                       |                  | toa_incoming_shortwave_flux                                            
+ ALBEDO    | 1     | xy   | N    |                       |                  | surface_albedo                                                         
+ ALBVR     | 1     | xy   | N    |                       |                  | surface_albedo_for_visible_beam                                        
+ ALBVF     | 1     | xy   | N    |                       |                  | surface_albedo_for_visible_diffuse                                     
+ ALBNR     | 1     | xy   | N    |                       |                  | surface_albedo_for_near_infrared_beam                                  
+ ALBNF     | 1     | xy   | N    |                       |                  | surface_albedo_for_near_infrared_diffuse                               
+# COSZ is instantaneous at the end of the UPDATE period, so it is
+# consistent with the HISTORY files output time. MCOSZ is the mean over the
+# update period, so it will be half a heartbeat behind the HISTORY file
+# time, but is the flux-weighted and update-interval-averaged COSZ value
+# used by the UPDATE. (Also see COSZSW under INTERNAL, above, for a third.)
+ COSZ      | 1     | xy   | N    |                       |                  | cosine_of_the_solar_zenith_angle                                       
+ MCOSZ     | 1     | xy   | N    |                       |                  | mean_cosine_of_the_solar_zenith_angle                                  
+ CLDTMP    | K     | xy   | N    |                       |                  | cloud_top_temperature                                                  
+ CLDPRS    | Pa    | xy   | N    |                       |                  | cloud_top_pressure                                                     
+# The four CLDxxSWHB diagnostics represent super-layer cloud fractions based
+# on essentially the same subcolumn cloud generation used by RRTMG SW but
+# called from within the SOLAR UPDATE at the HEARTBEAT. They are GLOBAL (not
+# just sunlit) fields and generated on the heartbeat. BUT, because subcolumn
+# cloud generation is EXPENSIVE, asking for any of these exports will DOUBLE
+# the cost of running the SOLAR GC. As such, they are for SPECIAL VALIDATION
+# PURPOSES ONLY. No cost is incurred if they are not exported. But we gate
+# them with USE_SOLAR_RADVAL as an extra protection against their
+# inadvertant use. Note, also, that they are NOT EXACTLY heartbeat versions
+# of CLDxxSW, since they sample the heartbeat cloud fractions, not the less
+# frequent snapshots used at REFRESH-frequency, and also since the
+# generation inside UPDATE is on non-flipped vertical fields. This latter
+# difference should be statistically insignificant. A re-coding to use
+# vertically flipped fields as per RRTMG SW is possible but will be
+# slightly slower, and was deemed unnecessary since the cloud fraction
+# frequency difference will likely dominate.
+ CLDTTSWHB | 1     | xy   | N    |                       | USE_SOLAR_RADVAL | total_cloud_area_fraction_rrtmg_sw_HEARTBEAT                           
+ CLDHISWHB | 1     | xy   | N    |                       | USE_SOLAR_RADVAL | high-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT                      
+ CLDMDSWHB | 1     | xy   | N    |                       | USE_SOLAR_RADVAL | mid-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT                       
+ CLDLOSWHB | 1     | xy   | N    |                       | USE_SOLAR_RADVAL | low-level_cloud_area_fraction_rrtmg_sw_HEARTBEAT                       
+

@@ -9,7 +9,7 @@ set (srcs
 esma_add_library (${this}
   SRCS ${srcs}
   SUBDIRS RRTMG
-  DEPENDENCIES MAPL GEOS_Shared GEOS_RadiationShared RRTMG_SW RRTMG_SW_mods RRTMGP)
+  DEPENDENCIES MAPL GEOS_Shared GEOS_RadiationShared RRTMG_SW RRTMG_SW_mods RRTMGP TYPE SHARED)
 
 if(MKL_FOUND)
    target_compile_definitions(${this} PRIVATE HAVE_MKL)
@@ -19,3 +19,8 @@ option(ENABLE_SOLAR_RADVAL "extra solar diagnostics mainly for developer validat
 if(ENABLE_SOLAR_RADVAL)
    target_compile_definitions(${this} PRIVATE SOLAR_RADVAL)
 endif ()
+
+mapl_acg (
+  ${this} Solar_StateSpecs.rc
+  IMPORT_SPECS EXPORT_SPECS INTERNAL_SPECS GET_POINTERS DECLARE_POINTERS
+)
