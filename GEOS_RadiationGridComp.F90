@@ -43,6 +43,7 @@ module GEOS_RadiationGridCompMod
 
   use ESMF
   use MAPL
+  use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
   use GEOS_SolarGridCompMod,  only : solarSetServices  => SetServices
   use GEOS_IrradGridCompMod,  only : irradSetServices  => SetServices
@@ -195,6 +196,51 @@ module GEOS_RadiationGridCompMod
      VERIFY_(STATUS)
 
 ! !EXPORT STATE:
+
+    call MAPL_AddExportSpec ( GC,                                   &
+         SHORT_NAME = 'MLRADSW',                                    &
+         LONG_NAME  = 'air_temperature_tendency_due_to_ml_shortwave', &
+         UNITS      = 'K s-1',                                      &
+         DIMS       = MAPL_DimsHorzVert,                            &
+         VLOCATION  = MAPL_VLocationCenter,                         &
+                                                              RC=STATUS )
+    VERIFY_(STATUS)
+
+        call MAPL_AddExportSpec ( GC,                                      &
+         SHORT_NAME = 'MLRADLW',                                       &
+         LONG_NAME  = 'air_temperature_tendency_due_to_ml_longwave',   &
+         UNITS      = 'K s-1',                                         &
+         DIMS       = MAPL_DimsHorzVert,                               &
+         VLOCATION  = MAPL_VLocationCenter,                            &
+                                                              RC=STATUS )
+    VERIFY_(STATUS)
+
+    call MAPL_AddExportSpec ( GC,                                      &
+         SHORT_NAME = 'MLRADJH',                                       &
+         LONG_NAME  = 'air_temperature_tendency_due_to_ml_joule_heating', &
+         UNITS      = 'K s-1',                                         &
+         DIMS       = MAPL_DimsHorzVert,                               &
+         VLOCATION  = MAPL_VLocationCenter,                            &
+                                                              RC=STATUS )
+    VERIFY_(STATUS)
+
+    call MAPL_AddExportSpec ( GC,                                   &
+         SHORT_NAME = 'RADSWMLT',                                    &
+         LONG_NAME  = 'air_temperature_tendency_due_to_blended_geos_mlt_shortwave', &
+         UNITS      = 'K s-1',                                       &
+         DIMS       = MAPL_DimsHorzVert,                             &
+         VLOCATION  = MAPL_VLocationCenter,                          &
+                                                              RC=STATUS  )
+    VERIFY_(STATUS)
+
+    call MAPL_AddExportSpec ( GC,                                   &
+         SHORT_NAME = 'RADLWMLT',                                    &
+         LONG_NAME  = 'air_temperature_tendency_due_to_blended_geos_mlt_longwave', &
+         UNITS      = 'K s-1',                                       &
+         DIMS       = MAPL_DimsHorzVert,                             &
+         VLOCATION  = MAPL_VLocationCenter,                          &
+                                                              RC=STATUS  )
+    VERIFY_(STATUS)
 
     call MAPL_AddExportSpec ( GC,                                   &
          SHORT_NAME = 'DTDT',                                            &
@@ -667,6 +713,38 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
   real, pointer, dimension(:,:  )     :: BLW
   real, pointer, dimension(:,:  )     :: RADSRF
 
+  real, pointer, dimension(:,:,:) :: MLRADSW
+  real, pointer, dimension(:,:,:) :: MLRADLW
+  real, pointer, dimension(:,:,:) :: MLRADJH
+
+  real, pointer, dimension(:,:,:) :: RADLWMLT
+  real, pointer, dimension(:,:,:) :: RADSWMLT
+
+  real, allocatable :: DP(:,:,:)
+  real, allocatable :: PMID_HPA(:,:,:)
+  real, allocatable :: WGEOS_SW(:,:,:)
+  real, allocatable :: WGEOS_LW(:,:,:)
+  real, allocatable :: RADSW_GEOS(:,:,:)
+  real, allocatable :: RADLW_GEOS(:,:,:)
+  real, allocatable :: RADSW_BLEND(:,:,:)
+  real, allocatable :: RADLW_BLEND(:,:,:)
+
+  logical :: GEOS_MLT
+
+  ! Runtime controls for the GEOS/ML radiation blending region.
+  ! These are read from RC resources in pressure units [hPa].
+  ! The upper boundary is the low-pressure / high-altitude side.
+  ! The lower boundary is the high-pressure / low-altitude side.
+  ! For p <= upper, use pure ML radiation.
+  ! For p >= lower, use pure native GEOS radiation.
+  real :: MLRAD_P_BOTTOM_HPA
+  real :: MLRAD_SW_BLEND_UPPER_HPA
+  real :: MLRAD_SW_BLEND_LOWER_HPA
+  real :: MLRAD_LW_BLEND_UPPER_HPA
+  real :: MLRAD_LW_BLEND_LOWER_HPA
+
+! ---
+
 ! Locals
 
   real, pointer, dimension(:,:,:)     :: DMI
@@ -705,6 +783,40 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                             RC=STATUS )
     VERIFY_(STATUS)
 
+    ! Read the GEOS-MLT switch from AGCM.rc.
+    call MAPL_GetResource( MAPL, GEOS_MLT,              &
+         LABEL='GEOS_MLT:',                             &
+         DEFAULT=.FALSE.,                               &
+         RC=STATUS )
+    VERIFY_(STATUS)
+
+    ! Read the lower-pressure boundary of the valid ML radiation region.
+    ! ML radiation may replace unphysical native GEOS tendencies only at
+    ! pressures less than or equal to this value.
+    call MAPL_GetResource(MAPL, MLRAD_P_BOTTOM_HPA, &
+         LABEL="MLRAD_P_BOTTOM_HPA:", default=1.0, RC=STATUS)
+    VERIFY_(STATUS)
+
+    ! Read pressure bounds for the GEOS/ML radiation blend.
+    ! Defaults are conservative for the extended MLT lid:
+    !   p <= 0.1 hPa : pure ML radiation
+    !   p >= 0.3 hPa : pure native GEOS radiation
+    call MAPL_GetResource(MAPL, MLRAD_SW_BLEND_UPPER_HPA, &
+         LABEL="MLRAD_SW_BLEND_UPPER_HPA:", default=0.1, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_SW_BLEND_LOWER_HPA, &
+         LABEL="MLRAD_SW_BLEND_LOWER_HPA:", default=0.3, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_LW_BLEND_UPPER_HPA, &
+         LABEL="MLRAD_LW_BLEND_UPPER_HPA:", default=0.1, RC=STATUS)
+    VERIFY_(STATUS)
+
+    call MAPL_GetResource(MAPL, MLRAD_LW_BLEND_LOWER_HPA, &
+         LABEL="MLRAD_LW_BLEND_LOWER_HPA:", default=0.2, RC=STATUS)
+    VERIFY_(STATUS)
+
 ! Get pointers to exports
 !------------------------
 
@@ -736,11 +848,18 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     VERIFY_(STATUS)
     call MAPL_GetPointer ( EXPORT, RADSWCNA, 'RADSWCNA',  RC=STATUS )
     VERIFY_(STATUS)
+    if (GEOS_MLT) then
+       call MAPL_GetPointer ( EXPORT, RADSWMLT, 'RADSWMLT', RC=STATUS )
+       VERIFY_(STATUS)
+       call MAPL_GetPointer ( EXPORT, RADLWMLT, 'RADLWMLT', RC=STATUS )
+       VERIFY_(STATUS)
+    end if
 
 ! Allocate children's exports that we need
 !-----------------------------------------
 
-    if (associated(RADSW  ) .or. associated(DTDT   ) .or. associated(RADSRF) ) then
+    if (associated(RADSW) .or. associated(RADSWMLT) .or. &
+        associated(DTDT) .or. associated(RADSRF)) then
        call MAPL_GetPointer ( GEX(SOL), FSW   , 'FSW'    ,  alloc=.TRUE.,RC=STATUS )
        VERIFY_(STATUS)
     end if
@@ -750,7 +869,8 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        VERIFY_(STATUS)
     end if
 
-    if (associated(RADLW) .or. associated(DTDT   )   .or. associated(RADSRF)) then
+    if (associated(RADLW) .or. associated(RADLWMLT) .or. &
+       associated(DTDT) .or. associated(RADSRF)) then
        call MAPL_GetPointer ( GEX(IRR), FLW   , 'FLX'    ,  alloc=.TRUE.,RC=STATUS )
        VERIFY_(STATUS)
     end if
@@ -784,6 +904,20 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
        VERIFY_(STATUS)
     end if
 
+    ! Get ML radiation only for GEOS-MLT runs.
+    if (GEOS_MLT .and. &
+       (associated(DTDT) .or. associated(RADSWMLT) .or. associated(RADLWMLT))) then
+
+       call MAPL_GetPointer ( GEX(SOL), MLRADSW, 'MLRADSW', alloc=.TRUE., RC=STATUS )
+       VERIFY_(STATUS)
+
+       call MAPL_GetPointer ( GEX(SOL), MLRADLW, 'MLRADLW', alloc=.TRUE., RC=STATUS )
+       VERIFY_(STATUS)
+
+       call MAPL_GetPointer ( GEX(SOL), MLRADJH, 'MLRADJH', alloc=.TRUE., RC=STATUS )
+       VERIFY_(STATUS)
+    end if
+
 ! Run the child components and their couplers
 !--------------------------------------------
 
@@ -798,31 +932,204 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
     if( associated (BLW     ) ) BLW      =  DSFDTS
     if( associated (ALW     ) ) ALW      =  SFCEM - DSFDTS*TRD
     if( associated (RADSRF  ) ) RADSRF   =   (FSW(:,:,  LM  ) + FLW(:,:,  LM))
-    if( associated (DTDT    ) ) DTDT     = ( (FLW(:,:,0:LM-1) - FLW(:,:,1:LM)) + &
-                                             (FSW(:,:,0:LM-1) - FSW(:,:,1:LM)) ) * (MAPL_GRAV/MAPL_CP)
 
-    if( associated (RADLW ) .or. associated (RADSW )   .or. &
-        associated (RADLWC) .or. associated (RADSWC)   .or. &
-        associated (RADSWNA).or. associated (RADSWCNA) .or. &
-        associated (RADLWCNA)                             ) then
 
-       allocate(DMI(IM,JM,LM),stat=STATUS)
-       VERIFY_(STATUS)
-       DMI = MAPL_GRAV/(MAPL_CP*(PLE(:,:,1:LM)-PLE(:,:,0:LM-1)))
 
-       if( associated (RADLW   ) ) RADLW    = (FLW   (:,:,0:LM-1) - FLW   (:,:,1:LM))*DMI
-       if( associated (RADSW   ) ) RADSW    = (FSW   (:,:,0:LM-1) - FSW   (:,:,1:LM))*DMI
-       if( associated (RADLWC  ) ) RADLWC   = (FLWCLR(:,:,0:LM-1) - FLWCLR(:,:,1:LM))*DMI
-       if( associated (RADSWC  ) ) RADSWC   = (FSWCLR(:,:,0:LM-1) - FSWCLR(:,:,1:LM))*DMI
-       if( associated (RADSWNA ) ) RADSWNA  = (FSWNA (:,:,0:LM-1) - FSWNA (:,:,1:LM))*DMI
-       if( associated (RADLWCNA) ) RADLWCNA = (FLA   (:,:,0:LM-1) - FLA   (:,:,1:LM))*DMI
-       if( associated (RADSWCNA) ) RADSWCNA = (FSCNA (:,:,0:LM-1) - FSCNA (:,:,1:LM))*DMI
+    if( associated (BLW     ) ) BLW      =  DSFDTS
+    if( associated (ALW     ) ) ALW      =  SFCEM - DSFDTS*TRD
+    if( associated (RADSRF  ) ) RADSRF   =   (FSW(:,:,  LM  ) + FLW(:,:,  LM))
 
-       deallocate(DMI,stat=STATUS)
-       VERIFY_(STATUS)
+    ! GEOS-MLT radiation tapering
+    if (GEOS_MLT) then
+
+       if( associated (DTDT  ) .or. associated (RADLW ) .or. associated (RADSW )   .or. &
+           associated (RADLWMLT) .or. associated (RADSWMLT) .or. &
+           associated (RADLWC) .or. associated (RADSWC)   .or. &
+           associated (RADSWNA).or. associated (RADSWCNA) .or. &
+           associated (RADLWCNA)                             ) then
+
+          allocate(DP(IM,JM,LM), stat=STATUS)
+          VERIFY_(STATUS)
+
+          allocate(DMI(IM,JM,LM), stat=STATUS)
+          VERIFY_(STATUS)
+
+          DP  = PLE(:,:,1:LM) - PLE(:,:,0:LM-1)
+          DMI = MAPL_GRAV / (MAPL_CP * DP)
+
+          ! Keep clear-sky and no-aerosol diagnostics as native GEOS radiation.
+          if( associated (RADLWC  ) ) RADLWC   = (FLWCLR(:,:,0:LM-1) - FLWCLR(:,:,1:LM)) * DMI
+          if( associated (RADSWC  ) ) RADSWC   = (FSWCLR(:,:,0:LM-1) - FSWCLR(:,:,1:LM)) * DMI
+          if( associated (RADSWNA ) ) RADSWNA  = (FSWNA (:,:,0:LM-1) - FSWNA (:,:,1:LM)) * DMI
+          if( associated (RADLWCNA) ) RADLWCNA = (FLA   (:,:,0:LM-1) - FLA   (:,:,1:LM)) * DMI
+          if( associated (RADSWCNA) ) RADSWCNA = (FSCNA (:,:,0:LM-1) - FSCNA (:,:,1:LM)) * DMI
+
+          ! Blend all-sky SW/LW only.
+          if( associated(DTDT) .or. associated(RADSW) .or. associated(RADLW) .or. &
+              associated(RADSWMLT) .or. associated(RADLWMLT) ) then
+
+             allocate(PMID_HPA(IM,JM,LM), stat=STATUS)
+             VERIFY_(STATUS)
+
+             allocate(WGEOS_SW(IM,JM,LM), stat=STATUS)
+             VERIFY_(STATUS)
+
+             allocate(WGEOS_LW(IM,JM,LM), stat=STATUS)
+             VERIFY_(STATUS)
+
+             allocate(RADSW_GEOS(IM,JM,LM), stat=STATUS)
+             VERIFY_(STATUS)
+
+             allocate(RADLW_GEOS(IM,JM,LM), stat=STATUS)
+             VERIFY_(STATUS)
+
+             ! Layer-midpoint pressure in hPa.
+             PMID_HPA = 0.5 * (PLE(:,:,0:LM-1) + PLE(:,:,1:LM)) * 0.01
+
+             ! Native GEOS heating rates in K/s.
+             RADSW_GEOS = (FSW(:,:,0:LM-1) - FSW(:,:,1:LM)) * DMI
+             RADLW_GEOS = (FLW(:,:,0:LM-1) - FLW(:,:,1:LM)) * DMI
+
+             ! Keep RADSW/RADLW as pure native GEOS diagnostics.
+             if( associated(RADSW) ) RADSW = RADSW_GEOS
+             if( associated(RADLW) ) RADLW = RADLW_GEOS
+
+             ! Only compute blended radiation if it is needed for DTDT or diagnostics.
+             if( associated(DTDT) .or. associated(RADSWMLT) .or. associated(RADLWMLT) ) then
+
+                allocate(RADSW_BLEND(IM,JM,LM), stat=STATUS)
+                VERIFY_(STATUS)
+
+                allocate(RADLW_BLEND(IM,JM,LM), stat=STATUS)
+                VERIFY_(STATUS)
+
+                ! Runtime-controlled tapers for SW and LW radiation.
+                !
+                ! Pressure decreases upward, so the "upper" pressure bound is
+                ! smaller than the "lower" pressure bound.
+                !
+                ! For each radiation band:
+                !   p <= upper hPa : pure ML radiation,        WGEOS = 0
+                !   p >= lower hPa : pure native GEOS radiation, WGEOS = 1
+                !   otherwise      : smooth log-pressure blend
+                !
+                ! The smoothstep function is used after mapping log-pressure to
+                ! [0, 1]. This gives exact zero/one weights at the requested
+                ! pressure bounds while avoiding a sharp discontinuity.
+
+                WGEOS_SW = (log(max(PMID_HPA, tiny(1.0))) - &
+                     log(MLRAD_SW_BLEND_UPPER_HPA)) / &
+                     (log(MLRAD_SW_BLEND_LOWER_HPA) - &
+                     log(MLRAD_SW_BLEND_UPPER_HPA))
+                WGEOS_SW = max(0.0, min(1.0, WGEOS_SW))
+                WGEOS_SW = WGEOS_SW * WGEOS_SW * (3.0 - 2.0 * WGEOS_SW)
+
+                WGEOS_LW = (log(max(PMID_HPA, tiny(1.0))) - &
+                     log(MLRAD_LW_BLEND_UPPER_HPA)) / &
+                     (log(MLRAD_LW_BLEND_LOWER_HPA) - &
+                     log(MLRAD_LW_BLEND_UPPER_HPA))
+                WGEOS_LW = max(0.0, min(1.0, WGEOS_LW))
+                WGEOS_LW = WGEOS_LW * WGEOS_LW * (3.0 - 2.0 * WGEOS_LW)
+
+                ! Blended GEOS-MLT SW/LW heating rates.
+                RADSW_BLEND = WGEOS_SW * RADSW_GEOS + (1.0 - WGEOS_SW) * MLRADSW
+                RADLW_BLEND = WGEOS_LW * RADLW_GEOS + (1.0 - WGEOS_LW) * MLRADLW
+
+                ! Wherever ML radiation is available, replace a non-finite or
+                ! unphysically large native GEOS tendency with the corresponding
+                ! finite ML tendency. The regular blending remains unchanged for
+                ! physically valid native GEOS tendencies.
+                where (PMID_HPA <= MLRAD_P_BOTTOM_HPA .and. &
+                       ieee_is_finite(MLRADSW) .and. &
+                       (.not. ieee_is_finite(RADSW_GEOS) .or. &
+                        abs(RADSW_GEOS) > 1.0))
+                   RADSW_BLEND = MLRADSW
+                end where
+
+                where (PMID_HPA <= MLRAD_P_BOTTOM_HPA .and. &
+                       ieee_is_finite(MLRADLW) .and. &
+                       (.not. ieee_is_finite(RADLW_GEOS) .or. &
+                        abs(RADLW_GEOS) > 1.0))
+                   RADLW_BLEND = MLRADLW
+                end where
+
+                ! Export blended diagnostics separately.
+                if( associated(RADSWMLT) ) RADSWMLT = RADSW_BLEND
+                if( associated(RADLWMLT) ) RADLWMLT = RADLW_BLEND
+                
+                ! DTDT should use the separately blended SW/LW rates.
+                ! MLRADJH is independent and added separately.
+                if( associated(DTDT) ) then
+                   DTDT = (RADSW_BLEND + RADLW_BLEND) * DP
+                   DTDT = DTDT + MLRADJH * DP
+                end if
+    
+                deallocate(RADLW_BLEND, stat=STATUS)
+                VERIFY_(STATUS)
+
+                deallocate(RADSW_BLEND, stat=STATUS)
+                VERIFY_(STATUS)
+
+             end if
+
+             deallocate(RADLW_GEOS, stat=STATUS)
+             VERIFY_(STATUS)
+
+             deallocate(RADSW_GEOS, stat=STATUS)
+             VERIFY_(STATUS)
+
+             deallocate(WGEOS_SW, stat=STATUS)
+             VERIFY_(STATUS)
+
+             deallocate(WGEOS_LW, stat=STATUS)
+             VERIFY_(STATUS)
+
+             deallocate(PMID_HPA, stat=STATUS)
+             VERIFY_(STATUS)
+
+          end if   ! closes all-sky SW/LW block
+
+          deallocate(DMI, stat=STATUS)
+          VERIFY_(STATUS)
+
+          deallocate(DP, stat=STATUS)
+          VERIFY_(STATUS)
+
+       end if
+
+    else
+
+       ! Original GEOS radiation path for non-GEOS_MLT runs.
+       if( associated (DTDT) ) then
+          DTDT = ( (FLW(:,:,0:LM-1) - FLW(:,:,1:LM)) + &
+                   (FSW(:,:,0:LM-1) - FSW(:,:,1:LM)) ) * (MAPL_GRAV/MAPL_CP)
+       end if
+
+       if( associated (RADLW ) .or. associated (RADSW )   .or. &
+           associated (RADLWC) .or. associated (RADSWC)   .or. &
+           associated (RADSWNA).or. associated (RADSWCNA) .or. &
+           associated (RADLWCNA)                             ) then
+
+          allocate(DMI(IM,JM,LM), stat=STATUS)
+          VERIFY_(STATUS)
+
+          DMI = MAPL_GRAV / (MAPL_CP * (PLE(:,:,1:LM) - PLE(:,:,0:LM-1)))
+
+          if( associated (RADLW   ) ) RADLW    = (FLW   (:,:,0:LM-1) - FLW   (:,:,1:LM)) * DMI
+          if( associated (RADSW   ) ) RADSW    = (FSW   (:,:,0:LM-1) - FSW   (:,:,1:LM)) * DMI
+          if( associated (RADLWC  ) ) RADLWC   = (FLWCLR(:,:,0:LM-1) - FLWCLR(:,:,1:LM)) * DMI
+          if( associated (RADSWC  ) ) RADSWC   = (FSWCLR(:,:,0:LM-1) - FSWCLR(:,:,1:LM)) * DMI
+          if( associated (RADSWNA ) ) RADSWNA  = (FSWNA (:,:,0:LM-1) - FSWNA (:,:,1:LM)) * DMI
+          if( associated (RADLWCNA) ) RADLWCNA = (FLA   (:,:,0:LM-1) - FLA   (:,:,1:LM)) * DMI
+          if( associated (RADSWCNA) ) RADSWCNA = (FSCNA (:,:,0:LM-1) - FSCNA (:,:,1:LM)) * DMI
+
+          deallocate(DMI, stat=STATUS)
+          VERIFY_(STATUS)
+
+       end if
 
     end if
-
+    
     call MAPL_TimerOff(MAPL,"TOTAL")
 
     RETURN_(ESMF_SUCCESS)
@@ -832,4 +1139,3 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 end module GEOS_RadiationGridCompMod
-
