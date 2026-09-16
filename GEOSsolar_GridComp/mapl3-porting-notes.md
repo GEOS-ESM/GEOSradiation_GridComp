@@ -187,20 +187,35 @@ port - referenced throughout below instead of repeated).
    `TYPE SHARED` to `esma_add_library()`.
 5. **Replace static `MAPL_Add*Spec` blocks** in `SetServices` with
    `#include "Solar_Import___.h"` / `_Export___.h` / `_Internal___.h`.
-6. **Convert the RRTMGP internal state.** Solar's `ty_RRTMGP_state`/
-   `ty_RRTMGP_wrap` uses manual `ESMF_UserCompSetInternalState`/
-   `GetInternalState` - convert to `_SET_NAMED_PRIVATE_STATE`/
-   `_GET_NAMED_PRIVATE_STATE` macros (don't mix the two patterns).
-7. **`MAPL_GetResource(MAPL,...)` -> `MAPL_GridCompGetResource(gc,
+6. **DONE - Convert the RRTMGP internal state.** Replaced the manual
+   `ty_RRTMGP_wrap`/`ESMF_UserCompSetInternalState`/
+   `ESMF_UserCompGetInternalState` pattern with `_SET_NAMED_PRIVATE_STATE`/
+   `_GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, ...)`
+   macros at all 4 call sites (`SetServices`, and 3 sites inside `Run`'s
+   contained procedures `SORADCORE`/`UPDATE_EXPORT`, which are
+   host-associated with `gc` so no signature changes were needed). Added
+   a module-scope `character(*), parameter :: PRIVATE_STATE =
+   "RRTMGP_state"` and removed the now-dead `ty_RRTMGP_wrap` type,
+   matching IRRAD's pattern exactly.
+7. **DONE - `MAPL_GetResource(MAPL,...)` -> `MAPL_GridCompGetResource(gc,
    "LABEL", var, default=..., _RC)`** (drop trailing colon on labels)
-   throughout `SetServices` and `Run`.
-8. **`ESMF_Config` -> `ESMF_HConfig`** wherever Solar reads config
-   directly (if any beyond `MAPL_GridCompGetResource`).
-9. **Fix entry-point signatures**: `SetServices(gc, rc)`/
+   throughout `SetServices` and `Run`. Converted all 40 call sites
+   (`SetServices`, `Run`, and inside `SORADCORE`/`UPDATE_EXPORT`/
+   `PROCESS_RRTMGP_BLOCK`, all host-associated with `gc`).
+8. **DONE - `ESMF_Config` -> `ESMF_HConfig`.** Solar never read config
+   directly via `ESMF_Config` (only through `MAPL_GetResource`/now
+   `MAPL_GridCompGetResource`) - removed the now-unused `type(ESMF_Config)
+   :: cf` declaration and the `cf=cf` argument to `MAPL_Get` in `Run`;
+   no `ESMF_HConfig` usage needed.
+9. **DONE - Fix entry-point signatures**: `SetServices(gc, rc)`/
    `Run(gc, import, export, clock, rc)` with **no `intent`/`optional`**
    on `gc`, and `rc` non-optional `intent(out)`. This is required
    before `MAPL_GridCompAddChild` can add Solar as a child from
-   `GEOS_RadiationGridComp.F90`.
+   `GEOS_RadiationGridComp.F90`. Dropped `intent(inout)` from `gc` and
+   `optional`/`intent(inout)` from the other dummy args in both
+   `SetServices` and `Run` to match `Irrad`'s signatures exactly;
+   confirmed no `present(rc)` checks existed anywhere in the file, so
+   making `rc` non-optional is safe.
 10. **Check `MAPL_MetaComp`/`MAPL_Get`/`MAPL_TimerOn` usage** in `Run` -
    Solar's `Run` has heavy use of `MAPL_Get(MAPL, ...)` for grid/clock
    info and `MAPL_TimerOn(MAPL,"TOTAL")`/`"PRELIMS"` - convert to

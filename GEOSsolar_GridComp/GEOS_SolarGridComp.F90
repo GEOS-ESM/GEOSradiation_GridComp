@@ -255,10 +255,8 @@ module GEOS_SolarGridCompMod
       type(ty_gas_optics_rrtmgp) :: k_dist
    end type ty_RRTMGP_state
 
-   ! Wrapper to access RRTMGP internal state
-   type ty_RRTMGP_wrap
-      type(ty_RRTMGP_state), pointer :: ptr => null()
-   end type ty_RRTMGP_wrap
+   ! name under which the RRTMGP state is attached as a private state
+   character(*), parameter :: PRIVATE_STATE = "RRTMGP_state"
 
    ! ----------------------------------------------------------------
    ! For an RRTMGP forwice calculation approximating RRTMG iceflag=3:
@@ -433,8 +431,8 @@ contains
    !INTERFACE:
    subroutine SetServices(gc, rc)
       !ARGUMENTS:
-      type(ESMF_GridComp), intent(inout) :: gc ! gridded component
-      integer, optional :: rc ! return code
+      type(ESMF_GridComp) :: gc ! gridded component
+      integer, intent(out) :: rc ! return code
 
       ! !DESCRIPTION: This version uses the MAPL\_GenericSetServices. This function sets
       !   the Initialize and Finalize services, as well as allocating our instance of a
@@ -461,9 +459,6 @@ contains
       type(MAPL_UngriddedDim) :: ungrd_num_bands_solar
       type(MAPL_UngriddedDim) :: ungrd_nb_obio
 
-      type(ty_RRTMGP_state), pointer :: rrtmgp_state
-      type(ty_RRTMGP_wrap) :: wrap
-
       ! for OSRBbbRG, ISRBbbRG, and TBRBbbRG
       integer :: ibnd
       character*2 :: bb
@@ -472,25 +467,22 @@ contains
       call ESMF_GridCompGet(gc, NAME=comp_name, _RC)
       IAm = trim(comp_name) // 'SetServices'
 
-      ! save pointer to the wrapped RRTMGP internal state in the GC
-      allocate(rrtmgp_state, _STAT)
-      wrap%ptr => rrtmgp_state
-      call ESMF_UserCompSetInternalState(gc, 'RRTMGP_state', wrap, status)
-      _VERIFY(status)
+      ! attach the RRTMGP internal state to the gc as a named private state
+      _SET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE)
 
       ! Get my internal MAPL_Generic state
       call MAPL_GetObjectFromGC(gc, MAPL, _RC)
 
       ! Get the intervals; "heartbeat" must exist
-      call MAPL_GetResource(MAPL, dt, Label="RUN_DT:", _RC)
+      call MAPL_GridCompGetResource(gc, "RUN_DT", dt, _RC)
       run_dt = nint(dt)
 
       ! Refresh interval defaults to heartbeat.
-      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "_DT:", default=dt, _RC)
+      call MAPL_GridCompGetResource(gc, trim(comp_name) // "_DT", dt, default=dt, _RC)
       my_step = nint(dt)
 
       ! Averaging interval defaults to refresh interval.
-      call MAPL_GetResource(MAPL, dt, Label=trim(comp_name) // "Avrg:", default=dt, _RC)
+      call MAPL_GridCompGetResource(gc, trim(comp_name) // "Avrg", dt, default=dt, _RC)
       accumint = nint(dt)
 
       ! Decide which radiation to use:
@@ -508,7 +500,7 @@ contains
       end if
 
       ! Decide if should make OBIO exports
-      call MAPL_GetResource(MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:", default=0, rc=status)
+      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, rc=status)
       _VERIFY(status)
 
       SOLAR_TO_OBIO = (DO_OBIO/=0)
@@ -636,11 +628,11 @@ contains
    subroutine Run(gc, import, export, clock, rc)
 
       !ARGUMENTS:
-      type(ESMF_GridComp), intent(inout) :: gc
-      type(ESMF_State), intent(inout) :: import
-      type(ESMF_State), intent(inout) :: export
-      type(ESMF_Clock), intent(inout) :: clock
-      integer, optional, intent(out) :: rc
+      type(ESMF_GridComp) :: gc
+      type(ESMF_State) :: import
+      type(ESMF_State) :: export
+      type(ESMF_Clock) :: clock
+      integer, intent(out) :: rc
 
       ! /*
       ! !DESCRIPTION: Each time the Run method is called it fills all Exports for
@@ -678,10 +670,8 @@ contains
       ! Local derived type aliases
       type(MAPL_MetaComp), pointer :: MAPL
       type(ESMF_Grid) :: esmfgrid
-      type(ESMF_Config) :: cf
 
       type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
-      type(ty_RRTMGP_wrap) :: wrap
 
       ! Local variables
       type(ESMF_Alarm) :: alarm
@@ -792,7 +782,6 @@ contains
            IM=IM, &
            JM=JM, &
            LM=LM, &
-           cf=cf, &
            LONS=LONS, &
            LATS=LATS, &
            RUNALARM=alarm, &
@@ -803,17 +792,17 @@ contains
            INTERNAL_ESMF_STATE=internal, _RC)
 
       ! Get parameters from configuration
-      call MAPL_GetResource(MAPL, PRS_LOW_MID, 'PRS_LOW_MID_CLOUDS:', default=70000., _RC)
-      call MAPL_GetResource(MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', default=40000., _RC)
-      call MAPL_GetResource(MAPL, CO2, 'CO2:', _RC)
-      call MAPL_GetResource(MAPL, SC, 'SOLAR_CONSTANT:', _RC)
-      call MAPL_GetResource(MAPL, SUNFLAG, 'SUN_FLAG:', default=0, _RC)
+      call MAPL_GridCompGetResource(gc, 'PRS_LOW_MID_CLOUDS', PRS_LOW_MID, default=70000., _RC)
+      call MAPL_GridCompGetResource(gc, 'PRS_MID_HIGH_CLOUDS', PRS_MID_HIGH, default=40000., _RC)
+      call MAPL_GridCompGetResource(gc, 'CO2', CO2, _RC)
+      call MAPL_GridCompGetResource(gc, 'SOLAR_CONSTANT', SC, _RC)
+      call MAPL_GridCompGetResource(gc, 'SUN_FLAG', SUNFLAG, default=0, _RC)
 
       ! Should we load balance solar radiation?
       ! For the single-column model, we always use the DATMO DYCORE.
       ! If this is our DYCORE, turn off load balancing.
-      call MAPL_GetResource(MAPL, DYCORE, 'DYCORE:', _RC)
-      call MAPL_GetResource(MAPL, SOLAR_LOAD_BALANCE, 'SOLAR_LOAD_BALANCE:', default=1, _RC)
+      call MAPL_GridCompGetResource(gc, 'DYCORE', DYCORE, _RC)
+      call MAPL_GridCompGetResource(gc, 'SOLAR_LOAD_BALANCE', SOLAR_LOAD_BALANCE, default=1, _RC)
       if (adjustl(DYCORE) == "DATMO" .or. SOLAR_LOAD_BALANCE == 0) then
          LoadBalance = .false.
       else
@@ -822,7 +811,7 @@ contains
 
       ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
       ! would have been used if not passed in
-      call MAPL_GetResource(MAPL, MaxPasses, 'SOLAR_LB_MAX_PASSES:', default=100, _RC)
+      call MAPL_GridCompGetResource(gc, 'SOLAR_LB_MAX_PASSES', MaxPasses, default=100, _RC)
 
       ! Use time-varying co2
       call ESMF_ClockGet(clock, currTIME=current_time, _RC)
@@ -866,7 +855,7 @@ contains
          TOTAL_RAD_BANDS = TOTAL_RAD_BANDS + NB_CHOU_IRRAD
       end if
 
-      call MAPL_GetResource(MAPL, NUM_BANDS, 'NUM_BANDS:', _RC)
+      call MAPL_GridCompGetResource(gc, 'NUM_BANDS', NUM_BANDS, _RC)
       if (NUM_BANDS /= TOTAL_RAD_BANDS) then
          if (MAPL_AM_I_ROOT()) then
             write(*, *) "NUM_BANDS is not set up correctly for the radiation combination selected:"
@@ -905,19 +894,19 @@ contains
       end if
 
       ! Decide if should make OBIO exports
-      call MAPL_GetResource(MAPL, DO_OBIO, Label="USE_OCEANOBIOGEOCHEM:", default=0, rc=status)
+      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, rc=status)
       _VERIFY(status)
       SOLAR_TO_OBIO = (DO_OBIO/=0)
 
       ! Decide how to do solar forcing
-      call MAPL_GetResource(MAPL, SolCycFileName, "SOLAR_CYCLE_FILE_NAME:", default='/dev/null', _RC)
+      call MAPL_GridCompGetResource(gc, "SOLAR_CYCLE_FILE_NAME", SolCycFileName, default='/dev/null', _RC)
       if (SolCycFileName /= '/dev/null') then
 
          ! Solar forcing is from NRL SSI2 file for RRTMG[P].
          ! For chou-Suarez, the typical forcing is from internal tables, but a special
          ! file forcing is also possible.
 
-         call MAPL_GetResource(MAPL, USE_NRLSSI2, "USE_NRLSSI2:", default=.true., _RC)
+         call MAPL_GridCompGetResource(gc, "USE_NRLSSI2", USE_NRLSSI2, default=.true., _RC)
          if (USE_NRLSSI2) then
 
             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -926,7 +915,7 @@ contains
 
             _ASSERT(USE_RRTMG .or. USE_RRTMGP, 'only RRTMG[P] can use NRLSSI2 currently')
 
-            call MAPL_GetResource(MAPL, PersistSolar, "PERSIST_SOLAR:", default=.true., _RC)
+            call MAPL_GridCompGetResource(gc, "PERSIST_SOLAR", PersistSolar, default=.true., _RC)
             call MAPL_SunGetSolarConstant(clock, trim(SolCycFileName), &
                  SC, MG, SB, PersistSolar=PersistSolar, _RC)
 
@@ -1026,7 +1015,7 @@ contains
       ! step of interval. Right now it is always the last, which is only correct
       ! for called_last=1.
 
-      call MAPL_GetResource(MAPL, CalledLast, 'CALLED_LAST:', default=1, _RC)
+      call MAPL_GridCompGetResource(gc, 'CALLED_LAST', CalledLast, default=1, _RC)
       UPDATE_FIRST = CalledLast /= 0
 
       call MAPL_TimerOff(MAPL, "PRELIMS", _RC)
@@ -2532,7 +2521,7 @@ contains
          end if
 
          ! Option to force binary clouds for SW
-         call MAPL_GetResource(MAPL, ibinary, "RADSW_BINARY_CLOUDS:", default=0, _RC)
+         call MAPL_GridCompGetResource(gc, "RADSW_BINARY_CLOUDS", ibinary, default=0, _RC)
          if (ibinary /= 0) where (CL > 0.) CL = 1.
 
          ! Prepare auxilliary variables
@@ -2676,13 +2665,11 @@ TEST_(gas_concs%set_vmr('ch4', real(CH4_R, kind=wp)))
             deallocate(CH4_R, _STAT)
 
             ! access RRTMGP internal state from the GC
-            call ESMF_UserCompGetInternalState(gc, 'RRTMGP_state', wrap, status)
-            _VERIFY(status)
-            rrtmgp_state => wrap%ptr
+            _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
 
             ! initialize k-distribution if not already done
-            call MAPL_GetResource( &
-                 MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_GAS_SW", k_dist_file, &
                  default='rrtmgp-gas-sw-g112.nc', _RC)
             if (.not. rrtmgp_state%initialized) then
                ! gas_concs needed only to access required gas names
@@ -2854,11 +2841,11 @@ TEST_(error_msg)
             ! load and init cloud_optics from file:
             ! gets appropriate coefficients needed to calculate
             ! cloud optical properties from cloud physical properties
-            call MAPL_GetResource( &
-                 MAPL, cloud_optics_file, "RRTMGP_CLOUD_OPTICS_SW:", &
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_CLOUD_OPTICS_SW", cloud_optics_file, &
                  default='rrtmgp-clouds-sw.nc', _RC)
-            call MAPL_GetResource( &
-                 MAPL, cloud_optics_type, "RRTMGP_CLOUD_OPTICS_TYPE_SW:", &
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_CLOUD_OPTICS_TYPE_SW", cloud_optics_type, &
                  default='LUT', _RC)
             call MAPL_TimerOn(MAPL, "--RRTMGP_IO_CLOUDS", _RC)
             if (trim(cloud_optics_type) == 'LUT') then
@@ -2872,24 +2859,24 @@ TEST_('unknown cloud_optics_type: ' // trim(cloud_optics_file))
 
             ! ice surface roughness category for Yang (2013) ice optics
             ! icergh: 1 = none, 2 = medium, 3 = high
-            call MAPL_GetResource( &
-                 MAPL, icergh, "RRTMGP_ICE_ROUGHNESS_SW:", &
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_ICE_ROUGHNESS_SW", icergh, &
                  default=2, _RC)
 TEST_(cloud_optics%set_ice_roughness(icergh))
 
             ! delta-scaling if of course applied by default
             ! ... you can turn it off for debugging purposes
-            call MAPL_GetResource( &
-                 MAPL, rrtmgp_delta_scale, Label='RRTMGP_DELTA_SCALE:', &
+            call MAPL_GridCompGetResource(gc, &
+                 'RRTMGP_DELTA_SCALE', rrtmgp_delta_scale, &
                  default=.true., _RC)
-            call MAPL_GetResource( &
-                 MAPL, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
-                 Label='RRTMGP_USE_RRTMG_ICEFLG3_LIKE_FORWICE:', &
+            call MAPL_GridCompGetResource(gc, &
+                 'RRTMGP_USE_RRTMG_ICEFLG3_LIKE_FORWICE', &
+                 rrtmgp_use_rrtmg_iceflg3_like_forwice, &
                  default=.true., _RC)
 
             ! read desired cloud overlap type
-            call MAPL_GetResource( &
-                 MAPL, cloud_overlap_type, "RRTMGP_CLOUD_OVERLAP_TYPE_SW:", &
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_CLOUD_OVERLAP_TYPE_SW", cloud_overlap_type, &
                  default='GEN_MAX_RAN_OVERLAP', _RC)
 
             ! GEN_MAX_RAN_OVERLAP uses correlation lengths
@@ -2981,8 +2968,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             !  - one possible partial block is done at the end      !
             !-------------------------------------------------------!
 
-            call MAPL_GetResource(MAPL, &
-                 rrtmgp_blockSize, "RRTMGP_SW_BLOCKSIZE:", default=4, _RC)
+            call MAPL_GridCompGetResource(gc, &
+                 "RRTMGP_SW_BLOCKSIZE", rrtmgp_blockSize, default=4, _RC)
             _ASSERT(rrtmgp_blockSize >= 1, 'bad RRTMGP_SW_BLOCKSIZE')
 
             ! Total number of blocks, including any final partial block.
@@ -3209,15 +3196,15 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
             ! Set flags related to cloud properties (see RRTMG_SW)
             ! ----------------------------------------------------
-            call MAPL_GetResource(MAPL, ICEFLGSW, 'RRTMG_ICEFLG:', default=3, _RC)
-            call MAPL_GetResource(MAPL, LIQFLGSW, 'RRTMG_LIQFLG:', default=1, _RC)
+            call MAPL_GridCompGetResource(gc, 'RRTMG_ICEFLG', ICEFLGSW, default=3, _RC)
+            call MAPL_GridCompGetResource(gc, 'RRTMG_LIQFLG', LIQFLGSW, default=1, _RC)
 
             if (LM > 72) then
-               call MAPL_GetResource(MAPL, USE_PRECIP_IN_RADIATION, 'RRTMGSW_USE_PRECIP_IN_RADIATION:', default=.true.&
+               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.true.&
                     &, rc=status)
                _VERIFY(status)
             else
-               call MAPL_GetResource(MAPL, USE_PRECIP_IN_RADIATION, 'RRTMGSW_USE_PRECIP_IN_RADIATION:', default=.false.&
+               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.false.&
                     , rc=status)
                _VERIFY(status)
             end if
@@ -3368,7 +3355,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_TimerOn(MAPL, "--RRTMG_RUN")
 
             ! partition size for columns (profiles) used to improve efficiency
-            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, _RC)
+            call MAPL_GridCompGetResource(gc, 'RRTMGSW_PARTITION_SIZE', RPART, default=0, _RC)
 
             ! various RRTMG configuration options ...
 
@@ -3381,7 +3368,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
             DYOFYR = DOY ! Day of year
 
-            call MAPL_GetResource(MAPL, ISOLVAR, 'ISOLVAR:', default=0, _RC)
+            call MAPL_GridCompGetResource(gc, 'ISOLVAR', ISOLVAR, default=0, _RC)
 
             ! ISOLVAR:
             ! Flag for solar variability method
@@ -3445,8 +3432,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
             else
 
-               call MAPL_GetResource(MAPL, INDSOLVAR(1), 'INDSOLVAR_1:', default=1.0, _RC)
-               call MAPL_GetResource(MAPL, INDSOLVAR(2), 'INDSOLVAR_2:', default=1.0, _RC)
+               call MAPL_GridCompGetResource(gc, 'INDSOLVAR_1', INDSOLVAR(1), default=1.0, _RC)
+               call MAPL_GridCompGetResource(gc, 'INDSOLVAR_2', INDSOLVAR(2), default=1.0, _RC)
 
             end if
 
@@ -3462,7 +3449,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! MAT: Note while we don't currently use SOLCYCFRAC, we set it to something
             !      to avoid an optional variable on GPUs
 
-            call MAPL_GetResource(MAPL, SOLCYCFRAC, 'SOLCYCFRAC:', default=1.0, _RC)
+            call MAPL_GridCompGetResource(gc, 'SOLCYCFRAC', SOLCYCFRAC, default=1.0, _RC)
 
             ! call RRTMG SW
             ! -------------
@@ -3848,7 +3835,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          integer, external :: GetAeroIndex
 
          type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
-         type(ty_RRTMGP_wrap) :: wrap
          character(len=ESMF_MAXPATHLEN) :: k_dist_file
          character(len=ESMF_MAXSTR) :: error_msg
          type(ty_gas_concs) :: gas_concs
@@ -4148,7 +4134,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             if (associated(CLDTTSWHB)) CLDTTSWHB = 0.
 
             ! partition size pncol for cloudy columns to conserve memory & improve efficiency
-            call MAPL_GetResource(MAPL, RPART, 'RRTMGSW_PARTITION_SIZE:', default=0, _RC)
+            call MAPL_GridCompGetResource(gc, 'RRTMGSW_PARTITION_SIZE', RPART, default=0, _RC)
             if (RPART > 0) then
                pncol = RPART
             else
@@ -4446,7 +4432,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             if (allocated(aTAUT)) deallocate(aTAUT, _STAT)
 
             if (associated(CLDTMP) .or. associated(CLDPRS)) then
-               call MAPL_GetResource(MAPL, TAUCRIT, 'TAUCRIT:', default=0.10, _RC)
+               call MAPL_GridCompGetResource(gc, 'TAUCRIT', TAUCRIT, default=0.10, _RC)
 
                if (associated(CLDTMP)) CLDTMP = MAPL_UNDEF
                if (associated(CLDPRS)) CLDPRS = MAPL_UNDEF
@@ -4711,9 +4697,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
                            ! access RRTMGP internal state from the GC
                            if (.not. rrtmgp_state_set) then
-                              call ESMF_UserCompGetInternalState(gc, 'RRTMGP_state', wrap, status)
-                              _VERIFY(status)
-                              rrtmgp_state => wrap%ptr
+                              _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
                               rrtmgp_state_set = .true.
                            end if
 
@@ -4724,8 +4708,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                            ! initialize k-distribution if not already done
                            ! remember: its possible to have UPDATE_FIRST
                            if (.not. rrtmgp_state%initialized) then
-                              call MAPL_GetResource( &
-                                   MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                              call MAPL_GridCompGetResource(gc, &
+                                   "RRTMGP_GAS_SW", k_dist_file, &
                                    default='rrtmgp-gas-sw-g112.nc', _RC)
                               ! gas_concs needed only to access required gas names
                               error_msg = gas_concs%init([character(3) :: &
@@ -4776,9 +4760,7 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 
                      ! access RRTMGP internal state from the GC
                      if (.not. rrtmgp_state_set) then
-                        call ESMF_UserCompGetInternalState(gc, 'RRTMGP_state', wrap, status)
-                        _VERIFY(status)
-                        rrtmgp_state => wrap%ptr
+                        _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
                         rrtmgp_state_set = .true.
                      end if
 
@@ -4789,8 +4771,8 @@ TEST_('RRTMGP-SW: does not seem to be SW')
                      ! initialize k-distribution if not already done
                      ! remember: its possible to have UPDATE_FIRST
                      if (.not. rrtmgp_state%initialized) then
-                        call MAPL_GetResource( &
-                             MAPL, k_dist_file, "RRTMGP_GAS_SW:", &
+                        call MAPL_GridCompGetResource(gc, &
+                             "RRTMGP_GAS_SW", k_dist_file, &
                              default='rrtmgp-gas-sw-g112.nc', _RC)
                         ! gas_concs needed only to access required gas names
                         error_msg = gas_concs%init([character(3) :: &
