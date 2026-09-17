@@ -773,6 +773,12 @@ contains
       real, pointer, dimension(:, :, :) :: ptr3d
       real, pointer, dimension(:, :) :: ptr2d
 
+      ! scratch pointer to satisfy Fortran's rank-remapping rule for the
+      ! Edge-array remap below (self-remap alone isn't enough - gfortran
+      ! rejects a self-referencing rank remap unless the target is
+      ! CONTIGUOUS)
+      real, pointer, contiguous, dimension(:, :, :) :: p3d
+
       type(ESMF_State) :: AERO
       character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
       integer :: AS_STATUS
@@ -956,17 +962,17 @@ contains
             band_output(ibnd) = .false.
             if (.not. band_output_supported(ibnd)) cycle
             write(bb, '(I0.2)') ibnd
-            call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
+            call MAPL_StateGetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
             end if
-            call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
+            call MAPL_StateGetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
             end if
-            call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
+            call MAPL_StateGetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
             if (associated(ptr2d)) then
                band_output(ibnd) = .true.
                cycle
@@ -1056,7 +1062,7 @@ contains
       ! Determine the model level separating high-middle and low-middle clouds
 
       ! Use the reference pressures to separate high, middle, and low clouds.
-      call MAPL_GetPointer(import, PREF, 'PREF', _RC)
+      call MAPL_StateGetPointer(import, PREF, 'PREF', _RC)
 
       _ASSERT(PRS_MID_HIGH > PREF(1), 'mid-high pressure band boundary too high!')
       _ASSERT(PRS_LOW_MID > PRS_MID_HIGH, 'pressure band misordering!')
@@ -1145,13 +1151,14 @@ contains
                  NAME='relative_humidity_for_aerosol_optics', &
                  value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', _RC)
-               call MAPL_GetPointer(import, AS_PTR_Q, 'QV', _RC)
-               call MAPL_GetPointer(import, AS_PTR_T, 'T', _RC)
+               call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
+               p3d => AS_PTR_PLE; AS_PTR_PLE(1:IM, 1:JM, 0:LM) => p3d
+               call MAPL_StateGetPointer(import, AS_PTR_Q, 'QV', _RC)
+               call MAPL_StateGetPointer(import, AS_PTR_T, 'T', _RC)
                allocate(AS_ARR_RH(IM, JM, LM), AS_ARR_PL(IM, JM, LM), _STAT)
                AS_ARR_PL = 0.5 * (AS_PTR_PLE(:, :, 1:LM) + AS_PTR_PLE(:, :, 0:LM - 1))
                AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
+               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                AS_PTR_3D = AS_ARR_RH
                deallocate(AS_ARR_RH, AS_ARR_PL, _STAT)
             end if
@@ -1161,8 +1168,9 @@ contains
                  NAME='air_pressure_for_aerosol_optics', &
                  value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
-               call MAPL_GetPointer(import, AS_PTR_PLE, 'PLE', _RC)
-               call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
+               call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
+               p3d => AS_PTR_PLE; AS_PTR_PLE(1:IM, 1:JM, 0:LM) => p3d
+               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                AS_PTR_3D = AS_PTR_PLE
             end if
 
@@ -1197,7 +1205,7 @@ contains
                     NAME='extinction_in_air_due_to_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
+                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_EXT(:, :, :, band) = MAX(AS_PTR_3D, 0.0)
                end if
 
@@ -1206,7 +1214,7 @@ contains
                     NAME='single_scattering_albedo_of_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
+                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_SSA(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), SSA_MAX)
                end if
 
@@ -1215,7 +1223,7 @@ contains
                     NAME='asymmetry_parameter_of_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
-                  call MAPL_GetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
+                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
                   if (associated(AS_PTR_3D)) AEROSOL_ASY(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), ASY_MAX)
                end if
 
@@ -1241,7 +1249,7 @@ contains
          string_vec_iter = string_vec%begin()
          do while (string_vec_iter /= string_vec%end())
             string_pointer => string_vec_iter%get()
-            call MAPL_GetPointer(export, ptr3d, string_pointer, _RC)
+            call MAPL_StateGetPointer(export, ptr3d, string_pointer, _RC)
             do_no_aero_calc = (do_no_aero_calc .or. associated(ptr3d))
             call string_vec_iter%next()
          end do
@@ -1265,7 +1273,7 @@ contains
 
             do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_GetPointer(export, ptr2d, string_pointer, _RC)
+               call MAPL_StateGetPointer(export, ptr2d, string_pointer, _RC)
                do_no_aero_calc = (do_no_aero_calc .or. associated(ptr2d))
                call string_vec_iter%next()
             end do
@@ -1295,7 +1303,7 @@ contains
             string_vec_iter = string_vec%begin()
             do while (string_vec_iter /= string_vec%end())
                string_pointer => string_vec_iter%get()
-               call MAPL_GetPointer(internal, ptr3d, string_pointer, _RC)
+               call MAPL_StateGetPointer(internal, ptr3d, string_pointer, _RC)
                ptr3d = 0.
                call string_vec_iter%next()
             end do
@@ -3819,6 +3827,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          real, dimension(IM, JM) :: ZTH, SLR, ALB, CLD, SLN, ZTHN
 
+         ! scratch pointer to satisfy Fortran's rank-remapping rule for the
+         ! Edge-array remaps below (see the matching remap + explanation in
+         ! Run, right after its own AS_PTR_PLE fetches)
+         real, pointer, contiguous, dimension(:, :, :) :: p3d
+
          real, pointer, dimension(:, :) :: ALBEXP, ALBIMP
 
          real, pointer, dimension(:, :, :) :: FSW, FSC
@@ -4015,127 +4028,160 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             SLN = 0.0
          end where
 
-         call MAPL_GetPointer(internal, FSWN, 'FSWN', _RC)
-         call MAPL_GetPointer(internal, FSCN, 'FSCN', _RC)
-         call MAPL_GetPointer(internal, FSWNAN, 'FSWNAN', _RC)
-         call MAPL_GetPointer(internal, FSCNAN, 'FSCNAN', _RC)
-         call MAPL_GetPointer(internal, FSWUN, 'FSWUN', _RC)
-         call MAPL_GetPointer(internal, FSCUN, 'FSCUN', _RC)
-         call MAPL_GetPointer(internal, FSWUNAN, 'FSWUNAN', _RC)
-         call MAPL_GetPointer(internal, FSCUNAN, 'FSCUNAN', _RC)
-         call MAPL_GetPointer(internal, FSWBANDN, 'FSWBANDN', _RC)
-         call MAPL_GetPointer(internal, FSWBANDNAN, 'FSWBANDNAN', _RC)
+         call MAPL_StateGetPointer(internal, FSWN, 'FSWN', _RC)
+         call MAPL_StateGetPointer(internal, FSCN, 'FSCN', _RC)
+         call MAPL_StateGetPointer(internal, FSWNAN, 'FSWNAN', _RC)
+         call MAPL_StateGetPointer(internal, FSCNAN, 'FSCNAN', _RC)
+         call MAPL_StateGetPointer(internal, FSWUN, 'FSWUN', _RC)
+         call MAPL_StateGetPointer(internal, FSCUN, 'FSCUN', _RC)
+         call MAPL_StateGetPointer(internal, FSWUNAN, 'FSWUNAN', _RC)
+         call MAPL_StateGetPointer(internal, FSCUNAN, 'FSCUNAN', _RC)
+         call MAPL_StateGetPointer(internal, FSWBANDN, 'FSWBANDN', _RC)
+         call MAPL_StateGetPointer(internal, FSWBANDNAN, 'FSWBANDNAN', _RC)
 
-         call MAPL_GetPointer(internal, DRUVRN, 'DRUVRN', _RC)
-         call MAPL_GetPointer(internal, DFUVRN, 'DFUVRN', _RC)
-         call MAPL_GetPointer(internal, DRPARN, 'DRPARN', _RC)
-         call MAPL_GetPointer(internal, DFPARN, 'DFPARN', _RC)
-         call MAPL_GetPointer(internal, DRNIRN, 'DRNIRN', _RC)
-         call MAPL_GetPointer(internal, DFNIRN, 'DFNIRN', _RC)
+         call MAPL_StateGetPointer(internal, DRUVRN, 'DRUVRN', _RC)
+         call MAPL_StateGetPointer(internal, DFUVRN, 'DFUVRN', _RC)
+         call MAPL_StateGetPointer(internal, DRPARN, 'DRPARN', _RC)
+         call MAPL_StateGetPointer(internal, DFPARN, 'DFPARN', _RC)
+         call MAPL_StateGetPointer(internal, DRNIRN, 'DRNIRN', _RC)
+         call MAPL_StateGetPointer(internal, DFNIRN, 'DFNIRN', _RC)
 
-         call MAPL_GetPointer(export, FSW, 'FSW', _RC)
-         call MAPL_GetPointer(export, FSC, 'FSC', _RC)
-         call MAPL_GetPointer(export, FSWNA, 'FSWNA', _RC)
-         call MAPL_GetPointer(export, FSCNA, 'FSCNA', _RC)
-         call MAPL_GetPointer(export, FSWD, 'FSWD', _RC)
-         call MAPL_GetPointer(export, FSCD, 'FSCD', _RC)
-         call MAPL_GetPointer(export, FSWDNA, 'FSWDNA', _RC)
-         call MAPL_GetPointer(export, FSCDNA, 'FSCDNA', _RC)
-         call MAPL_GetPointer(export, FSWU, 'FSWU', _RC)
-         call MAPL_GetPointer(export, FSCU, 'FSCU', _RC)
-         call MAPL_GetPointer(export, FSWUNA, 'FSWUNA', _RC)
-         call MAPL_GetPointer(export, FSCUNA, 'FSCUNA', _RC)
-         call MAPL_GetPointer(export, FSWBAND, 'FSWBAND', _RC)
-         call MAPL_GetPointer(export, FSWBANDNA, 'FSWBANDNA', _RC)
+         call MAPL_StateGetPointer(export, FSW, 'FSW', _RC)
+         call MAPL_StateGetPointer(export, FSC, 'FSC', _RC)
+         call MAPL_StateGetPointer(export, FSWNA, 'FSWNA', _RC)
+         call MAPL_StateGetPointer(export, FSCNA, 'FSCNA', _RC)
+         call MAPL_StateGetPointer(export, FSWD, 'FSWD', _RC)
+         call MAPL_StateGetPointer(export, FSCD, 'FSCD', _RC)
+         call MAPL_StateGetPointer(export, FSWDNA, 'FSWDNA', _RC)
+         call MAPL_StateGetPointer(export, FSCDNA, 'FSCDNA', _RC)
+         call MAPL_StateGetPointer(export, FSWU, 'FSWU', _RC)
+         call MAPL_StateGetPointer(export, FSCU, 'FSCU', _RC)
+         call MAPL_StateGetPointer(export, FSWUNA, 'FSWUNA', _RC)
+         call MAPL_StateGetPointer(export, FSCUNA, 'FSCUNA', _RC)
+         call MAPL_StateGetPointer(export, FSWBAND, 'FSWBAND', _RC)
+         call MAPL_StateGetPointer(export, FSWBANDNA, 'FSWBANDNA', _RC)
 
-         call MAPL_GetPointer(export, DRUVR, 'DRUVR', _RC)
-         call MAPL_GetPointer(export, DFUVR, 'DFUVR', _RC)
-         call MAPL_GetPointer(export, DRPAR, 'DRPAR', _RC)
-         call MAPL_GetPointer(export, DFPAR, 'DFPAR', _RC)
-         call MAPL_GetPointer(export, DRNIR, 'DRNIR', _RC)
-         call MAPL_GetPointer(export, DFNIR, 'DFNIR', _RC)
-         call MAPL_GetPointer(export, RSR, 'RSR', _RC)
-         call MAPL_GetPointer(export, RSC, 'RSC', _RC)
-         call MAPL_GetPointer(export, RSRNA, 'RSRNA', _RC)
-         call MAPL_GetPointer(export, RSCNA, 'RSCNA', _RC)
-         call MAPL_GetPointer(export, SLRTP, 'SLRTP', _RC)
-         call MAPL_GetPointer(export, RSCS, 'RSCS', _RC)
-         call MAPL_GetPointer(export, RSRS, 'RSRS', _RC)
-         call MAPL_GetPointer(export, RSCSNA, 'RSCSNA', _RC)
-         call MAPL_GetPointer(export, RSRSNA, 'RSRSNA', _RC)
-         call MAPL_GetPointer(export, SLRSF, 'SLRSF', _RC)
-         call MAPL_GetPointer(export, SLRSFC, 'SLRSFC', _RC)
-         call MAPL_GetPointer(export, SLRSFNA, 'SLRSFNA', _RC)
-         call MAPL_GetPointer(export, SLRSFCNA, 'SLRSFCNA', _RC)
-         call MAPL_GetPointer(export, SLRSUF, 'SLRSUF', _RC)
-         call MAPL_GetPointer(export, SLRSUFC, 'SLRSUFC', _RC)
-         call MAPL_GetPointer(export, SLRSUFNA, 'SLRSUFNA', _RC)
-         call MAPL_GetPointer(export, SLRSUFCNA, 'SLRSUFCNA', _RC)
-         call MAPL_GetPointer(export, OSR, 'OSR', _RC)
-         call MAPL_GetPointer(export, OSRCLR, 'OSRCLR', _RC)
-         call MAPL_GetPointer(export, OSRNA, 'OSRNA', _RC)
-         call MAPL_GetPointer(export, OSRCNA, 'OSRCNA', _RC)
-         call MAPL_GetPointer(export, ALBEDO, 'ALBEDO', _RC)
-         call MAPL_GetPointer(export, COSZ, 'COSZ', _RC)
-         call MAPL_GetPointer(export, MCOSZ, 'MCOSZ', _RC)
-         call MAPL_GetPointer(export, DRNUVR, 'DRNUVR', _RC)
-         call MAPL_GetPointer(export, DRNPAR, 'DRNPAR', _RC)
-         call MAPL_GetPointer(export, DRNNIR, 'DRNNIR', _RC)
+         ! MAPL always creates Edge-staggered fields with Fortran bounds
+         ! 1:LM+1 (see FieldCreate.F90's make_bounds_from_args - there is
+         ! no automatic 0-based remap for VLOC=E fields). This code assumes
+         ! the 0:LM layer-interface convention throughout (e.g.
+         ! FSWN(:,:,0)/(:,:,LM)), so remap each Edge pointer here, once,
+         ! right after its ACG-style fetch above.
+         ! INTERNALs are mandatory (no COND), always associated, so no
+         ! associated() guard is needed for them.
+         p3d => FSWN; FSWN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSCN; FSCN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSWNAN; FSWNAN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSCNAN; FSCNAN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSWUN; FSWUN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSCUN; FSCUN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSWUNAN; FSWUNAN(1:IM, 1:JM, 0:LM) => p3d
+         p3d => FSCUNAN; FSCUNAN(1:IM, 1:JM, 0:LM) => p3d
 
-         call MAPL_GetPointer(import, CLIN, 'FCLD', _RC)
-         call MAPL_GetPointer(import, PLL, 'PLE', _RC)
-         call MAPL_GetPointer(import, RRI, 'RI', _RC)
-         call MAPL_GetPointer(import, RRL, 'RL', _RC)
-         call MAPL_GetPointer(import, RRR, 'RR', _RC)
-         call MAPL_GetPointer(import, RRS, 'RS', _RC)
-         call MAPL_GetPointer(import, RQI, 'QI', _RC)
-         call MAPL_GetPointer(import, RQL, 'QL', _RC)
-         call MAPL_GetPointer(import, RQR, 'QR', _RC)
-         call MAPL_GetPointer(import, RQS, 'QS', _RC)
-         call MAPL_GetPointer(import, T, 'T', _RC)
-         call MAPL_GetPointer(import, Q, 'QV', _RC)
+         ! EXPORTs can be unassociated if not requested downstream, so
+         ! guard each remap with associated().
+         if (associated(FSW)) then; p3d => FSW; FSW(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSC)) then; p3d => FSC; FSC(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSWNA)) then; p3d => FSWNA; FSWNA(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSCNA)) then; p3d => FSCNA; FSCNA(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSWD)) then; p3d => FSWD; FSWD(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSCD)) then; p3d => FSCD; FSCD(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSWDNA)) then; p3d => FSWDNA; FSWDNA(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSCDNA)) then; p3d => FSCDNA; FSCDNA(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSWU)) then; p3d => FSWU; FSWU(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSCU)) then; p3d => FSCU; FSCU(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSWUNA)) then; p3d => FSWUNA; FSWUNA(1:IM, 1:JM, 0:LM) => p3d; end if
+         if (associated(FSCUNA)) then; p3d => FSCUNA; FSCUNA(1:IM, 1:JM, 0:LM) => p3d; end if
 
-         call MAPL_GetPointer(export, FCLD, 'FCLD', _RC)
-         call MAPL_GetPointer(export, TAUI, 'TAUCLI', _RC)
-         call MAPL_GetPointer(export, TAUW, 'TAUCLW', _RC)
-         call MAPL_GetPointer(export, TAUR, 'TAUCLR', _RC)
-         call MAPL_GetPointer(export, TAUS, 'TAUCLS', _RC)
-         call MAPL_GetPointer(export, CLDL, 'CLDLO', _RC)
-         call MAPL_GetPointer(export, CLDM, 'CLDMD', _RC)
-         call MAPL_GetPointer(export, CLDH, 'CLDHI', _RC)
-         call MAPL_GetPointer(export, CLDT, 'CLDTT', _RC)
-         call MAPL_GetPointer(export, TAUL, 'TAULO', _RC)
-         call MAPL_GetPointer(export, TAUM, 'TAUMD', _RC)
-         call MAPL_GetPointer(export, TAUH, 'TAUHI', _RC)
-         call MAPL_GetPointer(export, TAUT, 'TAUTT', _RC)
-         call MAPL_GetPointer(export, TAUX, 'TAUTX', _RC)
-         call MAPL_GetPointer(export, COTL, 'COTLO', _RC)
-         call MAPL_GetPointer(export, COTM, 'COTMD', _RC)
-         call MAPL_GetPointer(export, COTH, 'COTHI', _RC)
-         call MAPL_GetPointer(export, COTT, 'COTTT', _RC)
-         call MAPL_GetPointer(export, CLDTMP, 'CLDTMP', _RC)
-         call MAPL_GetPointer(export, CLDPRS, 'CLDPRS', _RC)
-         call MAPL_GetPointer(export, COTDL, 'COTDENLO', _RC)
-         call MAPL_GetPointer(export, COTDM, 'COTDENMD', _RC)
-         call MAPL_GetPointer(export, COTDH, 'COTDENHI', _RC)
-         call MAPL_GetPointer(export, COTDT, 'COTDENTT', _RC)
-         call MAPL_GetPointer(export, COTNL, 'COTNUMLO', _RC)
-         call MAPL_GetPointer(export, COTNM, 'COTNUMMD', _RC)
-         call MAPL_GetPointer(export, COTNH, 'COTNUMHI', _RC)
-         call MAPL_GetPointer(export, COTNT, 'COTNUMTT', _RC)
+         call MAPL_StateGetPointer(export, DRUVR, 'DRUVR', _RC)
+         call MAPL_StateGetPointer(export, DFUVR, 'DFUVR', _RC)
+         call MAPL_StateGetPointer(export, DRPAR, 'DRPAR', _RC)
+         call MAPL_StateGetPointer(export, DFPAR, 'DFPAR', _RC)
+         call MAPL_StateGetPointer(export, DRNIR, 'DRNIR', _RC)
+         call MAPL_StateGetPointer(export, DFNIR, 'DFNIR', _RC)
+         call MAPL_StateGetPointer(export, RSR, 'RSR', _RC)
+         call MAPL_StateGetPointer(export, RSC, 'RSC', _RC)
+         call MAPL_StateGetPointer(export, RSRNA, 'RSRNA', _RC)
+         call MAPL_StateGetPointer(export, RSCNA, 'RSCNA', _RC)
+         call MAPL_StateGetPointer(export, SLRTP, 'SLRTP', _RC)
+         call MAPL_StateGetPointer(export, RSCS, 'RSCS', _RC)
+         call MAPL_StateGetPointer(export, RSRS, 'RSRS', _RC)
+         call MAPL_StateGetPointer(export, RSCSNA, 'RSCSNA', _RC)
+         call MAPL_StateGetPointer(export, RSRSNA, 'RSRSNA', _RC)
+         call MAPL_StateGetPointer(export, SLRSF, 'SLRSF', _RC)
+         call MAPL_StateGetPointer(export, SLRSFC, 'SLRSFC', _RC)
+         call MAPL_StateGetPointer(export, SLRSFNA, 'SLRSFNA', _RC)
+         call MAPL_StateGetPointer(export, SLRSFCNA, 'SLRSFCNA', _RC)
+         call MAPL_StateGetPointer(export, SLRSUF, 'SLRSUF', _RC)
+         call MAPL_StateGetPointer(export, SLRSUFC, 'SLRSUFC', _RC)
+         call MAPL_StateGetPointer(export, SLRSUFNA, 'SLRSUFNA', _RC)
+         call MAPL_StateGetPointer(export, SLRSUFCNA, 'SLRSUFCNA', _RC)
+         call MAPL_StateGetPointer(export, OSR, 'OSR', _RC)
+         call MAPL_StateGetPointer(export, OSRCLR, 'OSRCLR', _RC)
+         call MAPL_StateGetPointer(export, OSRNA, 'OSRNA', _RC)
+         call MAPL_StateGetPointer(export, OSRCNA, 'OSRCNA', _RC)
+         call MAPL_StateGetPointer(export, ALBEDO, 'ALBEDO', _RC)
+         call MAPL_StateGetPointer(export, COSZ, 'COSZ', _RC)
+         call MAPL_StateGetPointer(export, MCOSZ, 'MCOSZ', _RC)
+         call MAPL_StateGetPointer(export, DRNUVR, 'DRNUVR', _RC)
+         call MAPL_StateGetPointer(export, DRNPAR, 'DRNPAR', _RC)
+         call MAPL_StateGetPointer(export, DRNNIR, 'DRNNIR', _RC)
+
+         call MAPL_StateGetPointer(import, CLIN, 'FCLD', _RC)
+         call MAPL_StateGetPointer(import, PLL, 'PLE', _RC)
+         p3d => PLL; PLL(1:IM, 1:JM, 0:LM) => p3d
+         call MAPL_StateGetPointer(import, RRI, 'RI', _RC)
+         call MAPL_StateGetPointer(import, RRL, 'RL', _RC)
+         call MAPL_StateGetPointer(import, RRR, 'RR', _RC)
+         call MAPL_StateGetPointer(import, RRS, 'RS', _RC)
+         call MAPL_StateGetPointer(import, RQI, 'QI', _RC)
+         call MAPL_StateGetPointer(import, RQL, 'QL', _RC)
+         call MAPL_StateGetPointer(import, RQR, 'QR', _RC)
+         call MAPL_StateGetPointer(import, RQS, 'QS', _RC)
+         call MAPL_StateGetPointer(import, T, 'T', _RC)
+         call MAPL_StateGetPointer(import, Q, 'QV', _RC)
+
+         call MAPL_StateGetPointer(export, FCLD, 'FCLD', _RC)
+         call MAPL_StateGetPointer(export, TAUI, 'TAUCLI', _RC)
+         call MAPL_StateGetPointer(export, TAUW, 'TAUCLW', _RC)
+         call MAPL_StateGetPointer(export, TAUR, 'TAUCLR', _RC)
+         call MAPL_StateGetPointer(export, TAUS, 'TAUCLS', _RC)
+         call MAPL_StateGetPointer(export, CLDL, 'CLDLO', _RC)
+         call MAPL_StateGetPointer(export, CLDM, 'CLDMD', _RC)
+         call MAPL_StateGetPointer(export, CLDH, 'CLDHI', _RC)
+         call MAPL_StateGetPointer(export, CLDT, 'CLDTT', _RC)
+         call MAPL_StateGetPointer(export, TAUL, 'TAULO', _RC)
+         call MAPL_StateGetPointer(export, TAUM, 'TAUMD', _RC)
+         call MAPL_StateGetPointer(export, TAUH, 'TAUHI', _RC)
+         call MAPL_StateGetPointer(export, TAUT, 'TAUTT', _RC)
+         call MAPL_StateGetPointer(export, TAUX, 'TAUTX', _RC)
+         call MAPL_StateGetPointer(export, COTL, 'COTLO', _RC)
+         call MAPL_StateGetPointer(export, COTM, 'COTMD', _RC)
+         call MAPL_StateGetPointer(export, COTH, 'COTHI', _RC)
+         call MAPL_StateGetPointer(export, COTT, 'COTTT', _RC)
+         call MAPL_StateGetPointer(export, CLDTMP, 'CLDTMP', _RC)
+         call MAPL_StateGetPointer(export, CLDPRS, 'CLDPRS', _RC)
+         call MAPL_StateGetPointer(export, COTDL, 'COTDENLO', _RC)
+         call MAPL_StateGetPointer(export, COTDM, 'COTDENMD', _RC)
+         call MAPL_StateGetPointer(export, COTDH, 'COTDENHI', _RC)
+         call MAPL_StateGetPointer(export, COTDT, 'COTDENTT', _RC)
+         call MAPL_StateGetPointer(export, COTNL, 'COTNUMLO', _RC)
+         call MAPL_StateGetPointer(export, COTNM, 'COTNUMMD', _RC)
+         call MAPL_StateGetPointer(export, COTNH, 'COTNUMHI', _RC)
+         call MAPL_StateGetPointer(export, COTNT, 'COTNUMTT', _RC)
 
 #ifdef SOLAR_RADVAL
-         call MAPL_GetPointer(export, CLDLOSWHB, 'CLDLOSWHB', _RC)
-         call MAPL_GetPointer(export, CLDMDSWHB, 'CLDMDSWHB', _RC)
-         call MAPL_GetPointer(export, CLDHISWHB, 'CLDHISWHB', _RC)
-         call MAPL_GetPointer(export, CLDTTSWHB, 'CLDTTSWHB', _RC)
+         call MAPL_StateGetPointer(export, CLDLOSWHB, 'CLDLOSWHB', _RC)
+         call MAPL_StateGetPointer(export, CLDMDSWHB, 'CLDMDSWHB', _RC)
+         call MAPL_StateGetPointer(export, CLDHISWHB, 'CLDHISWHB', _RC)
+         call MAPL_StateGetPointer(export, CLDTTSWHB, 'CLDTTSWHB', _RC)
 #endif
 
          if (SOLAR_TO_OBIO) then
-            call MAPL_GetPointer(internal, DRBANDN, 'DRBANDN', _RC)
-            call MAPL_GetPointer(internal, DFBANDN, 'DFBANDN', _RC)
-            call MAPL_GetPointer(export, DROBIO, 'DROBIO', _RC)
-            call MAPL_GetPointer(export, DFOBIO, 'DFOBIO', _RC)
+            call MAPL_StateGetPointer(internal, DRBANDN, 'DRBANDN', _RC)
+            call MAPL_StateGetPointer(internal, DFBANDN, 'DFBANDN', _RC)
+            call MAPL_StateGetPointer(export, DROBIO, 'DROBIO', _RC)
+            call MAPL_StateGetPointer(export, DFOBIO, 'DFOBIO', _RC)
          end if
 
          if (associated(FCLD)) FCLD = CLIN
@@ -4546,9 +4592,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! Visible/UV diffuse
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBVF', _RC)
+         call MAPL_StateGetPointer(export, ALBEXP, 'ALBVF', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBVF', _RC)
+            call MAPL_StateGetPointer(import, ALBIMP, 'ALBVF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
             else where
@@ -4558,9 +4604,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! Visible/UV direct
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBVR', _RC)
+         call MAPL_StateGetPointer(export, ALBEXP, 'ALBVR', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBVR', _RC)
+            call MAPL_StateGetPointer(import, ALBIMP, 'ALBVR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
             else where
@@ -4570,9 +4616,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! NIR diffuse
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBNF', _RC)
+         call MAPL_StateGetPointer(export, ALBEXP, 'ALBNF', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBNF', _RC)
+            call MAPL_StateGetPointer(import, ALBIMP, 'ALBNF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
             else where
@@ -4582,9 +4628,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! NIR direct
 
-         call MAPL_GetPointer(export, ALBEXP, 'ALBNR', _RC)
+         call MAPL_StateGetPointer(export, ALBEXP, 'ALBNR', _RC)
          if (associated(ALBEXP)) then
-            call MAPL_GetPointer(import, ALBIMP, 'ALBNR', _RC)
+            call MAPL_StateGetPointer(import, ALBIMP, 'ALBNR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
             else where
@@ -4729,9 +4775,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                   allocate(ISRB(IM, JM), _STAT)
 
                   ! get last full calculation
-                  call MAPL_GetPointer(internal, ptr2d, 'OSRB' // bb // 'RGN', _RC)
+                  call MAPL_StateGetPointer(internal, ptr2d, 'OSRB' // bb // 'RGN', _RC)
                   OSRB = ptr2d
-                  call MAPL_GetPointer(internal, ptr2d, 'ISRB' // bb // 'RGN', _RC)
+                  call MAPL_StateGetPointer(internal, ptr2d, 'ISRB' // bb // 'RGN', _RC)
                   ISRB = ptr2d
 
                   ! scale to current solar input
@@ -4739,7 +4785,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                   ISRB = ISRB * SLR
 
                   ! fill OSRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
+                  call MAPL_StateGetPointer(export, ptr2d, 'OSRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (all(OSRB == 0.)) then
                         ! handles pre-first-full-calc case
@@ -4750,7 +4796,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                   end if
 
                   ! fill ISRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
+                  call MAPL_StateGetPointer(export, ptr2d, 'ISRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (all(ISRB == 0.)) then
                         ! handles pre-first-full-calc case
@@ -4761,7 +4807,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                   end if
 
                   ! calculate TBRBbbRG if requested
-                  call MAPL_GetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
+                  call MAPL_StateGetPointer(export, ptr2d, 'TBRB' // bb // 'RG', _RC)
                   if (associated(ptr2d)) then
                      if (USE_RRTMG) then
 

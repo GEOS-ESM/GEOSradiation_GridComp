@@ -3,7 +3,7 @@
 Status: in progress. `GEOSsolar_GridComp` is still commented out of the
 parent container's `alldirs` (see `../CMakeLists.txt`) and
 `GEOS_SolarGridComp.F90` is still the unported MAPL2 version. Steps
-1-9 below are done (see branch `feature/pchakrab/port-solar-to-mapl3`).
+1-11 below are done (see branch `feature/pchakrab/port-solar-to-mapl3`).
 
 This plan was derived by comparing against the already-completed IRRAD
 port (`../GEOSirrad_GridComp/`, see its own `mapl3-porting-notes.md` for
@@ -296,17 +296,74 @@ port - referenced throughout below instead of repeated).
      12's load-balancing API investigation, and was already
      non-compilable before this step's changes.
 
-11. **Edge (`VLOC=E`) 0-based bounds remap - Solar needs this too,
-   likely worse than IRRAD.** Solar's SORAD core assumes `PLE(0:LM)`-
-   style indexing pervasively (fluxes at layer interfaces indexed
-   top-down from L=0). Every Edge-staggered import/internal/export
-   pointer (fluxes `FSW`/`FSC`/etc., `PLE`) needs the same `contiguous`
-   scratch-pointer remap pattern IRRAD used (`p3d => X;
-   X(1:IM,1:JM,0:LM) => p3d`) - the ACG generator's
-   `emit_declare_pointer()` already emits `contiguous` unconditionally
-   now (fixed during the IRRAD port), so no generator change needed,
-   just apply the remap at each fetch site in `Run`/`SORADCORE`/
-   `Update_Flx`.
+11. **DONE - Edge (`VLOC=E`) 0-based bounds remap.**
+   - **Prerequisite fix found and done first**: Solar's `Run` still
+     called the old MAPL2 `MAPL_GetPointer(state, ptr, 'NAME', _RC)`
+     API at ~140 call sites - confirmed **completely absent from
+     MAPL3** (`grep -rl "MAPL_GetPointer\b"` across `src/Shared/@MAPL`
+     only turns up the legacy MAPL2-era `apps/mapl_acg.pl` Perl script,
+     not any real Fortran symbol or macro). Considered fully switching
+     these to the ACG-generated `#include "Solar_DeclarePointer___.h"`/
+     `"Solar_GetPointer___.h"` (like IRRAD does), but rejected that:
+     unlike IRRAD, most of Solar's manual fetches use a **different**
+     local variable name than the field's own short_name (e.g.
+     `call MAPL_GetPointer(import, PLL, 'PLE', _RC)`, `RRI` for `'RI'`,
+     `ALBIMP` reused across 4 different fields in sequential blocks) -
+     switching to ACG's generated declarations (which use the
+     short_name as the variable name) would mean renaming every
+     downstream numerics usage of `PLL`/`RRI`/etc. throughout ~3000
+     lines of `SORADCORE`/`UPDATE_EXPORT`, unverifiable without a build
+     (Solar still isn't wired into CMake). Instead did a mechanical
+     `sed` rename `MAPL_GetPointer(` -> `MAPL_StateGetPointer(` (real
+     MAPL3 function, `superstructure/state/StateGetPointer.F90` -
+     confirmed identical positional signature `(state, farrayPtr,
+     itemName, unusable, isPresent, rc)`, and confirmed no Solar call
+     site uses the old `ALLOC=` keyword, which the new function
+     doesn't support) across all ~140 call sites - zero behavior
+     change, just the correct MAPL3 name for the same operation. This
+     matches how IRRAD itself calls `MAPL_StateGetPointer` directly for
+     its own dynamic/per-band fields not covered by its ACG include.
+   - **CORRECTION to this step's original text**: the claim that "the
+     ACG generator's `emit_declare_pointer()` already emits `contiguous`
+     unconditionally" is **wrong** - checked the live
+     `apps/MAPL_GridCompSpecs_ACG.py` `emit_declare_pointer()` (and a
+     real generated `Irrad_DeclarePointer___.h` in the `ifx/Debug`
+     build dir) - ACG emits plain `real(kind=...), pointer ::
+     NAME(:,:,:)`, no `contiguous` anywhere. IRRAD's actual remap
+     pattern instead declares its own **local** `real, pointer,
+     contiguous, dimension(:,:,:) :: p3d` scratch variable in `Run`
+     (not ACG-generated) and remaps through it (`p3d => X; X(bounds) =>
+     p3d`) - this is what was replicated for Solar.
+   - Identified every genuine (non-load-balancing) Edge fetch site by
+     checking actual 0-based-index usage, not just the `.rc`'s `VLOC=E`
+     tag alone - **`PREF`** (`z`/`E` import, 1D reference pressure) is
+     tagged Edge in `Solar_StateSpecs.rc` but is used exclusively with
+     plain 1-based indices (`PREF(1)`, `PREF(LM)`, `PREF(K)` for `K` in
+     `1..LM`) everywhere in the file, so it was correctly **left
+     un-remapped** - remapping it to `0:LM` would have silently shifted
+     every access by one level and been a real bug, not a fix. Likewise
+     the `case ('PLE')`/`'FSWN'`/etc. references inside `SORADCORE`'s
+     load-balancing pack/unpack logic (already `TODO(step 12)`-flagged,
+     confirmed broken/deferred) reassign `PLE`/`FSW`/etc. to a
+     completely different repacked 2D "daytime-only column" array, not
+     the gridded 3D state pointer - correctly left untouched.
+   - Added one local `real, pointer, contiguous, dimension(:,:,:) ::
+     p3d` scratch declaration in `Run` and a second, separate one in
+     `UPDATE_EXPORT` (each contained procedure needs its own scratch
+     variable in scope).
+   - Remapped, right after each fetch: `AS_PTR_PLE` (`Run`'s AERO/aerosol-
+     optics block, 2 fetch sites) and, in `UPDATE_EXPORT`: `PLL` (aliased
+     from `'PLE'`), the 8 INTERNAL fields `FSWN`/`FSCN`/`FSWUN`/`FSCUN`/
+     `FSWNAN`/`FSCNAN`/`FSWUNAN`/`FSCUNAN` (mandatory/no-COND, no
+     `associated()` guard needed, matching IRRAD's INTERNAL-side
+     treatment), and the 12 EXPORT fields `FSW`/`FSC`/`FSWNA`/`FSCNA`/
+     `FSWD`/`FSCD`/`FSWDNA`/`FSCDNA`/`FSWU`/`FSCU`/`FSWUNA`/`FSCUNA`
+     (each guarded by `if (associated(...))`, matching IRRAD's
+     EXPORT-side `Update_Flx` treatment, since exports can be
+     unassociated if not requested downstream - confirmed Solar's own
+     code already assumes this, e.g. `if (associated(FSW)) FSW(:,:,L) =
+     ...`).
+
 
 12. **The load-balancing block (`MAPL_LoadBalance`/`MAPL_BalanceWork`)**
     in `Run` is unique to Solar (IRRAD has no analog) - verify these
