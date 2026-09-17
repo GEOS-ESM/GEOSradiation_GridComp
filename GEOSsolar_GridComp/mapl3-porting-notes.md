@@ -1,9 +1,11 @@
 # GEOS_SolarGridComp MAPL3 porting plan
 
-Status: in progress. `GEOSsolar_GridComp` is still commented out of the
-parent container's `alldirs` (see `../CMakeLists.txt`) and
-`GEOS_SolarGridComp.F90` is still the unported MAPL2 version. Steps
-1-11 below are done (see branch `feature/pchakrab/port-solar-to-mapl3`).
+Status: in progress. `GEOSsolar_GridComp` is now uncommented in the
+parent container's `alldirs` (see `../CMakeLists.txt`) and wired as a
+child of `GEOS_RadiationGridComp.F90`. Steps 1-11 and 13-15 below are
+done (see branch `feature/pchakrab/port-solar-to-mapl3`); step 12 has
+been investigated but not yet implemented (see its notes below). The
+port has **not yet been build-verified end-to-end**.
 
 This plan was derived by comparing against the already-completed IRRAD
 port (`../GEOSirrad_GridComp/`, see its own `mapl3-porting-notes.md` for
@@ -365,43 +367,119 @@ port - referenced throughout below instead of repeated).
      ...`).
 
 
-12. **The load-balancing block (`MAPL_LoadBalance`/`MAPL_BalanceWork`)**
-    in `Run` is unique to Solar (IRRAD has no analog) - verify these
-    MAPL APIs still exist unchanged in MAPL3's `MAPL_Generic`/
-    `MAPL_LoadBalanceMod`; this is new territory not covered by the
-    IRRAD port.
+12. **IN PROGRESS (investigated, not yet implemented) - The
+    load-balancing block (`MAPL_LoadBalance`/`MAPL_BalanceWork`) in
+    `Run` is unique to Solar (IRRAD has no analog).**
+    - **Confirmed working, no changes needed**: `MAPL_BalanceCreate`/
+      `MAPL_BalanceWork`/`MAPL_BalanceDestroy` (`mp_utils/
+      MAPL_LoadBalance.F90`) still exist in MAPL3 with signatures
+      identical to what Solar already calls (checked every real call
+      site in `Run` against the actual subroutine signatures). Same for
+      the `MAPL_DimsHorzVert`/`MAPL_DimsHorzOnly`/`MAPL_DimsVertOnly`
+      dims-classification constants (`mapl_Constants`, reachable via
+      plain `use MAPL`).
+    - **Small real gap found**: `MAPL_Distribute`/`MAPL_Retrieve` (the
+      `Direction=` values Solar passes to `MAPL_BalanceWork`) are
+      listed in `MAPL_Public_API.md` but `mp_utils/API.F90`'s `use
+      mapl_LoadBalance_mod, only:` list only re-exports the 4 `Balance*`
+      functions, not these two parameters - an apparent oversight in
+      MAPL3's own aggregator module. Workaround: add a direct `use
+      mapl_LoadBalance_mod, only: MAPL_Distribute, MAPL_Retrieve` in
+      Solar (bypassing the incomplete umbrella re-export for just these
+      two names).
+    - **The real blocker**: the pack/unpack machinery (~1000 lines
+      across two `"-BALANCE"`-timed regions) generically iterates every
+      import/internal field via `MAPL_VarSpecGet(ImportSpec(K),
+      DIMS=..., SHORT_NAME=..., _RC)` - and `MAPL_VarSpec`/
+      `MAPL_VarSpecGet` are confirmed **completely absent** from MAPL3
+      (see step 10's note - re-confirmed here). Checked for a
+      metadata-attribute-based MAPL3 replacement (a `'DIMS'`
+      `ESMF_Info` attribute automatically attached to fields by
+      `MAPL_GridCompAddSpec`, mirroring how `base/NCIO.F90` reads/
+      writes a `'DIMS'` info attribute for its own restart/history I/O
+      purposes) - confirmed this does NOT exist; `NCIO.F90`'s
+      `ESMF_InfoSet(...,'DIMS',...)` calls are internal to that file's
+      own I/O logic, not something `gridcomp_add_spec` attaches
+      generically to every field it creates. So there is no drop-in
+      runtime-introspection replacement for what `MAPL_VarSpecGet` used
+      to provide.
+    - **Recommended fix (not yet implemented)**: since
+      `Solar_StateSpecs.rc` already statically declares every import/
+      internal field's `DIMS`, replace the generic `MAPL_VarSpecGet`-
+      driven loop with a hardcoded name/DIMS table mirroring the `.rc`
+      (a `select case` or parallel array literal built once from the
+      known IMPORT/INTERNAL field lists) - no more runtime spec
+      introspection needed. This matches MAPL3's overall design shift
+      away from generic runtime introspection toward static
+      `.rc`-declared/ACG-generated knowledge. Deferred for now at the
+      user's request - pick this up as the next concrete task when
+      resuming step 12.
 
-13. **`Irrad_SetServices`-style external wrapper.** Add a standalone
-    `Solar_SetServices(gc, rc)` subroutine after `end module`,
-    delegating to the module's `SetServices`, matching
-    `Irrad_SetServices`/`Radiation_SetServices`.
+13. **DONE - `Irrad_SetServices`-style external wrapper.** Added a
+    standalone `Solar_SetServices(gc, rc)` subroutine after `end
+    module`, delegating to the module's `SetServices`, matching
+    `Irrad_SetServices` exactly (`use ESMF` + `use
+    GEOS_SolarGridCompMod, only: mySetServices => SetServices`, then
+    `call mySetServices(gc, rc=rc)`).
 
-14. **Wire into the parent container** (`GEOS_RadiationGridComp.F90`):
-    - Uncomment `use GEOS_SolarGridCompMod, only: solarSetServices =>
-      SetServices`.
-    - `call MAPL_GridCompAddChild(gc, "SOLAR", solarSetServices,
-      "solar.yaml", _RC)` (or inline `ESMF_HConfigCreate(content='{}',
-      ...)` if Solar needs no per-child yaml - check whether Solar
-      reads anything via its own hconfig vs. resource file).
-    - Add `MAPL_GridCompAddConnection` pulling Solar's needed exports
-      (`FSW`/`FSC`/etc., whatever `RADSW`/`RADSWC`/`RADSWNA`/
-      `RADSWCNA`/`DTDT`/`RADSRF` need) into `<self>`.
-    - Add matching rows to `../Radiation_StateSpecs.rc`'s IMPORT
-      category for those connected fields (mirroring the existing IRRAD
-      `FLX`/`FLC`/... rows).
-    - Fill in the SW/combined pointer fetches + `RADSW`/`RADSWC`/
-      `RADSWNA`/`RADSWCNA`/`DTDT`/`RADSRF` calculations in `Run`, using
-      the pre-MAPL3 formulas (`git log` on the pre-port
-      `GEOS_SolarGridComp.F90`/old `GEOS_RadiationGridComp.F90` has
-      them - the parent's porting notes explicitly flag this as the
-      follow-up work).
-    - Re-export the old `CHILD_ID=SOL` promoted exports (`DRPAR`,
-      `FCLD`, `ALBEDO`, `TAUCLI`, etc.) via `MAPL_GridCompReexport(gc,
-      src_comp="SOLAR", src_name="...", _RC)`.
+14. **DONE - Wire into the parent container** (`GEOS_RadiationGridComp.F90`):
+    - Uncommented `use GEOS_SolarGridCompMod, only: solarSetServices =>
+      SetServices` and added `call MAPL_GridCompAddChild(gc, "SOLAR",
+      solarSetServices, "solar.yaml", _RC)`, mirroring IRRAD's own
+      `"irrad.yaml"` literal-filename pattern exactly (no need for the
+      inline-`ESMF_HConfigCreate` alternative - IRRAD's precedent shows
+      the plain filename overload works fine).
+    - Added `MAPL_GridCompAddConnection(gc, src_comp="SOLAR",
+      src_names="FSW, FSC, FSWNA, FSCNA", dst_comp="<self>", _RC)` -
+      these 4 are the only SOLAR exports the SW/combined formulas below
+      actually need (verified against the pre-port `git show 9c9a00f`
+      formulas - the last commit before later GEOS-MLT/ML-radiation
+      additions that are unrelated new features, not part of this
+      port).
+    - Added matching `FSW`/`FSC`/`FSWNA`/`FSCNA` IMPORT rows (all
+      `VLOC=E`) to `../Radiation_StateSpecs.rc`, mirroring the existing
+      IRRAD `FLX`/`FLC`/`FLXA`/`FLA` rows exactly (same `SKIP` restart
+      mode, same "connected internally, not for an external coupler"
+      comment style). Verified via the real ACG script that the new
+      rows parse correctly.
+    - Filled in `Run`: declared `FSW`/`FSWCLR`/`FSWNA`/`FSCNA` (aliased
+      from `'FSW'`/`'FSC'`/`'FSWNA'`/`'FSCNA'`) alongside the existing
+      `FLW`/`FLWCLR`/`FLWNA`/`FLA`, fetched them via
+      `MAPL_StateGetPointer`, and remapped them through the same `p3d`
+      Edge-remap scratch pointer already used for the LW fields (all 4
+      are mandatory/no-COND, forced-allocated by the connection, so no
+      `associated()` guard needed - same reasoning as the LW fields).
+      Extended the existing LW-only `DMI`-based `if` block to also
+      compute `RADSW`/`RADSWC`/`RADSWNA`/`RADSWCNA` (same `DMI`, just
+      swapping in the `FSW*` pointers), and added the standalone
+      `RADSRF = FSW(:,:,LM) + FLW(:,:,LM)` and
+      `DTDT = ((FLW(:,:,0:LM-1)-FLW(:,:,1:LM)) + (FSW(:,:,0:LM-1)-FSW(:,:,1:LM)))
+      * (MAPL_GRAV/MAPL_CP)` lines - all formulas taken verbatim from
+      the pre-port `git show 9c9a00f:GEOS_RadiationGridComp.F90` (the
+      last pre-GEOS-MLT commit, to avoid pulling in the unrelated later
+      ML-radiation-blending feature).
+    - Re-exported the old `CHILD_ID=SOL` promoted exports (`DRPAR`,
+      `DFPAR`, `DRNIR`, `DFNIR`, `DRUVR`, `DFUVR`, `DRPARN`, `DFPARN`,
+      `DRNIRN`, `DFNIRN`, `DRUVRN`, `DFUVRN`, `FCLD`, `TAUCLI`,
+      `TAUCLW`, `CLDTT`, `ALBEDO`, `FSWBAND`, `FSWBANDNA`) via
+      `MAPL_GridCompReexport(gc, src_comp="SOLAR", src_name="...",
+      _RC)` (confirmed via `MAPL_Generic.F90`'s `gridcomp_reexport`/
+      `ComponentSpec%reexport` and the real `GEOS_SuperdynGridComp.F90`
+      precedent that this call **self-registers** the export spec - no
+      corresponding `.rc` row is needed, unlike the connected-import
+      fields above). `DROBIO`/`DFOBIO` are `COND=SOLAR_TO_OBIO` on
+      Solar's side, so guarded the same two reexports behind a fresh
+      `MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO,
+      default=0, _RC)` check in the parent, mirroring Solar's own
+      `SetServices` gating logic - reexporting an export that doesn't
+      exist on the child side would fail.
 
-15. **Uncomment `GEOSsolar_GridComp`** in the parent `CMakeLists.txt`'s
-    `alldirs` list, and add `SOLAR` to `SUBCOMPONENTS`/`DEPENDENCIES` if
-    it isn't automatically picked up.
+15. **DONE - Uncommented `GEOSsolar_GridComp`** in the parent
+    `CMakeLists.txt`'s `alldirs` list. `SUBCOMPONENTS`/`DEPENDENCIES`
+    already just pass through `alldirs`/`MAPL GEOS_Shared ESMF::ESMF`
+    with no explicit per-child entries (matching IRRAD's own precedent
+    - it isn't separately listed in `DEPENDENCIES` either), so no other
+    change was needed there.
 
 16. **Remaining style cleanup** (lower priority, do after functional
     correctness - step 1 already covers the bulk of macro/indentation

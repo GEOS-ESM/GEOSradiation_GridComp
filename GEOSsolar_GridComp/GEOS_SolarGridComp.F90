@@ -6879,3 +6879,11 @@ TEST_(aer_props%increment(optical_props))
    end subroutine UnPackIt
 
 end module GEOS_SolarGridCompMod
+
+subroutine Solar_SetServices(gc, rc)
+   use ESMF
+   use GEOS_SolarGridCompMod, only: mySetServices => SetServices
+   type(ESMF_GridComp) :: gc
+   integer, intent(out) :: rc
+   call mySetServices(gc, rc=rc)
+end subroutine Solar_SetServices
