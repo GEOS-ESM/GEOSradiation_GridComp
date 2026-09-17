@@ -169,6 +169,9 @@ module GEOS_SolarGridCompMod
    use MAPL
    use gFTL_StringVector
 
+   ! not re-exported through the MAPL umbrella (mp_utils/API.F90 gap)
+   use mapl_SatVapor_mod, only: MAPL_EQsat
+
    ! for RRTMGP
    use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
 
@@ -833,12 +836,12 @@ contains
       data CO2_0 /0.0/, SC_0/0.0/, MG_0/0.0/, SB_0/0.0/
 
       logical :: LoadBalance
-      character(len=ESMF_MAXSTR) :: DYCORE
+      character(len=:), allocatable :: DYCORE
       integer :: SOLAR_LOAD_BALANCE
       integer :: SolarBalanceHandle
       integer :: MaxPasses
 
-      character(len=ESMF_MAXPATHLEN) :: SolCycFileName
+      character(len=:), allocatable :: SolCycFileName
       logical :: USE_NRLSSI2
       logical :: PersistSolar
 
@@ -1574,9 +1577,9 @@ contains
          integer :: ib, b, nBlocks, colS, colE, ncols_block, &
               icol, isub, ilay, igpt
          real(kind=wp), allocatable :: t_lev(:) ! (ncol)
-         character(len=ESMF_MAXPATHLEN) :: k_dist_file, cloud_optics_file
+         character(len=:), allocatable :: k_dist_file, cloud_optics_file
          character(len=ESMF_MAXSTR) :: error_msg
-         character(len=128) :: cloud_optics_type, cloud_overlap_type
+         character(len=:), allocatable :: cloud_optics_type, cloud_overlap_type
          type(ESMF_Time) :: ReferenceTime
          type(ESMF_TimeInterval) :: RefreshInterval
          real :: cld_frac, sigma_qcw, wgt
@@ -1599,7 +1602,8 @@ contains
 
          ! for global gcolumn index seeding of PRNGs
          integer :: iBeg, iEnd, jBeg, jEnd
-         integer :: IM_World, JM_World, Gdims(3)
+         integer :: IM_World, JM_World
+         integer, allocatable :: Gdims(:)
          integer, dimension(IM, JM) :: Ig, Jg
 
          integer, parameter :: KICE = 1
@@ -1704,7 +1708,7 @@ contains
 
          ! prepare global gridcolumn indicies needed by random number generators
          ! get indicies of local rectangular grid
-         call MAPL_GridGet(esmfgrid, globalCellCountPerDim=Gdims, _RC)
+         call MAPL_GridGetGlobalCellCountPerDim(esmfgrid, globalCellCountPerDim=Gdims, _RC)
          IM_World = Gdims(1)
          JM_World = Gdims(2)
          call MAPL_GridGetInterior(esmfgrid, iBeg, iEnd, jBeg, jEnd)
@@ -3543,7 +3547,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! call RRTMG SW
             ! -------------
 
-            call rrtmg_sw(MAPL, &
+            call rrtmg_sw(gc, &
                  RPART, NCOL, LM, &
                  SC, ADJES, ZT, ISOLVAR, &
                  PL_R, PLE_R, T_R, &
@@ -3929,7 +3933,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          integer, external :: GetAeroIndex
 
          type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
-         character(len=ESMF_MAXPATHLEN) :: k_dist_file
+         character(len=:), allocatable :: k_dist_file
          character(len=ESMF_MAXSTR) :: error_msg
          type(ty_gas_concs) :: gas_concs
 
