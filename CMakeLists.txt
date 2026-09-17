@@ -2,9 +2,9 @@ esma_set_this()
 
 set (alldirs
   GEOS_RadiationShared
-  # GEOSsolar_GridComp NOT ported to MAPL3 yet
+  GEOSsolar_GridComp
   GEOSirrad_GridComp
-  # GEOSsatsim_GridComp
+  # GEOSsatsim_GridComp NOT ported to MAPL3 yet
 )
 
 esma_add_library (${this}

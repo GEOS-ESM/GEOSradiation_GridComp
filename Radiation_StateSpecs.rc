@@ -16,6 +16,13 @@ category: IMPORT
  DSFDTS0 | W m-2 K-1 | xy   | N    | SKIP    | sensitivity_of_longwave_flux_emitted_from_surface_to_surface_temperature_at_reference_time
  SFCEM0  | W m-2     | xy   | N    | SKIP    | longwave_flux_emitted_from_surface_at_reference_time
  TSREFF  | K         | xy   | N    | SKIP    | surface_temperature
+# The following are connected internally from SOLAR's own exports (see
+# SetServices) so that Run can combine them into the temperature-tendency
+# exports below. They are not meant to be filled by an external coupler.
+ FSW     | W m-2     | xyz  | E    | SKIP    | net_downward_shortwave_flux_in_air
+ FSC     | W m-2     | xyz  | E    | SKIP    | net_downward_shortwave_flux_in_air_assuming_clear_sky
+ FSWNA   | W m-2     | xyz  | E    | SKIP    | net_downward_shortwave_flux_in_air_assuming_no_aerosol
+ FSCNA   | W m-2     | xyz  | E    | SKIP    | net_downward_shortwave_flux_in_air_assuming_clear_sky_and_no_aerosol
 
 category: EXPORT
 #-------------------------------------------------------------------
