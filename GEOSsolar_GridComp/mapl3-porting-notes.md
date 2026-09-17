@@ -2,8 +2,8 @@
 
 Status: in progress. `GEOSsolar_GridComp` is still commented out of the
 parent container's `alldirs` (see `../CMakeLists.txt`) and
-`GEOS_SolarGridComp.F90` is still the unported MAPL2 version. Steps 1
-and 2 below are done (see branch `feature/pchakrab/port-solar-to-mapl3`).
+`GEOS_SolarGridComp.F90` is still the unported MAPL2 version. Steps
+1-9 below are done (see branch `feature/pchakrab/port-solar-to-mapl3`).
 
 This plan was derived by comparing against the already-completed IRRAD
 port (`../GEOSirrad_GridComp/`, see its own `mapl3-porting-notes.md` for
@@ -160,6 +160,7 @@ port - referenced throughout below instead of repeated).
    `#ifdef`/`#endif`, `#define`/`#undef TEST_` pairs) and grep for
    residual host-association - Solar isn't wired into the build yet so
    this could not be compile-verified.
+
 2a. **DONE - codee format pass over the step-2 changes.** Ran `codee
     format` on the whole file to bring the moved/modified code in line
     with the file's style (see
@@ -168,25 +169,25 @@ port - referenced throughout below instead of repeated).
     codee's parser can't handle). Verified via the same before/after
     structural marker counts as step 2. Landed together with step 2 as
     a single commit on `feature/pchakrab/port-solar-to-mapl3`.
-3. **Extract state specs into `Solar_StateSpecs.rc`.** Pull every
+
+3. **DONE - Extract state specs into `Solar_StateSpecs.rc`.** Pulled every
    `MAPL_AddImportSpec`/`AddExportSpec`/`AddInternalSpec` call out of
-   `GEOS_SolarGridComp.F90`'s `SetServices` into YAML (`IMPORT`/`EXPORT`/
-   `INTERNAL` categories, `ALIAS` column for internal-vs-import name
-   collisions). Solar is much larger than Irrad here - it has the huge
-   `#ifdef SOLAR_RADVAL` block of internals (TAUxxPAR, COTxxPAR, etc.)
-   and the OBIO-conditional exports (`SOLAR_TO_OBIO`), so expect many
-   `COND` columns (`USE_RRTMG .or. USE_RRTMGP`, `SOLAR_TO_OBIO`,
-   `#ifdef SOLAR_RADVAL` fields stay as manual `MAPL_GridCompAddSpec`
-   calls guarded by the same `#ifdef` since ACG can't express
-   compile-time conditionals). The `OSRBbbRG`/`ISRBbbRG`/`TBRBbbRG`
-   per-band dynamic exports (loop over `ibnd`) are genuinely dynamic -
-   leave those as manual `MAPL_GridCompAddSpec` calls, same treatment as
+   `GEOS_SolarGridComp.F90`'s `SetServices` into
+   [Solar_StateSpecs.rc](Solar_StateSpecs.rc) (`IMPORT`/`EXPORT`/
+   `INTERNAL` categories). The `AERO` nested state (an `ESMF_State`, not
+   a plain Field - ACG's `ITEMTYPE` column only supports `F`/`V`) and the
+   `OSRBbbRG`/`ISRBbbRG`/`TBRBbbRG` per-band dynamic specs (loop over
+   `ibnd`) are genuinely dynamic/non-tabular - left as manual
+   `MAPL_GridCompAddSpec` calls in `SetServices`, same treatment as
    IRRAD's RATS diagnostics loop.
-4. **Add `mapl_acg()` to `CMakeLists.txt`** with `IMPORT_SPECS
-   EXPORT_SPECS INTERNAL_SPECS GET_POINTERS DECLARE_POINTERS`, and add
+
+4. **DONE - Add `mapl_acg()` to `CMakeLists.txt`** with `IMPORT_SPECS
+   EXPORT_SPECS INTERNAL_SPECS GET_POINTERS DECLARE_POINTERS`, and added
    `TYPE SHARED` to `esma_add_library()`.
-5. **Replace static `MAPL_Add*Spec` blocks** in `SetServices` with
+
+5. **DONE - Replace static `MAPL_Add*Spec` blocks** in `SetServices` with
    `#include "Solar_Import___.h"` / `_Export___.h` / `_Internal___.h`.
+
 6. **DONE - Convert the RRTMGP internal state.** Replaced the manual
    `ty_RRTMGP_wrap`/`ESMF_UserCompSetInternalState`/
    `ESMF_UserCompGetInternalState` pattern with `_SET_NAMED_PRIVATE_STATE`/
@@ -197,16 +198,19 @@ port - referenced throughout below instead of repeated).
    a module-scope `character(*), parameter :: PRIVATE_STATE =
    "RRTMGP_state"` and removed the now-dead `ty_RRTMGP_wrap` type,
    matching IRRAD's pattern exactly.
+
 7. **DONE - `MAPL_GetResource(MAPL,...)` -> `MAPL_GridCompGetResource(gc,
    "LABEL", var, default=..., _RC)`** (drop trailing colon on labels)
    throughout `SetServices` and `Run`. Converted all 40 call sites
    (`SetServices`, `Run`, and inside `SORADCORE`/`UPDATE_EXPORT`/
    `PROCESS_RRTMGP_BLOCK`, all host-associated with `gc`).
+
 8. **DONE - `ESMF_Config` -> `ESMF_HConfig`.** Solar never read config
    directly via `ESMF_Config` (only through `MAPL_GetResource`/now
    `MAPL_GridCompGetResource`) - removed the now-unused `type(ESMF_Config)
    :: cf` declaration and the `cf=cf` argument to `MAPL_Get` in `Run`;
    no `ESMF_HConfig` usage needed.
+
 9. **DONE - Fix entry-point signatures**: `SetServices(gc, rc)`/
    `Run(gc, import, export, clock, rc)` with **no `intent`/`optional`**
    on `gc`, and `rc` non-optional `intent(out)`. This is required
@@ -216,10 +220,82 @@ port - referenced throughout below instead of repeated).
    `SetServices` and `Run` to match `Irrad`'s signatures exactly;
    confirmed no `present(rc)` checks existed anywhere in the file, so
    making `rc` non-optional is safe.
-10. **Check `MAPL_MetaComp`/`MAPL_Get`/`MAPL_TimerOn` usage** in `Run` -
-   Solar's `Run` has heavy use of `MAPL_Get(MAPL, ...)` for grid/clock
-   info and `MAPL_TimerOn(MAPL,"TOTAL")`/`"PRELIMS"` - convert to
-   `MAPL_GridCompGet`/`MAPL_GridCompTimerStart`/`Stop`.
+
+10. **DONE - Convert `MAPL_MetaComp`/`MAPL_Get`/`MAPL_TimerOn` usage in
+   `Run`.** `MAPL_GenericSetServices` (the MAPL2 mechanism that let a
+   component define only `Run` and get a default `Initialize`/
+   `Finalize`) is completely gone from MAPL3 - confirmed zero matches
+   anywhere in `src/Shared/@MAPL`, including the Deprecated shim. Since
+   `SetServices` already registered `ESMF_METHOD_INITIALIZE, Initialize`
+   (a leftover from before this port that referenced a since-removed
+   subroutine - a latent bug), a **new `Initialize(gc, import, export,
+   clock, rc)` subroutine had to be added** (mirroring IRRAD's), which:
+   - Creates a `"solar_run_alarm"` (`ESMF_AlarmCreate`, `sticky=.true.`)
+     with ring interval from `<NAME>_DT` (default: heartbeat via
+     `MAPL_ClockGet(clock, dt=..., _RC)`), matching IRRAD's
+     `"irrad_lw_alarm"` pattern. `Run` retrieves it via
+     `ESMF_ClockGetAlarm(clock, alarmname="solar_run_alarm", alarm=alarm, _RC)`
+     in place of MAPL2's `MAPL_Get(MAPL, RUNALARM=alarm, ...)`.
+   - Creates the solar orbit (MAPL2's `MAPL_Get(MAPL, orbit=orbit, ...)`
+     has no MAPL3 replacement - `MAPL_GetOrbit` remains unimplemented,
+     see `MAPL_Generic.F90`/`API.F90`). `MAPL_SunOrbitCreateFromConfig`
+     (`base/SunOrbit.F90`) still exists and works but takes a legacy
+     `type(ESMF_Config)`, unobtainable in MAPL3 - so `Initialize` instead
+     reads each orbital parameter directly via `MAPL_GridCompGetResource`
+     (labels/defaults copied from `MAPL_SunOrbitCreateFromConfig`'s own
+     body, since its `DEFAULT_ORBIT_*`/`DEFAULT_ORB2B_*` constants are
+     module-private, not exported) and calls `MAPL_SunOrbitCreate(...)`
+     directly with `FIX_SUN=.false.` (no existing resource/precedent for
+     this flag anywhere in the repo). The resulting `MAPL_SunOrbit` is
+     stored in a new `orbit` field added to `ty_RRTMGP_state` (the
+     existing named-private-state type, reused rather than adding a new
+     private state) and fetched back in `Run` via
+     `_GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)`.
+   - `IM`/`JM`/`LM`/`LONS`/`LATS` (previously from `MAPL_Get`): now
+     `MAPL_GridCompGet(gc, num_levels=LM, _RC)` +
+     `MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)` +
+     `MAPL_GridGetCoordinates(esmfgrid, longitudes=LONS, latitudes=LATS, _RC)`,
+     matching IRRAD exactly (note: `LONS`/`LATS` changed from `pointer`
+     to `allocatable` to match `MAPL_GridGetCoordinates`'s intent(out)
+     arrays).
+   - `INTERNAL_ESMF_STATE=internal` -> `MAPL_GridCompGetInternalState(gc, internal, _RC)`.
+   - All ~34 live `MAPL_TimerOn(MAPL, "NAME", ...)`/`MAPL_TimerOff(MAPL, "NAME", ...)`
+     call sites in `Run` -> `MAPL_GridCompTimerStart(gc, "NAME", ...)`/
+     `MAPL_GridCompTimerStop(gc, "NAME", ...)` (mechanical, via a
+     comment-aware `sed` so the ~14 already-dead/commented-out
+     `! call MAPL_TimerOn(MAPL,...)` lines inside the RRTMGP helpers
+     were left untouched).
+   - The module-scope RRTMGP helpers hoisted in step 2
+     (`compute_gas_optics`, `compute_cloud_optics_mcica`,
+     `compute_sprlyr_diags_predelta`, `compute_delta_scale`,
+     `compute_sprlyr_diags_postdelta`, `compute_rte_sw`,
+     `PROCESS_RRTMGP_BLOCK`) each carried a vestigial
+     `type(MAPL_MetaComp), intent(inout) :: MAPL` dummy arg used *only*
+     by those already-dead/commented-out timer calls (disabled inside
+     OMP parallel regions, not thread-safe) - removed the parameter
+     entirely from each signature/declaration and from every call site,
+     matching IRRAD's equivalent hoisted helpers (which carry no
+     `gc`/`MAPL` parameter at all). `shrtwave` was the one exception:
+     its `MAPL_TimerOn`/`Off` calls are live (not disabled), so its
+     `MAPL` dummy argument was renamed to `gc` (`type(ESMF_GridComp),
+     intent(inout) :: gc`) instead of removed, and its sole call site
+     (inside `SORADCORE`, host-associated with `gc`) updated to pass
+     `gc`.
+   - `type(MAPL_MetaComp), pointer :: MAPL` in `Run` and the
+     `MAPL_GetObjectFromGC(gc, MAPL, _RC)` call were removed/commented
+     out, matching IRRAD's `! type(MAPL_MetaComp), pointer :: MAPL`.
+   - **Deferred to step 12, NOT fixed here**: `ImportSpec`/`ExportSpec`/
+     `InternalSpec` (`type(MAPL_VarSpec), pointer :: ...(:)`) and the
+     `MAPL_VarSpecGet` calls inside the load-balancing block (all
+     `MAPL_VarSpec` usage in `Run` is confined to between the
+     `"-BALANCE"` timer start/stop) are **confirmed to have zero MAPL3
+     equivalent** (`MAPL_VarSpec`/`VarSpecGet` - zero matches anywhere
+     in `src/Shared/@MAPL`). Left untouched (still referencing the
+     nonexistent type) with a `TODO(step 12)` comment at the
+     declarations - this whole block needs a redesign as part of step
+     12's load-balancing API investigation, and was already
+     non-compilable before this step's changes.
+
 11. **Edge (`VLOC=E`) 0-based bounds remap - Solar needs this too,
    likely worse than IRRAD.** Solar's SORAD core assumes `PLE(0:LM)`-
    style indexing pervasively (fluxes at layer interfaces indexed
@@ -231,15 +307,18 @@ port - referenced throughout below instead of repeated).
    now (fixed during the IRRAD port), so no generator change needed,
    just apply the remap at each fetch site in `Run`/`SORADCORE`/
    `Update_Flx`.
+
 12. **The load-balancing block (`MAPL_LoadBalance`/`MAPL_BalanceWork`)**
     in `Run` is unique to Solar (IRRAD has no analog) - verify these
     MAPL APIs still exist unchanged in MAPL3's `MAPL_Generic`/
     `MAPL_LoadBalanceMod`; this is new territory not covered by the
     IRRAD port.
+
 13. **`Irrad_SetServices`-style external wrapper.** Add a standalone
     `Solar_SetServices(gc, rc)` subroutine after `end module`,
     delegating to the module's `SetServices`, matching
     `Irrad_SetServices`/`Radiation_SetServices`.
+
 14. **Wire into the parent container** (`GEOS_RadiationGridComp.F90`):
     - Uncomment `use GEOS_SolarGridCompMod, only: solarSetServices =>
       SetServices`.
@@ -262,9 +341,11 @@ port - referenced throughout below instead of repeated).
     - Re-export the old `CHILD_ID=SOL` promoted exports (`DRPAR`,
       `FCLD`, `ALBEDO`, `TAUCLI`, etc.) via `MAPL_GridCompReexport(gc,
       src_comp="SOLAR", src_name="...", _RC)`.
+
 15. **Uncomment `GEOSsolar_GridComp`** in the parent `CMakeLists.txt`'s
     `alldirs` list, and add `SOLAR` to `SUBCOMPONENTS`/`DEPENDENCIES` if
     it isn't automatically picked up.
+
 16. **Remaining style cleanup** (lower priority, do after functional
     correctness - step 1 already covers the bulk of macro/indentation
     style): `ESMF_Attribute*`->`ESMF_Info*` (Solar doesn't appear to use

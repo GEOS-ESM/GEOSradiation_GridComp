@@ -236,10 +236,10 @@ module GEOS_SolarGridCompMod
         .false., &!  05
         .false., &!  06
         .false., &!  07
-        .true., &!  08   W. Putman (RRTMG: GOES-"Veggie")
-        .true., &!  09   W. Putman (RRTMG: GOES-Red)       (RRTMGP: GOES-"Veggie")
-        .true., &!  10   W. Putman (RRTMG: GOES-Blue)      (RRTMGP: GOES-Red)
-        .true., &!  11   W. Putman                         (RRTMGP: GOES-Blue)
+        .true.,  &!  08   W. Putman (RRTMG: GOES-"Veggie")
+        .true.,  &!  09   W. Putman (RRTMG: GOES-Red)       (RRTMGP: GOES-"Veggie")
+        .true.,  &!  10   W. Putman (RRTMG: GOES-Blue)      (RRTMGP: GOES-Red)
+        .true.,  &!  11   W. Putman                         (RRTMGP: GOES-Blue)
         .false., &!  12
         .false., &!  13
         .false. ] !  14
@@ -253,6 +253,10 @@ module GEOS_SolarGridCompMod
       private
       logical :: initialized = .false.
       type(ty_gas_optics_rrtmgp) :: k_dist
+      ! solar orbit, created once in Initialize (no MAPL3 generic-state
+      ! equivalent to MAPL2's MAPL_Get(MAPL, orbit=orbit, ...) - see
+      ! mapl3-porting-notes.md step 10)
+      type(MAPL_SunOrbit) :: orbit
    end type ty_RRTMGP_state
 
    ! name under which the RRTMGP state is attached as a private state
@@ -445,8 +449,6 @@ contains
       character(len=ESMF_MAXSTR) :: comp_name
       integer :: status
 
-      type(MAPL_MetaComp), pointer :: MAPL
-
       integer :: run_dt
       integer :: my_step
       integer :: accumint
@@ -469,9 +471,6 @@ contains
 
       ! attach the RRTMGP internal state to the gc as a named private state
       _SET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE)
-
-      ! Get my internal MAPL_Generic state
-      call MAPL_GetObjectFromGC(gc, MAPL, _RC)
 
       ! Get the intervals; "heartbeat" must exist
       call MAPL_GridCompGetResource(gc, "RUN_DT", dt, _RC)
@@ -615,12 +614,94 @@ contains
          end do
       end if
 
-      ! Set Run method and use generic Initalize and Finalize methods
+      ! Set entry points (Finalize uses MAPL generic default)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
-      call MAPL_GenericSetServices(gc, _RC)
 
       _RETURN(ESMF_SUCCESS)
    end subroutine SetServices
+
+   subroutine Initialize(gc, import, export, clock, rc)
+      !ARGUMENTS:
+      type(ESMF_GridComp) :: gc
+      type(ESMF_State) :: import
+      type(ESMF_State) :: export
+      type(ESMF_Clock) :: clock
+      integer, intent(out) :: rc
+
+      !DESCRIPTION: Creates the alarm that controls how often Run() performs
+      ! the full SORADCORE refresh calculation, with ring interval set by the
+      ! <NAME>_DT configuration resource (seconds, defaults to the
+      ! heartbeat). Run() later retrieves this alarm from the clock by name
+      ! via ESMF_ClockGetAlarm. Also creates the solar orbit here (once),
+      ! since MAPL3 no longer provides one automatically via generic
+      ! Initialize (unlike MAPL2's MAPL_Get(MAPL, orbit=orbit, ...)), and
+      ! stores it in the private state for Run to retrieve.
+      !EOP
+
+      integer :: status
+      character(len=ESMF_MAXSTR) :: comp_name
+      real :: run_dt, my_dt
+      type(ESMF_TimeInterval) :: run_alarm_interval
+      type(ESMF_Alarm) :: run_alarm
+      type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
+
+      ! orbital parameters - labels/defaults mirror MAPL_SunOrbitCreateFromConfig
+      ! (base/SunOrbit.F90), reproduced here via MAPL_GridCompGetResource since
+      ! that function requires a legacy ESMF_Config, unavailable in MAPL3
+      real :: eccentricity, obliquity, perihelion
+      integer :: equinox
+      logical :: eot, orbit_anal2b
+      integer :: orb2b_ref_yyyymmdd, orb2b_ref_hhmmss
+      integer :: orb2b_equinox_yyyymmdd, orb2b_equinox_hhmmss
+      real :: orb2b_yearlen, orb2b_ecc_ref, orb2b_ecc_rate
+      real :: orb2b_obq_ref, orb2b_obq_rate
+      real :: orb2b_lambdap_ref, orb2b_lambdap_rate
+
+      call ESMF_GridCompGet(gc, name=comp_name, _RC)
+
+      call MAPL_ClockGet(clock, dt=run_dt, _RC)
+      call MAPL_GridCompGetResource(gc, trim(comp_name) // "_DT", my_dt, default=run_dt, _RC)
+      call ESMF_TimeIntervalSet(run_alarm_interval, s=nint(my_dt), _RC)
+      run_alarm = ESMF_AlarmCreate( &
+           name="solar_run_alarm", &
+           clock=clock, &
+           ringInterval=run_alarm_interval, &
+           sticky=.true., _RC)
+
+      call MAPL_GridCompGetResource(gc, "ECCENTRICITY", eccentricity, default=0.0167, _RC)
+      call MAPL_GridCompGetResource(gc, "OBLIQUITY", obliquity, default=23.45, _RC)
+      call MAPL_GridCompGetResource(gc, "PERIHELION", perihelion, default=102.0, _RC)
+      call MAPL_GridCompGetResource(gc, "EQUINOX", equinox, default=80, _RC)
+      call MAPL_GridCompGetResource(gc, "EOT", eot, default=.false., _RC)
+      call MAPL_GridCompGetResource(gc, "ORBIT_ANAL2B", orbit_anal2b, default=.false., _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_YEARLEN", orb2b_yearlen, default=365.2596, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_REF_YYYYMMDD", orb2b_ref_yyyymmdd, default=20000101, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_REF_HHMMSS", orb2b_ref_hhmmss, default=115856, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_ECC_REF", orb2b_ecc_ref, default=0.016710, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_ECC_RATE", orb2b_ecc_rate, default=-4.2e-5, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_OBQ_REF", orb2b_obq_ref, default=23.44, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_OBQ_RATE", orb2b_obq_rate, default=-1.3e-2, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_LAMBDAP_REF", orb2b_lambdap_ref, default=282.947, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_LAMBDAP_RATE", orb2b_lambdap_rate, default=1.7195, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_EQUINOX_YYYYMMDD", orb2b_equinox_yyyymmdd, default=20000320, _RC)
+      call MAPL_GridCompGetResource(gc, "ORB2B_EQUINOX_HHMMSS", orb2b_equinox_hhmmss, default=73500, _RC)
+
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      rrtmgp_state%orbit = MAPL_SunOrbitCreate( &
+           clock, eccentricity, obliquity, perihelion, equinox, &
+           eot, orbit_anal2b, orb2b_yearlen, &
+           orb2b_ref_yyyymmdd, orb2b_ref_hhmmss, &
+           orb2b_ecc_ref, orb2b_ecc_rate, &
+           orb2b_obq_ref, orb2b_obq_rate, &
+           orb2b_lambdap_ref, orb2b_lambdap_rate, &
+           orb2b_equinox_yyyymmdd, orb2b_equinox_hhmmss, &
+           FIX_SUN=.false., _RC)
+
+      _RETURN(ESMF_SUCCESS)
+      _UNUSED_DUMMY(import)
+      _UNUSED_DUMMY(export)
+   end subroutine Initialize
 
    !BOP
    !IROUTINE: RUN -- Run method for the SOLAR component
@@ -668,7 +749,7 @@ contains
       integer :: status
 
       ! Local derived type aliases
-      type(MAPL_MetaComp), pointer :: MAPL
+      ! type(MAPL_MetaComp), pointer :: MAPL
       type(ESMF_Grid) :: esmfgrid
 
       type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
@@ -680,11 +761,14 @@ contains
       type(ESMF_TimeInterval) :: intDT
       integer :: IM, JM, LM
       type(MAPL_SunOrbit) :: orbit
+      ! TODO(step 12): MAPL_VarSpec has no MAPL3 equivalent (confirmed absent
+      ! from src/Shared/@MAPL) - ImportSpec/ExportSpec/InternalSpec and the
+      ! MAPL_VarSpecGet-based load-balancing block below need a redesign.
       type(MAPL_VarSpec), pointer :: ImportSpec(:) => null()
       type(MAPL_VarSpec), pointer :: ExportSpec(:) => null()
       type(MAPL_VarSpec), pointer :: InternalSpec(:) => null()
-      real, pointer, dimension(:, :) :: LONS
-      real, pointer, dimension(:, :) :: LATS
+      real, allocatable, dimension(:, :) :: LONS
+      real, allocatable, dimension(:, :) :: LATS
 
       real, pointer, dimension(:, :, :) :: ptr3d
       real, pointer, dimension(:, :) :: ptr2d
@@ -771,25 +855,22 @@ contains
       call ESMF_GridCompGet(gc, NAME=comp_name, GRID=esmfgrid, _RC)
       IAm = trim(comp_name) // "Run"
 
-      ! Get my internal MAPL_Generic state
-      call MAPL_GetObjectFromGC(gc, MAPL, _RC)
+      call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
+      call MAPL_GridCompTimerStart(gc, "PRELIMS", _RC)
 
-      call MAPL_TimerOn(MAPL, "TOTAL", _RC)
-      call MAPL_TimerOn(MAPL, "PRELIMS", _RC)
+      ! Get parameters from the generic state.
+      call MAPL_GridCompGet(gc, num_levels=LM, _RC)
+      call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
+      call MAPL_GridGetCoordinates(esmfgrid, longitudes=LONS, latitudes=LATS, _RC)
+      call MAPL_GridCompGetInternalState(gc, internal, _RC)
 
-      ! Get parameters from generic state.
-      call MAPL_Get(MAPL, &
-           IM=IM, &
-           JM=JM, &
-           LM=LM, &
-           LONS=LONS, &
-           LATS=LATS, &
-           RUNALARM=alarm, &
-           orbit=orbit, &
-           InternalSpec=InternalSpec, &
-           ImportSpec=ImportSpec, &
-           ExportSpec=ExportSpec, &
-           INTERNAL_ESMF_STATE=internal, _RC)
+      ! Retrieve the alarm (created once in Initialize) that controls when
+      ! SORADCORE's full refresh calculation is run below.
+      call ESMF_ClockGetAlarm(clock, alarmname="solar_run_alarm", alarm=alarm, _RC)
+
+      ! Retrieve the orbit (created once in Initialize) from the private state.
+      _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
+      orbit = rrtmgp_state%orbit
 
       ! Get parameters from configuration
       call MAPL_GridCompGetResource(gc, 'PRS_LOW_MID_CLOUDS', PRS_LOW_MID, default=70000., _RC)
@@ -1018,14 +1099,14 @@ contains
       call MAPL_GridCompGetResource(gc, 'CALLED_LAST', CalledLast, default=1, _RC)
       UPDATE_FIRST = CalledLast /= 0
 
-      call MAPL_TimerOff(MAPL, "PRELIMS", _RC)
+      call MAPL_GridCompTimerStop(gc, "PRELIMS", _RC)
 
       ! Update the Sun position and weight the export variables
       ! -------------------------------------------------------
       if (UPDATE_FIRST) then
-         call MAPL_TimerOn(MAPL, "UPDATE", _RC)
+         call MAPL_GridCompTimerStart(gc, "UPDATE", _RC)
          call UPDATE_EXPORT(IM, JM, LM, _RC)
-         call MAPL_TimerOff(MAPL, "UPDATE", _RC)
+         call MAPL_GridCompTimerStop(gc, "UPDATE", _RC)
       end if
 
       ! Periodically, refresh the internal state with a full solar calc
@@ -1033,7 +1114,7 @@ contains
       REFRESH_FLUXES = ESMF_AlarmIsRinging(alarm, _RC)
 
       REFRESH: if (REFRESH_FLUXES) then
-         call MAPL_TimerOn(MAPL, "REFRESH", _RC)
+         call MAPL_GridCompTimerStart(gc, "REFRESH", _RC)
 
          call ESMF_AlarmRingerOff(alarm, _RC)
          call ESMF_ClockGet(clock, currTIME=current_time, _RC)
@@ -1052,7 +1133,7 @@ contains
 
          ! Get optical properties of radiatively active aerosols
          ! -----------------------------------------------------
-         call MAPL_TimerOn(MAPL, "-AEROSOLS", _RC)
+         call MAPL_GridCompTimerStart(gc, "-AEROSOLS", _RC)
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call ESMF_AttributeGet(AERO, &
               NAME='implements_aerosol_optics_method', &
@@ -1103,13 +1184,13 @@ contains
                     value=(BANDS_SOLAR_OFFSET + band), _RC)
 
                ! execute the aero provider's optics method
-               call MAPL_TimerOn(MAPL, "---AEROSOL_OPTICS")
+               call MAPL_GridCompTimerStart(gc, "---AEROSOL_OPTICS")
                call ESMF_MethodExecute(AERO, &
                     Label="run_aerosol_optics", &
                     userRC=AS_STATUS, rc=status)
                _VERIFY(AS_STATUS)
                _VERIFY(status)
-               call MAPL_TimerOff(MAPL, "---AEROSOL_OPTICS")
+               call MAPL_GridCompTimerStop(gc, "---AEROSOL_OPTICS")
 
                ! EXT from AERO_PROVIDER
                call ESMF_AttributeGet(AERO, &
@@ -1141,7 +1222,7 @@ contains
             end do SOLAR_BANDS
 
          end if ! implements_aerosol_optics
-         call MAPL_TimerOff(MAPL, "-AEROSOLS", _RC)
+         call MAPL_GridCompTimerStop(gc, "-AEROSOLS", _RC)
 
          ! Optional without-aerosol diagnostics
          ! ------------------------------------
@@ -1238,18 +1319,18 @@ contains
             deallocate(AEROSOL_ASY, _STAT)
          end if
 
-         call MAPL_TimerOff(MAPL, "REFRESH", _RC)
+         call MAPL_GridCompTimerStop(gc, "REFRESH", _RC)
       end if REFRESH
 
       ! Update the Sun position and weight the export variables
       ! -------------------------------------------------------
       if (.not. UPDATE_FIRST) then
-         call MAPL_TimerOn(MAPL, "UPDATE", _RC)
+         call MAPL_GridCompTimerStart(gc, "UPDATE", _RC)
          call UPDATE_EXPORT(IM, JM, LM, _RC)
-         call MAPL_TimerOff(MAPL, "UPDATE", _RC)
+         call MAPL_GridCompTimerStop(gc, "UPDATE", _RC)
       end if
 
-      call MAPL_TimerOff(MAPL, "TOTAL", _RC)
+      call MAPL_GridCompTimerStop(gc, "TOTAL", _RC)
       _RETURN(ESMF_SUCCESS)
 
    contains
@@ -1588,7 +1669,7 @@ contains
          real, allocatable, dimension(:) :: ILWT
 
          IAm = trim(comp_name) // "Soradcore"
-         call MAPL_TimerOn(MAPL, "-MISC")
+         call MAPL_GridCompTimerStart(gc, "-MISC")
 
          ! Get the average insolation for the next alarm "REFRESH" interval
          ! @ In standard (legacy) mode, this longer REFRESH interval forms the basis of
@@ -1626,11 +1707,11 @@ contains
             end do
          end do
 
-         call MAPL_TimerOff(MAPL, "-MISC")
+         call MAPL_GridCompTimerStop(gc, "-MISC")
 
          !  Load balancing by packing the lit points and sharing work with night regions
 
-         call MAPL_TimerOn(MAPL, "-BALANCE")
+         call MAPL_GridCompTimerStart(gc, "-BALANCE")
 
          !  Identify lit soundings with the daytime mask
 
@@ -1658,7 +1739,7 @@ contains
          call ESMF_VMGetCurrent(VM, _RC)
          call ESMF_VMGet(VM, mpiCommunicator=COMM, _RC)
 
-         call MAPL_TimerOn(MAPL, "--CREATE")
+         call MAPL_GridCompTimerStart(gc, "--CREATE")
 
          if (LoadBalance) then
             call MAPL_BalanceCreate( &
@@ -1669,7 +1750,7 @@ contains
             NumMax = NumLit
          end if
 
-         call MAPL_TimerOff(MAPL, "--CREATE")
+         call MAPL_GridCompTimerStop(gc, "--CREATE")
 
          !  The number of Input and Output/InOut variables to the load balancing.
          !    The Input number is five more than the number of IMPORTS because the
@@ -1922,10 +2003,10 @@ contains
          ! Load balance the Inputs
          ! -----------------------
 
-         call MAPL_TimerOn(MAPL, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE")
          if (LoadBalance) call MAPL_BalanceWork(BufInp, NumMax, Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
               _RC)
-         call MAPL_TimerOff(MAPL, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE")
 
          ! @@@@@@@@@@@@@@@@@@@@@@
          ! @@@ InOuts/Outputs @@@
@@ -2492,21 +2573,21 @@ contains
          end do INT_VARS_2
 
          ! Load balance the InOuts for Input
-         call MAPL_TimerOn(MAPL, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE")
          if (size(BufInOut) > 0) then
             if (LoadBalance) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Distribute, Handle=&
                  SolarBalanceHandle, _RC)
          end if
-         call MAPL_TimerOff(MAPL, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE")
 
          ! number of columns after load balancing
          NCOL = size(Q, 1)
 
-         call MAPL_TimerOff(MAPL, "-BALANCE")
+         call MAPL_GridCompTimerStop(gc, "-BALANCE")
 
          ! Do shortwave calculations on a list of soundings
 
-         call MAPL_TimerOn(MAPL, "-MISC")
+         call MAPL_GridCompTimerStart(gc, "-MISC")
 
          ! report cosine solar zenith angle actually used by REFRESH
          COSZSW = ZT
@@ -2595,7 +2676,7 @@ contains
             asya = BUFIMP_AEROSOL_ASY
          end if
 
-         call MAPL_TimerOff(MAPL, "-MISC")
+         call MAPL_GridCompTimerStop(gc, "-MISC")
 
          ! Call the requested Shortwave scheme
          ! -----------------------------------
@@ -2615,7 +2696,7 @@ contains
                  FSWBAND, &
                  SOLAR_TO_OBIO .and. include_aerosols, &
                  DRBAND, DFBAND, &
-                 MAPL, _RC)
+                 gc, _RC)
 
          else if (USE_RRTMGP) then
 
@@ -2623,7 +2704,7 @@ contains
             ! allows line number reporting cf. original call method
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
 
-            call MAPL_TimerOn(MAPL, "-RRTMGP", _RC)
+            call MAPL_GridCompTimerStart(gc, "-RRTMGP", _RC)
 
             ! absorbing gas names
             error_msg = gas_concs%init([character(3) :: &
@@ -2673,9 +2754,9 @@ TEST_(gas_concs%set_vmr('ch4', real(CH4_R, kind=wp)))
                  default='rrtmgp-gas-sw-g112.nc', _RC)
             if (.not. rrtmgp_state%initialized) then
                ! gas_concs needed only to access required gas names
-               call MAPL_TimerOn(MAPL, "--RRTMGP_IO_GAS", _RC)
+               call MAPL_GridCompTimerStart(gc, "--RRTMGP_IO_GAS", _RC)
                call load_and_init(rrtmgp_state%k_dist, trim(k_dist_file), gas_concs)
-               call MAPL_TimerOff(MAPL, "--RRTMGP_IO_GAS", _RC)
+               call MAPL_GridCompTimerStop(gc, "--RRTMGP_IO_GAS", _RC)
                if (.not. rrtmgp_state%k_dist%source_is_external()) then
 TEST_('RRTMGP-SW: does not seem to be SW')
                end if
@@ -2847,7 +2928,7 @@ TEST_(error_msg)
             call MAPL_GridCompGetResource(gc, &
                  "RRTMGP_CLOUD_OPTICS_TYPE_SW", cloud_optics_type, &
                  default='LUT', _RC)
-            call MAPL_TimerOn(MAPL, "--RRTMGP_IO_CLOUDS", _RC)
+            call MAPL_GridCompTimerStart(gc, "--RRTMGP_IO_CLOUDS", _RC)
             if (trim(cloud_optics_type) == 'LUT') then
                call load_cld_lutcoeff(cloud_optics, cloud_optics_file)
             elseif (trim(cloud_optics_type) == 'PADE') then
@@ -2855,7 +2936,7 @@ TEST_(error_msg)
             else
 TEST_('unknown cloud_optics_type: ' // trim(cloud_optics_file))
             end if
-            call MAPL_TimerOff(MAPL, "--RRTMGP_IO_CLOUDS", _RC)
+            call MAPL_GridCompTimerStop(gc, "--RRTMGP_IO_CLOUDS", _RC)
 
             ! ice surface roughness category for Yang (2013) ice optics
             ! icergh: 1 = none, 2 = medium, 3 = high
@@ -3036,12 +3117,12 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                     FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
                     FORINTP, FORINHP, FORINMP, FORINLP, &
 #endif
-                    MAPL, _RC)
+                    _RC)
 
             end do ! loop over blocks
             !$OMP END PARALLEL DO
 
-            call MAPL_TimerOn(MAPL, "--RRTMGP_POST", _RC)
+            call MAPL_GridCompTimerStart(gc, "--RRTMGP_POST", _RC)
 
             ! normalize by incoming solar radiation
             allocate(flux_dn_top(NCOL), _STAT)
@@ -3143,16 +3224,16 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! cloud_props_gpt/bnd, aer_props, optical_props are local to PROCESS_RRTMGP_BLOCK
             ! and are finalized automatically when that subroutine returns.
 
-            call MAPL_TimerOff(MAPL, "--RRTMGP_POST", _RC)
+            call MAPL_GridCompTimerStop(gc, "--RRTMGP_POST", _RC)
 
-            call MAPL_TimerOff(MAPL, "-RRTMGP", _RC)
+            call MAPL_GridCompTimerStop(gc, "-RRTMGP", _RC)
 
 #undef TEST_
 
          else if (USE_RRTMG) then
 
             ! regular RRTMG
-            call MAPL_TimerOn(MAPL, "-RRTMG")
+            call MAPL_GridCompTimerStart(gc, "-RRTMG")
 
             ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
             ! -------------------------------------------------------------------
@@ -3227,7 +3308,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! --------------------------------------------------------
             ! RRTMG convention is that vertical indices increase from bot -> top
 
-            call MAPL_TimerOn(MAPL, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
 
             DPR(:, 1:LM) = (PLE(:, 2:LM + 1) - PLE(:, 1:LM))
 
@@ -3345,14 +3426,14 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             SSAAER(:, 1:LM, :) = ssaa(:, LM:1:-1, :)
             ASMAER(:, 1:LM, :) = asya(:, LM:1:-1, :)
 
-            call MAPL_TimerOff(MAPL, "--RRTMG_FLIP")
-            call MAPL_TimerOn(MAPL, "--RRTMG_INIT")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_INIT")
 
             ! initialize RRTMG SW
             call rrtmg_sw_ini
 
-            call MAPL_TimerOff(MAPL, "--RRTMG_INIT")
-            call MAPL_TimerOn(MAPL, "--RRTMG_RUN")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_INIT")
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_RUN")
 
             ! partition size for columns (profiles) used to improve efficiency
             call MAPL_GridCompGetResource(gc, 'RRTMGSW_PARTITION_SIZE', RPART, default=0, _RC)
@@ -3513,8 +3594,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                  BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
                  _RC)
 
-            call MAPL_TimerOff(MAPL, "--RRTMG_RUN")
-            call MAPL_TimerOn(MAPL, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_RUN")
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
 
             ! unflip the outputs in the vertical
             ! ----------------------------------
@@ -3524,7 +3605,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             SWUFLXCR(:, 1:LM + 1) = SWUFLXC(:, LM + 1:1:-1)
             SWDFLXCR(:, 1:LM + 1) = SWDFLXC(:, LM + 1:1:-1)
 
-            call MAPL_TimerOff(MAPL, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP")
 
             ! required outputs
             ! ----------------
@@ -3615,7 +3696,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             deallocate(SWUFLXCR, _STAT)
             deallocate(SWDFLXCR, _STAT)
 
-            call MAPL_TimerOff(MAPL, "-RRTMG")
+            call MAPL_GridCompTimerStop(gc, "-RRTMG")
 
          else
 
@@ -3633,16 +3714,16 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! Complete load balancing by retrieving work done remotely
 
-         call MAPL_TimerOn(MAPL, "-BALANCE")
+         call MAPL_GridCompTimerStart(gc, "-BALANCE")
 
-         call MAPL_TimerOn(MAPL, "--RETRIEVE")
+         call MAPL_GridCompTimerStart(gc, "--RETRIEVE")
          if (LoadBalance) then
             if (size(BufOut) > 0) call MAPL_BalanceWork(BufOut, NumMax, Direction=MAPL_Retrieve, Handle=&
                  SolarBalanceHandle, _RC)
             if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Retrieve, Handle=&
                  SolarBalanceHandle, _RC)
          end if
-         call MAPL_TimerOff(MAPL, "--RETRIEVE")
+         call MAPL_GridCompTimerStop(gc, "--RETRIEVE")
 
          ! Unpack the results. Fills "masked" (night) locations with default value from internal state
          ! resulting internals are then contiguous versions
@@ -3711,11 +3792,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(SlicesInt, NamesInt, _STAT)
          deallocate(IntInOut, rgDim, ugDim, _STAT)
          deallocate(BufInp, BufInOut, BufOut, _STAT)
-         call MAPL_TimerOn(MAPL, "--DESTROY")
+         call MAPL_GridCompTimerStart(gc, "--DESTROY")
          if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, _RC)
-         call MAPL_TimerOff(MAPL, "--DESTROY")
+         call MAPL_GridCompTimerStop(gc, "--DESTROY")
 
-         call MAPL_TimerOff(MAPL, "-BALANCE")
+         call MAPL_GridCompTimerStop(gc, "-BALANCE")
 
          _RETURN(ESMF_SUCCESS)
 
@@ -3930,7 +4011,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          where (ZTH > 0.0)
             SLN = (SLR / ZTH)
-            else where
+         else where
             SLN = 0.0
          end where
 
@@ -4470,7 +4551,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GetPointer(import, ALBIMP, 'ALBVF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
-               elsewhere
+            else where
                ALBEXP = MAPL_UNDEF
             end where
          end if
@@ -4482,7 +4563,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GetPointer(import, ALBIMP, 'ALBVR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
-               elsewhere
+            else where
                ALBEXP = MAPL_UNDEF
             end where
          end if
@@ -4494,7 +4575,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GetPointer(import, ALBIMP, 'ALBNF', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
-               elsewhere
+            else where
                ALBEXP = MAPL_UNDEF
             end where
          end if
@@ -4506,7 +4587,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GetPointer(import, ALBIMP, 'ALBNR', _RC)
             where (SLR > 0)
                ALBEXP = ALBIMP * FAC
-               elsewhere
+            else where
                ALBEXP = MAPL_UNDEF
             end where
          end if
@@ -4540,7 +4621,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSFC)) then
             where (ALB /= MAPL_UNDEF)
                SLRSFC = (FSCN(:, :, LM) * SLR) / (1. - ALB)
-               elsewhere
+            else where
                SLRSFC = 0.0
             end where
          end if
@@ -4548,7 +4629,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSFNA)) then
             where (ALB /= MAPL_UNDEF)
                SLRSFNA = (FSWNAN(:, :, LM) * SLR) / (1. - ALB)
-               elsewhere
+            else where
                SLRSFNA = 0.0
             end where
          end if
@@ -4556,7 +4637,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSFCNA)) then
             where (ALB /= MAPL_UNDEF)
                SLRSFCNA = (FSCNAN(:, :, LM) * SLR) / (1. - ALB)
-               elsewhere
+            else where
                SLRSFCNA = 0.0
             end where
          end if
@@ -4566,7 +4647,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSUFC)) then
             where (ALB /= MAPL_UNDEF)
                SLRSUFC = ALB * (FSCN(:, :, LM) / (1. - ALB)) * SLR
-               elsewhere
+            else where
                SLRSUFC = 0.0
             end where
          end if
@@ -4574,7 +4655,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSUFNA)) then
             where (ALB /= MAPL_UNDEF)
                SLRSUFNA = ALB * (FSWNAN(:, :, LM) / (1. - ALB)) * SLR
-               elsewhere
+            else where
                SLRSUFNA = 0.0
             end where
          end if
@@ -4582,7 +4663,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(SLRSUFCNA)) then
             where (ALB /= MAPL_UNDEF)
                SLRSUFCNA = ALB * (FSCNAN(:, :, LM) / (1. - ALB)) * SLR
-               elsewhere
+            else where
                SLRSUFCNA = 0.0
             end where
          end if
@@ -4917,7 +4998,7 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
    subroutine compute_gas_optics(colS, colE, ncols_block, LM, &
         gas_concs, k_dist, p_lay, p_lev, t_lay, &
-        optical_props, toa_flux, MAPL, rc)
+        optical_props, toa_flux, rc)
 
       use mo_gas_concentrations, only: ty_gas_concs
       use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -4930,7 +5011,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
       real(kind=wp), intent(in) :: p_lay(:, :), p_lev(:, :), t_lay(:, :)
       class(ty_optical_props_arry), intent(inout) :: optical_props
       real(kind=wp), intent(out) :: toa_flux(:, :)
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! locals -- will be thread-private under future !$OMP PARALLEL DO
@@ -5041,7 +5121,7 @@ TEST_('aerosol optical properties hardwired 2-stream for now')
         cloud_props_bnd_liq, cloud_props_bnd_ice, &
         cloud_props_gpt_liq, cloud_props_gpt_ice, &
         cld_mask, &
-        MAPL, rc)
+        rc)
 
       use mo_cloud_sampling, only: draw_samples, &
            sampled_mask_max_ran, &
@@ -5073,7 +5153,6 @@ TEST_('aerosol optical properties hardwired 2-stream for now')
       class(ty_optical_props_arry), intent(inout) :: cloud_props_bnd_liq, cloud_props_bnd_ice
       class(ty_optical_props_arry), intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
       logical, allocatable, intent(out) :: cld_mask(:, :, :)
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! locals -- all thread-private under future !$OMP PARALLEL DO
@@ -5299,7 +5378,7 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
         ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
         ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
 #endif
-        MAPL, rc)
+        rc)
 
       use mo_optical_props, only: ty_optical_props_arry
 
@@ -5331,7 +5410,6 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
       real, intent(inout) :: ASMIDTP(:), ASMIDHP(:), ASMIDMP(:), ASMIDLP(:)
       real, intent(inout) :: ASMINTP(:), ASMINHP(:), ASMINMP(:), ASMINLP(:)
 #endif
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! locals -- all thread-private under future !$OMP PARALLEL DO
@@ -5699,7 +5777,7 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
         CL, RR3, band_lims_gpt, &
         cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
         forwliq, forwice, &
-        MAPL, rc)
+        rc)
 
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
       use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
@@ -5714,7 +5792,6 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
       type(ty_cloud_optics_rrtmgp), intent(inout) :: cloud_optics
       class(ty_optical_props_arry), intent(inout) :: cloud_props_gpt_liq, cloud_props_gpt_ice
       real(kind=wp), dimension(:, :, :), intent(out) :: forwliq, forwice
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! locals -- all thread-private under future !$OMP PARALLEL DO
@@ -5828,7 +5905,7 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
         FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
         FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
         FORINTP, FORINHP, FORINMP, FORINLP, &
-        MAPL, rc)
+        rc)
 
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
       use mo_rte_kind, only: wp
@@ -5859,7 +5936,6 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
       real, intent(inout) :: FORLNTP(:), FORLNHP(:), FORLNMP(:), FORLNLP(:)
       real, intent(inout) :: FORIDTP(:), FORIDHP(:), FORIDMP(:), FORIDLP(:)
       real, intent(inout) :: FORINTP(:), FORINHP(:), FORINMP(:), FORINLP(:)
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! locals -- all thread-private under future !$OMP PARALLEL DO
@@ -6215,7 +6291,7 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
         fluxes_allsky, flux_up_allsky, flux_net_allsky, &
         bnd_flux_dn_allsky, bnd_flux_dir_allsky, bnd_flux_net_allsky, &
         cloud_props_gpt_liq, cloud_props_gpt_ice, &
-        MAPL, rc)
+        rc)
 
       use mo_optical_props, only: ty_optical_props_arry
       use mo_rte_kind, only: wp
@@ -6241,7 +6317,6 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
       real(kind=wp), target, intent(inout) :: bnd_flux_net_allsky(:, :, :)
       class(ty_optical_props_arry), intent(inout) :: cloud_props_gpt_liq
       class(ty_optical_props_arry), intent(inout) :: cloud_props_gpt_ice
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       character(len=512) :: error_msg
@@ -6339,7 +6414,7 @@ TEST_(error_msg)
         FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
         FORINTP, FORINHP, FORINMP, FORINLP, &
 #endif
-        MAPL, rc)
+        rc)
 
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_1scl, &
            ty_optical_props_2str, ty_optical_props_nstr
@@ -6418,7 +6493,6 @@ TEST_(error_msg)
       real, intent(inout) :: FORIDTP(:), FORIDHP(:), FORIDMP(:), FORIDLP(:)
       real, intent(inout) :: FORINTP(:), FORINHP(:), FORINMP(:), FORINLP(:)
 #endif
-      type(MAPL_MetaComp), intent(inout) :: MAPL
       integer, optional, intent(out) :: rc
 
       ! per-block private local variables
@@ -6513,7 +6587,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
 
       call compute_gas_optics(colS, colE, ncols_block, LM, &
            gas_concs, k_dist, p_lay, p_lev, t_lay, &
-           optical_props, toa_flux, MAPL, _RC)
+           optical_props, toa_flux, _RC)
 
       if (need_aer_optical_props) then
          call compute_aer_optics(colS, colE, need_aer_optical_props, &
@@ -6529,7 +6603,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
            cloud_props_bnd_liq, cloud_props_bnd_ice, &
            cloud_props_gpt_liq, cloud_props_gpt_ice, &
            cld_mask, &
-           MAPL, _RC)
+           _RC)
 
       ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
       ! ** Calculated from subcolumn ensemble, so stochastic **
@@ -6558,7 +6632,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
            ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
            ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
 #endif
-           MAPL, _RC)
+           _RC)
 
       ! delta-scaling of cloud optical properties (accounts for forward scattering)
       call compute_delta_scale( &
@@ -6567,7 +6641,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
            CL, RR3, band_lims_gpt, &
            cloud_optics, cloud_props_gpt_liq, cloud_props_gpt_ice, &
            forwliq, forwice, &
-           MAPL, _RC)
+           _RC)
 
 #ifdef SOLAR_RADVAL
       ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
@@ -6597,7 +6671,7 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
            FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
            FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
            FORINTP, FORINHP, FORINMP, FORINLP, &
-           MAPL, _RC)
+           _RC)
 #endif
 
       ! add in aerosol optical properties if requested and available
@@ -6616,7 +6690,7 @@ TEST_(aer_props%increment(optical_props))
            bnd_flux_dn_allsky(colS:colE, :, :), bnd_flux_dir_allsky(colS:colE, :, :), &
            bnd_flux_net_allsky(colS:colE, :, :), &
            cloud_props_gpt_liq, cloud_props_gpt_ice, &
-           MAPL, _RC)
+           _RC)
 
       ! deallocate per-block arrays
       deallocate(toa_flux, _STAT)
@@ -6646,7 +6720,7 @@ TEST_(aer_props%increment(optical_props))
         do_drfband, &
         DRBAND, DFBAND, &
 
-        MAPL, rc)
+        gc, rc)
 
       !   Inlineable cover for the f77 version of SORAD.
       !   This cover works on a 1D run of soundings.
@@ -6673,7 +6747,7 @@ TEST_(aer_props%increment(optical_props))
       ! if (do_drfband), must point to an (#cols,#bands) space.
       real, intent(inout), dimension(:, :), pointer :: DRBAND, DFBAND
 
-      type(MAPL_MetaComp), intent(inout) :: MAPL
+      type(ESMF_GridComp), intent(inout) :: gc
       integer, optional, intent(out) :: rc
 
       ! Locals
@@ -6683,16 +6757,16 @@ TEST_(aer_props%increment(optical_props))
 
       ! Begin
 
-      call MAPL_TimerOn(MAPL, "-MISC")
+      call MAPL_GridCompTimerStart(gc, "-MISC")
 
       IRUN = size(TA, 1)
       LN = size(TA, 2)
 
-      call MAPL_TimerOff(MAPL, "-MISC")
+      call MAPL_GridCompTimerStop(gc, "-MISC")
 
-      call MAPL_TimerOn(MAPL, "-SORAD")
+      call MAPL_GridCompTimerStart(gc, "-SORAD")
 
-      call MAPL_TimerOn(MAPL, "--SORAD_RUN", _RC)
+      call MAPL_GridCompTimerStart(gc, "--SORAD_RUN", _RC)
       call SORAD(IRUN, LN, NB_CHOU, COSZ, PLhPa, TA, WA, OA, CO2, &
            CWC, FCLD, ICT, ICB, REFF, HK_UV_TEMP, HK_IR_TEMP, &
            taua, ssaa, asya, &
@@ -6701,9 +6775,9 @@ TEST_(aer_props%increment(optical_props))
            FLXU, FLCU, &
            FLXBAND, &
            do_drfband, DRBAND, DFBAND)
-      call MAPL_TimerOff(MAPL, "--SORAD_RUN", _RC)
+      call MAPL_GridCompTimerStop(gc, "--SORAD_RUN", _RC)
 
-      call MAPL_TimerOff(MAPL, "-SORAD")
+      call MAPL_GridCompTimerStop(gc, "-SORAD")
 
       _RETURN(ESMF_SUCCESS)
 
