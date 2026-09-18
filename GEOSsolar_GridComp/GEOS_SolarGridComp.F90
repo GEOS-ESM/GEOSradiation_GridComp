@@ -675,14 +675,14 @@ contains
        AVERAGING_INTERVAL = ACCUMINT,                                        &
        REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
 
-    call MAPL_AddImportSpec(GC,                                              &
-       LONG_NAME  = 'odd-oxygen_volume_mixing_ratio',                        &
-       UNITS      = 'mol mol-1',                                             &
-       SHORT_NAME = 'OX',                                                    &
-       DIMS       = MAPL_DimsHorzVert,                                       &
-       VLOCATION  = MAPL_VLocationCenter,                                    &
-       AVERAGING_INTERVAL = ACCUMINT,                                        &
-       REFRESH_INTERVAL   = MY_STEP,                                   __RC__)
+     call MAPL_AddImportSpec(GC,                                             &
+        SHORT_NAME         = 'O3',                                           &
+        LONG_NAME          = 'ozone_mass_mixing_ratio',                      &
+        UNITS              = 'kg kg-1',                                      &
+        DIMS               = MAPL_DimsHorzVert,                              &
+        VLOCATION          = MAPL_VLocationCenter,                           &
+        AVERAGING_INTERVAL = ACCUMINT,                                       &
+        REFRESH_INTERVAL   = MY_STEP,                                 __RC__ )
 
     call MAPL_AddImportSpec(GC,                                              &
        LONG_NAME  = 'cloud_area_fraction',                                   &
@@ -3537,7 +3537,7 @@ contains
       ! ------------------------------
 
       ! inputs
-      real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, OX, CL, &
+      real, pointer, dimension(:,:)  :: PLE, CH4, N2O, T, Q, O3, CL, &
                                         QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
       real, pointer, dimension(:)    :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
                                         Ig1D, Jg1D, ALAT, SLR1D, ZT
@@ -3785,7 +3785,7 @@ contains
       integer, pointer :: pi1, piN
       integer, target :: i1Out, iNOut, i1InOut, iNInOut
       real, pointer :: QQ3(:,:,:), RR3(:,:,:), ptr3(:,:,:), ptr4(:,:,:,:)
-      real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), O3(:,:), PLhPa(:,:)
+      real, pointer :: ptr2(:,:), RH(:,:), PL(:,:), PLhPa(:,:)
       integer :: dims, NumLit, Num2do, num_aero_vars
       character(len=ESMF_MAXSTR) :: short_name
       integer, pointer :: ugdims(:) => null()
@@ -4093,8 +4093,8 @@ contains
                   T     => ptr2(1:Num2do,:)
                case('QV')
                   Q     => ptr2(1:Num2do,:)
-               case('OX')
-                  OX    => ptr2(1:Num2do,:)
+               case('O3')
+                  O3    => ptr2(1:Num2do,:)
                case('FCLD')
                   CL    => ptr2(1:Num2do,:)
                case('QL')
@@ -4774,22 +4774,6 @@ contains
       WHERE (RR == MAPL_UNDEF) RR3(:,:,3) = 50.
       WHERE (RS == MAPL_UNDEF) RR3(:,:,4) = 50.
       WHERE (RG == MAPL_UNDEF) RR3(:,:,5) = 50.
-
-      ! Convert odd oxygen, which is the model prognostic, to ozone
-      !------------------------------------------------------------
-
-      allocate(O3 (NCOL,LM),__STAT__)
-
-      O3 = OX
-      WHERE(PL < 100.)
-         O3 = O3 * EXP(-1.5*(LOG10(PL)-2.)**2)
-      ENDWHERE
-
-      ! SORAD expects non-negative ozone fraction by MASS
-      !--------------------------------------------------
-
-      O3 = O3 * (MAPL_O3MW / MAPL_AIRMW)
-      O3 = MAX(O3, 0.00)
 
       ! ------------------
       ! Begin aerosol code
@@ -5838,7 +5822,6 @@ contains
       deallocate (PL, RH, PLhPa)
       deallocate (QQ3, RR3)
       deallocate (ILWT)
-      deallocate (O3)
       deallocate (TAUA, SSAA, ASYA)
 
       ! Complete load balancing by retrieving work done remotely
