@@ -403,17 +403,225 @@ port - referenced throughout below instead of repeated).
       generically to every field it creates. So there is no drop-in
       runtime-introspection replacement for what `MAPL_VarSpecGet` used
       to provide.
-    - **Recommended fix (not yet implemented)**: since
-      `Solar_StateSpecs.rc` already statically declares every import/
-      internal field's `DIMS`, replace the generic `MAPL_VarSpecGet`-
-      driven loop with a hardcoded name/DIMS table mirroring the `.rc`
-      (a `select case` or parallel array literal built once from the
-      known IMPORT/INTERNAL field lists) - no more runtime spec
-      introspection needed. This matches MAPL3's overall design shift
-      away from generic runtime introspection toward static
-      `.rc`-declared/ACG-generated knowledge. Deferred for now at the
-      user's request - pick this up as the next concrete task when
-      resuming step 12.
+    - **Recommended fix (not yet implemented) - CHOSEN APPROACH**:
+      instead of a hardcoded name/DIMS table (an earlier idea, now
+      superseded), reconstruct the per-field metadata from the ESMF
+      states + fields, since MAPL3 does carry all of it on the fields
+      themselves (verified against `src/Shared/@MAPL` source). This
+      keeps the loop data-driven (no static table to drift out of sync
+      with `Solar_StateSpecs.rc`) while dropping `MAPL_VarSpec`
+      entirely:
+      - **Data source**: drop the `ImportSpec`/`ExportSpec`/
+        `InternalSpec` arrays. Pull field lists from the `import`/
+        `internal` `ESMF_State` via
+        `ESMF_StateGet(state, itemNameList=names)` then
+        `ESMF_StateGet(state, name, field)`. Names come free from the
+        item list.
+      - **`SHORT_NAME`** -> the `itemNameList` entry (or
+        `MAPL_FieldGet(field, short_name=)`).
+      - **`DIMS`** -> `ESMF_FieldGet(field, rank=)` for slice counting
+        (`rank==2` -> 1 slice; `rank==3` -> 3rd extent, the old
+        `size(ptr3,3)`).
+      - **Vertical-only detection** (`z`/`PREF`, which shares `rank`
+        with `xy`) -> `horizontal_dims_spec == HORIZONTAL_DIMS_NONE`
+        (from `MAPL_FieldGet(field, horizontal_dims_spec=)`; equiv.
+        ESMF `geomDimCount==0`). Confirmed in `MAPL_Generic.F90`
+        `gridcomp_add_spec`: `.rc` `DIMS=z` maps to
+        `HORIZONTAL_DIMS_NONE`, `xy`/`xyz` -> `HORIZONTAL_DIMS_GEOM`.
+      - **Full per-dim shape in one call** (optional convenience):
+        `MAPL_FieldGetLocalElementCount(field, local_count, _RC)`
+        (public via `infrastructure/esmf/API.F90`) returns the whole
+        shape array; no single `ESMF_FieldGet` arg returns the full
+        shape.
+      - **`UNGRIDDED_DIMS`** count ->
+        `MAPL_FieldGet(field, ungridded_dims=ugd)` then
+        `ugd%get_num_ungridded()` (`UngriddedDims`,
+        `infrastructure/esmf/UngriddedDims.F90`). Handles the
+        `ungrd_num_bands_solar` fields (`FSWBANDN`, `DRBANDN`, ...).
+      - **`default=def`** -> rely on MAPL3 applying `fill_value` at
+        allocation (`FieldClassAspect` calls
+        `FieldSet(payload, fill_value)`); drop the `def` arg in unpack
+        and verify against a baseline run. Fallback: read `/_FillValue`
+        via `ESMF_InfoGet` (`KEY_FILL_VALUE`,
+        `utils/MAPL_ESMF_InfoKeys.F90`). For SOLAR this is effectively
+        a no-op: only 4 of 159 internals set `FILL` (`TAULOPAR`,
+        `TAUMDPAR`, `TAUHIPAR`, `TAUTTPAR`), all to `MAPL_UNDEF`, which
+        is already the buffer initialization value.
+        - **What `def` actually does** (`INT_VARS_3` unpack loop at
+          ~L3746-3800, `UnPackIt` at ~L6860): the load balancer only
+          computes **daytime** columns (`daytime`/`MSK` true). When
+          unpacking the repacked buffer back into the full gridded
+          internal array, daytime cells receive the computed value;
+          **nighttime** cells have no computed value, so for
+          Out-only internals (`.not. IntInOut(K)`) `UnPackIt`
+          overwrites them with `def` (the MAPL2 spec `DEFAULT=`) so
+          the whole array is consistent (e.g. zero flux, `MAPL_UNDEF`
+          optical depth). For `InOut` internals `def` is deliberately
+          NOT passed (`UnPackIt`'s `default` is `optional`; see the
+          comment above the loop) so nighttime cells retain their
+          previous "aged" values. `MAPL_VarSpecGet(..., default=def)`
+          is only called in the non-InOut branch, so `def` is never
+          read stale. Hence the replacement only needs to serve the
+          Out-only branch: a `fill_value`-based `def`, or dropping
+          the arg and trusting allocation-time pre-fill.
+      - **Note on `FILL` vs `DEFAULT`**: the step-3 note above lists
+        `DEFAULT` as unsupported/dropped - that's the MAPL2 *spelling*.
+        The MAPL3 `FILL`/`FILL_VALUE` column DOES work end-to-end
+        (`fill_value` is a real `gridcomp_add_spec` dummy arg in
+        `MAPL_Generic.F90`), and is what serves the old `default=` role.
+
+      Mapping summary:
+
+      | MAPL2 `MAPL_VarSpecGet` | MAPL3 replacement |
+      | --- | --- |
+      | `SHORT_NAME` | `ESMF_StateGet(itemNameList=)` |
+      | `DIMS` | `ESMF_FieldGet(rank=)` + `horizontal_dims_spec == HORIZONTAL_DIMS_NONE` |
+      | `UNGRIDDED_DIMS` | `ungridded_dims%get_num_ungridded()` |
+      | `default` | MAPL3 `fill_value` pre-fill (drop arg); fallback `/_FillValue` |
+
+      **Concrete edit plan (spec arrays -> ESMF_State).** Verified there
+      are exactly THREE `MAPL_VarSpecGet` calls (L1807, L2033, L3754;
+      L769 is only a comment) and that the spec arrays are used only at:
+      declarations L770-772, `size()` at L1773-1774, and those three
+      `MAPL_VarSpecGet` calls. `ExportSpec` is DECLARED BUT NEVER READ ->
+      just delete it.
+
+      1. Declarations (replace L770-772):
+         ```fortran
+         character(len=ESMF_MAXSTR), allocatable :: ImportNames(:), InternalNames(:)
+         type(ESMF_Field) :: field
+         ```
+         (`internal` ESMF_State local already exists at L762; `import`
+         is the Run arg. No `ExportSpec` replacement needed.)
+
+      2. Populate names + counts (near where the spec arrays used to be
+         fetched, before the `NumImp = size(...)` block at L1773):
+         ```fortran
+         call ESMF_StateGet(import, itemCount=NumImp, _RC)
+         call ESMF_StateGet(internal, itemCount=NumInt, _RC)
+         allocate(ImportNames(NumImp), InternalNames(NumInt), _STAT)
+         call ESMF_StateGet(import, itemNameList=ImportNames, _RC)
+         call ESMF_StateGet(internal, itemNameList=InternalNames, _RC)
+         ```
+         Then `size(ImportSpec)` -> `NumImp`, `size(InternalSpec)` ->
+         `NumInt` (L1773-1774 become redundant / drop).
+
+      3. Site 1 - input loop (replace the L1807 call; needs DIMS +
+         SHORT_NAME):
+         ```fortran
+         NamesInp(K) = ImportNames(K)
+         call ESMF_StateGet(import, ImportNames(K), field, _RC)
+         call SolarFieldGetDims(field, DIMS, ugdims, SlicesInp(K), _RC)
+         ```
+         (`SlicesInp(K)` from the helper replaces the later
+         `ESMFL_StateGetPointerToData` + `size(ptr3,3)` slice count for
+         the non-aerosol branch; keep the AERO special-case as-is.)
+
+      4. Site 2 - internal loop (replace the L2033 call; needs
+         SHORT_NAME + DIMS + UNGRIDDED_DIMS):
+         ```fortran
+         NamesInt(K) = InternalNames(K)
+         call ESMF_StateGet(internal, InternalNames(K), field, _RC)
+         call SolarFieldGetDims(field, DIMS, ugDim(K), SlicesInt(K), _RC)
+         ```
+
+      5. Site 3 - unpack loop (replace the L3754 `default=def` call):
+         ```fortran
+         call ESMF_StateGet(internal, InternalNames(K), field, _RC)
+         call SolarFieldGetFill(field, def, _RC)
+         ```
+         (Or drop `def` entirely and rely on MAPL3 `fill_value`
+         pre-fill; for SOLAR it's a no-op as noted above.)
+
+      Full replacement mapping:
+
+      | MAPL2 | MAPL3 |
+      | --- | --- |
+      | `type(MAPL_VarSpec), pointer :: ImportSpec(:)` | `character(len=ESMF_MAXSTR), allocatable :: ImportNames(:)` + `import` state |
+      | `type(MAPL_VarSpec), pointer :: InternalSpec(:)` | `character(len=ESMF_MAXSTR), allocatable :: InternalNames(:)` + `internal` state |
+      | `type(MAPL_VarSpec), pointer :: ExportSpec(:)` | **delete** (declared, never read) |
+      | `size(ImportSpec)` / `size(InternalSpec)` | `ESMF_StateGet(state, itemCount=)` |
+      | `MAPL_VarSpecGet(spec, SHORT_NAME=)` | the `itemNameList` entry |
+      | `MAPL_VarSpecGet(spec, DIMS=, UNGRIDDED_DIMS=)` | `SolarFieldGetDims(field, ...)` |
+      | `MAPL_VarSpecGet(spec, default=)` | `SolarFieldGetFill(field, ...)` or drop |
+
+      **Local helper routine (recommended structure)**: wrap the per-field
+      metadata reads in one module-scope private subroutine so the two
+      load-balancing loops stay close to their current `select case (DIMS)`
+      shape. Place it near the hoisted RRTMGP helpers (after
+      `end subroutine Run`); it takes `field` explicitly, no host
+      association needed.
+      ```fortran
+      subroutine SolarFieldGetDims(field, dims, num_ungridded, num_slices, rc)
+         type(ESMF_Field), intent(inout) :: field
+         integer, intent(out) :: dims          ! MAPL_Dims{HorzVert,HorzOnly,VertOnly}
+         integer, intent(out) :: num_ungridded ! old ugDim(K)
+         integer, intent(out) :: num_slices    ! 2D slices
+         integer, optional, intent(out) :: rc
+         integer :: status, rank
+         type(HorizontalDimsSpec) :: hspec
+         type(MAPL_UngriddedDims) :: ugd
+         integer, allocatable :: local_count(:)
+         call ESMF_FieldGet(field, rank=rank, _RC)
+         call MAPL_FieldGet(field, horizontal_dims_spec=hspec, ungridded_dims=ugd, _RC)
+         num_ungridded = ugd%get_num_ungridded()
+         if (hspec == HORIZONTAL_DIMS_NONE) then
+            dims = MAPL_DimsVertOnly; num_slices = 0 ! z (PREF)
+         else if (rank >= 3) then
+            dims = MAPL_DimsHorzVert ! xyz
+            call MAPL_FieldGetLocalElementCount(field, local_count, _RC)
+            num_slices = local_count(3) ! == old size(ptr3,3)
+         else
+            dims = MAPL_DimsHorzOnly; num_slices = 1 ! xy
+         end if
+         _RETURN(_SUCCESS)
+      end subroutine SolarFieldGetDims
+      ```
+      Optional companion for the fill-value fallback (only the internal
+      unpack loop needs it):
+      ```fortran
+      subroutine SolarFieldGetFill(field, def, rc)
+         type(ESMF_Field), intent(in) :: field
+         real, intent(out) :: def
+         integer, optional, intent(out) :: rc
+         integer :: status
+         type(ESMF_Info) :: info
+         def = MAPL_UNDEF
+         call ESMF_InfoGetFromHost(field, info, _RC)
+         if (ESMF_InfoIsPresent(info, KEY_FILL_VALUE, _RC)) &
+              call ESMF_InfoGet(info, KEY_FILL_VALUE, def, _RC)
+         _RETURN(_SUCCESS)
+      end subroutine SolarFieldGetFill
+      ```
+      Loop usage collapses to:
+      ```fortran
+      call ESMF_StateGet(import, names(K), field, _RC)
+      NamesInp(K) = names(K)
+      call SolarFieldGetDims(field, DIMS, ugdims, SlicesInp(K), _RC)
+      if (DIMS == MAPL_DimsVertOnly) cycle ! skip PREF
+      ```
+
+      **`use`-reachability: all symbols come through the existing
+      `use MAPL`** (verified against `src/Shared/@MAPL` API aggregators) -
+      no extra `use mapl_*_mod` lines needed:
+      - `MAPL_FieldGet` <- `mapl_field_api` (infrastructure/field/API.F90)
+      - `MAPL_FieldGetLocalElementCount`, `HorizontalDimsSpec`,
+        `HORIZONTAL_DIMS_NONE`, `operator(==)` <- `mapl_esmf_api`
+        (infrastructure/esmf/API.F90; the last three via a bare
+        `use mapl_HorizontalDimsSpec_mod` there)
+      - `UngriddedDims` <- `mapl_esmf_api`, **aliased as
+        `MAPL_UngriddedDims`** (use that spelling for the type)
+      - `KEY_FILL_VALUE` <- `mapl_utils_api` (utils/API.F90 bare
+        `use mapl_esmf_info_keys_mod`)
+
+      One `.rc` cross-check when wiring in: ungridded-only fields
+      (`FSWBANDN` = `xy` + `ungrd_num_bands_solar`) come back as
+      `MAPL_DimsHorzOnly` with `num_slices=1`; their extra axis is still
+      driven by the loop's existing `num_ungridded`/`ugDim` handling,
+      matching the current structure.
+
+      Deferred for now at the user's request - pick this up as the next
+      concrete task when resuming step 12.
 
 13. **DONE - `Irrad_SetServices`-style external wrapper.** Added a
     standalone `Solar_SetServices(gc, rc)` subroutine after `end
