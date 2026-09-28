@@ -170,7 +170,10 @@ module GEOS_SolarGridCompMod
    use gFTL_StringVector
 
    ! not re-exported through the MAPL umbrella (mp_utils/API.F90 gap)
-   use mapl_SatVapor_mod, only: MAPL_EQsat
+   use MAPL_SatVapor_mod, only: MAPL_EQsat
+   use MAPL_LoadBalance_mod, only: MAPL_Distribute, MAPL_Retrieve
+   ! not re-exported through the MAPL umbrella (esmf/API.F90 has no public ::)
+   use MAPL_HorizontalDimsSpec_mod, only: HorizontalDimsSpec, HORIZONTAL_DIMS_NONE, operator(==)
 
    ! for RRTMGP
    use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -764,12 +767,9 @@ contains
       type(ESMF_TimeInterval) :: intDT
       integer :: IM, JM, LM
       type(MAPL_SunOrbit) :: orbit
-      ! TODO(step 12): MAPL_VarSpec has no MAPL3 equivalent (confirmed absent
-      ! from src/Shared/@MAPL) - ImportSpec/ExportSpec/InternalSpec and the
-      ! MAPL_VarSpecGet-based load-balancing block below need a redesign.
-      type(MAPL_VarSpec), pointer :: ImportSpec(:) => null()
-      type(MAPL_VarSpec), pointer :: ExportSpec(:) => null()
-      type(MAPL_VarSpec), pointer :: InternalSpec(:) => null()
+      character(len=ESMF_MAXSTR), allocatable :: ImportNames(:), InternalNames(:)
+      type(ESMF_Field) :: field
+      type(ESMF_StateItem_Flag) :: itemType
       real, allocatable, dimension(:, :) :: LONS
       real, allocatable, dimension(:, :) :: LATS
 
@@ -1665,12 +1665,12 @@ contains
          real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), O3(:, :), PLhPa(:, :)
          integer :: DIMS, NumLit, Num2do, num_aero_vars
          character(len=ESMF_MAXSTR) :: SHORT_NAME
-         integer, pointer :: ugdims(:) => null()
+         integer :: num_ungridded, ungrd_extent
          logical, allocatable :: IntInOut(:)
          character(len=ESMF_MAXSTR), allocatable :: NamesInp(:), NamesInt(:)
          integer, allocatable :: SlicesInp(:), SlicesInt(:)
          real, target, allocatable :: BufInp(:), BufInOut(:), BufOut(:)
-         integer, allocatable :: rgDim(:), ugDim(:)
+         integer, allocatable :: grd_dim(:), ungrd_dim(:)
          real, pointer :: buf(:)
          integer :: NumImp, NumInt, NumInp
          integer :: NumMax, HorzDims(2)
@@ -1770,8 +1770,11 @@ contains
          !  column indicies Ig and Jg.
          !    The Outputs and InOuts are all INTERNAL variables.
 
-         NumImp = size(ImportSpec)
-         NumInt = size(InternalSpec)
+         call ESMF_StateGet(import, itemCount=NumImp, _RC)
+         call ESMF_StateGet(internal, itemCount=NumInt, _RC)
+         allocate(ImportNames(NumImp), InternalNames(NumInt), _STAT)
+         call ESMF_StateGet(import, itemNameList=ImportNames, _RC)
+         call ESMF_StateGet(internal, itemNameList=InternalNames, _RC)
 
          ! Inputs to load balancing:
          ! All imports plus Ig, Jg, LATS, SLR & ZTH.
@@ -1781,7 +1784,7 @@ contains
          allocate( &
               SlicesInp(NumInp), NamesInp(NumInp), &
               SlicesInt(NumInt), NamesInt(NumInt), &
-              IntInOut(NumInt), rgDim(NumInt), ugDim(NumInt), &
+              IntInOut(NumInt), grd_dim(NumInt), ungrd_dim(NumInt), &
               _STAT)
 
          HorzDims = (/IM, JM/)
@@ -1804,8 +1807,16 @@ contains
 
             ! Get names and dimensions of Inputs
             if (K <= NumImp) then
-               call MAPL_VarSpecGet(ImportSpec(K), &
-                    DIMS=DIMS, SHORT_NAME=NamesInp(K), _RC)
+               NamesInp(K) = ImportNames(K)
+               call ESMF_StateGet(import, trim(ImportNames(K)), itemType=itemType, _RC)
+               if (itemType == ESMF_STATEITEM_FIELD) then
+                  call ESMF_StateGet(import, trim(ImportNames(K)), field, _RC)
+                  call SolarFieldGetDims(field, DIMS, num_ungridded, ungrd_extent, _RC)
+               else
+                  ! AERO is a nested state; sized separately below
+                  _ASSERT(NamesInp(K) == "AERO", 'only AERO may be a non-field import')
+                  DIMS = MAPL_DimsHorzOnly
+               end if
             else
                DIMS = MAPL_DimsHorzOnly
                if (K == NumImp + 1) then
@@ -1841,7 +1852,7 @@ contains
                select case (DIMS)
                case (MAPL_DimsHorzVert)
                   ! We currently assume this case is 3D
-                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), _RC)
+                  call MAPL_StateGetPointer(import, ptr3, NamesInp(K), _RC)
                   SlicesInp(K) = size(ptr3, 3)
 
                case (MAPL_DimsHorzOnly)
@@ -1920,7 +1931,7 @@ contains
                if (SlicesInp(K) /= 1) then
 
                   ! pack 3D imports
-                  call ESMFL_StateGetPointerToData(import, ptr3, NamesInp(K), _RC)
+                  call MAPL_StateGetPointer(import, ptr3, NamesInp(K), _RC)
                   call PackIt(BufInp(i1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   iN = i1 + NumMax * size(ptr3, 3) - 1
 
@@ -1939,7 +1950,7 @@ contains
                      call PackIt(BufInp(i1), ZTH, daytime, NumMax, HorzDims, 1)
                   else
                      ! pack 2D imports
-                     call ESMFL_StateGetPointerToData(import, ptr2, NamesInp(K), _RC)
+                     call MAPL_StateGetPointer(import, ptr2, NamesInp(K), _RC)
                      call PackIt(BufInp(i1), ptr2, daytime, NumMax, HorzDims, 1)
                   end if
                   iN = i1 + NumMax - 1
@@ -2030,14 +2041,15 @@ contains
          INT_VARS_1: do K = 1, NumInt
 
             ! InOut or Out?
-            call MAPL_VarSpecGet(InternalSpec(K), &
-                 SHORT_NAME=SHORT_NAME, DIMS=DIMS, UNGRIDDED_DIMS=ugdims, _RC)
+            SHORT_NAME = InternalNames(K)
+            call ESMF_StateGet(internal, trim(SHORT_NAME), field, _RC)
+            call SolarFieldGetDims(field, DIMS, num_ungridded, ungrd_extent, _RC)
             ! later FAR variables will be InOut ... for now there are no InOut vars
             IntInOut(K) = .false.
 
             ! save properties
             NamesInt(K) = SHORT_NAME
-            rgDim(K) = DIMS
+            grd_dim(K) = DIMS
 
             ! Skip vertical only variables. They dont require
             ! load-balancing since they have no horizontal dimension.
@@ -2083,25 +2095,25 @@ contains
                end if
             end if
 
-            if (associated(ugdims)) then
+            if (num_ungridded > 0) then
                ! ungridded dims are present, make sure just one
-               _ASSERT(size(ugdims) == 1, 'Only one ungridded dimension allowed')
-               ugDim(K) = ugdims(1)
+               _ASSERT(num_ungridded == 1, 'Only one ungridded dimension allowed')
+               ungrd_dim(K) = ungrd_extent
                select case (DIMS)
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
-                  SlicesInt(K) = size(ptr4, 3) * ugDim(K)
+                  call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
+                  SlicesInt(K) = size(ptr4, 3) * ungrd_dim(K)
                case (MAPL_DimsHorzOnly)
-                  SlicesInt(K) = ugDim(K)
+                  SlicesInt(K) = ungrd_dim(K)
                case default
                   _FAIL('invalid dimension for Internal')
                end select
             else
                ! no ungridded dimension
-               ugDim(K) = 0
+               ungrd_dim(K) = 0
                select case (DIMS)
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   SlicesInt(K) = size(ptr3, 3)
                case (MAPL_DimsHorzOnly)
                   SlicesInt(K) = 1
@@ -2139,12 +2151,12 @@ contains
             end if
             pi1 = piN + 1
 
-            if (ugDim(K) > 0) then ! has ungridded dimensions
+            if (ungrd_dim(K) > 0) then ! has ungridded dimensions
 
-               select case (rgDim(K))
+               select case (grd_dim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
-                  do J = 1, ugDim(K)
+                  call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
+                  do J = 1, ungrd_dim(K)
                      !pmn compiler       call
                      !PackIt(Buf(pi1+(j-1)*size(ptr4,3)*NumMax),ptr4(:,:,:,j),daytime,NumMax,HorzDims,size(ptr4,3))
                      if (IntInOut(K)) then
@@ -2155,25 +2167,25 @@ contains
                              HorzDims, size(ptr4, 3))
                      end if
                   end do
-                  piN = pi1 + NumMax * size(ptr4, 3) * ugDim(K) - 1
-                  ptr3(1:NumMax, 1:size(ptr4, 3), 1:ugDim(K)) => buf(pi1:piN)
+                  piN = pi1 + NumMax * size(ptr4, 3) * ungrd_dim(K) - 1
+                  ptr3(1:NumMax, 1:size(ptr4, 3), 1:ungrd_dim(K)) => buf(pi1:piN)
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
-                  !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ugDim(k))
+                  call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
+                  !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ungrd_dim(k))
                   if (IntInOut(K)) then
-                     call PackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K))
+                     call PackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K))
                   else
-                     call PackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K))
+                     call PackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K))
                   end if
-                  piN = pi1 + NumMax * ugDim(K) - 1
-                  ptr2(1:NumMax, 1:ugDim(K)) => buf(pi1:piN)
+                  piN = pi1 + NumMax * ungrd_dim(K) - 1
+                  ptr2(1:NumMax, 1:ungrd_dim(K)) => buf(pi1:piN)
                end select
 
             else ! no ungridded dimensions
 
-               select case (rgDim(K))
+               select case (grd_dim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                   if (IntInOut(K)) then
                      call PackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
@@ -2182,7 +2194,7 @@ contains
                   end if
                   piN = pi1 + NumMax * size(ptr3, 3) - 1
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr2, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
                   if (IntInOut(K)) then
                      call PackIt(BufInOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
@@ -3751,43 +3763,43 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                pi1 => i1InOut
             else
                pi1 => i1Out
-               call MAPL_VarSpecGet(InternalSpec(K), default=def, _RC)
+               def = solar_internal_default(NamesInt(K))
             end if
 
-            if (ugDim(K) > 0) then
-               select case (rgDim(K))
+            if (ungrd_dim(K) > 0) then
+               select case (grd_dim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr4, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
                   if (IntInOut(K)) then
-                     do J = 1, ugDim(K)
+                     do J = 1, ungrd_dim(K)
                         call UnPackIt(BufInOut(pi1 + (J - 1) * size(ptr4, 3) * NumMax), ptr4(:, :, :, J), &
                              daytime, NumMax, HorzDims, size(ptr4, 3))
                      end do
                   else
-                     do J = 1, ugDim(K)
+                     do J = 1, ungrd_dim(K)
                         call UnPackIt(BufOut(pi1 + (J - 1) * size(ptr4, 3) * NumMax), ptr4(:, :, :, J), &
                              daytime, NumMax, HorzDims, size(ptr4, 3), def)
                      end do
                   end if
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
-                     call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K))
+                     call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K))
                   else
-                     call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, ugDim(K), def)
+                     call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K), def)
                   end if
                end select
             else
-               select case (rgDim(K))
+               select case (grd_dim(K))
                case (MAPL_DimsHorzVert)
-                  call ESMFL_StateGetPointerToData(internal, ptr3, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   else
                      call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3), def)
                   end if
                case (MAPL_DimsHorzOnly)
-                  call ESMFL_StateGetPointerToData(internal, ptr2, NamesInt(K), _RC)
+                  call MAPL_StateGetPointer(internal, ptr2, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
                   else
@@ -3802,7 +3814,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          ! clean up
          deallocate(SlicesInp, NamesInp, _STAT)
          deallocate(SlicesInt, NamesInt, _STAT)
-         deallocate(IntInOut, rgDim, ugDim, _STAT)
+         deallocate(IntInOut, grd_dim, ungrd_dim, _STAT)
          deallocate(BufInp, BufInOut, BufOut, _STAT)
          call MAPL_GridCompTimerStart(gc, "--DESTROY")
          if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, _RC)
@@ -5040,6 +5052,61 @@ TEST_('RRTMGP-SW: does not seem to be SW')
       end subroutine UPDATE_EXPORT
 
    end subroutine Run
+
+   ! ---------------------------------------------------------------------------
+   ! Reconstruct the MAPL2 VarSpec DIMS/UNGRIDDED_DIMS view of a field from its
+   ! MAPL3 metadata (MAPL_VarSpecGet no longer exists). ungridded_dims in MAPL3
+   ! excludes the vertical dimension, so num_levels distinguishes xyz from xy.
+   ! ---------------------------------------------------------------------------
+   subroutine SolarFieldGetDims(field, dims, num_ungridded, ungrd_extent, rc)
+      type(ESMF_Field), intent(inout) :: field
+      integer, intent(out) :: dims, num_ungridded, ungrd_extent
+      integer, optional, intent(out) :: rc
+
+      integer :: status, num_levels
+      type(HorizontalDimsSpec) :: hspec
+      type(MAPL_UngriddedDims) :: ungrd
+      type(MAPL_UngriddedDim), pointer :: ungrd_dim
+
+      call MAPL_FieldGet(field, horizontal_dims_spec=hspec, &
+           ungridded_dims=ungrd, num_levels=num_levels, _RC)
+
+      num_ungridded = ungrd%get_num_ungridded()
+      ungrd_extent = 0
+      if (num_ungridded > 0) then
+         ungrd_dim => ungrd%get_ith_dim_spec(1, _RC)
+         ungrd_extent = ungrd_dim%get_extent()
+      end if
+
+      if (hspec == HORIZONTAL_DIMS_NONE) then
+         dims = MAPL_DimsVertOnly
+      else if (num_levels > 0) then
+         dims = MAPL_DimsHorzVert
+      else
+         dims = MAPL_DimsHorzOnly
+      end if
+
+      _RETURN(_SUCCESS)
+   end subroutine SolarFieldGetDims
+
+   ! ---------------------------------------------------------------------------
+   ! Default (fill) value for Solar INTERNAL variables, used when a variable is
+   ! not computed on a load-balanced PE. Replaces MAPL_VarSpecGet(default=).
+   ! Keep in sync with the FILL column of Solar_StateSpecs.rc.
+   ! ---------------------------------------------------------------------------
+   pure function solar_internal_default(name) result(def)
+      character(*), intent(in) :: name
+      real :: def
+
+      select case (trim(name))
+      case ('COSZSW', 'CLDTTSW', 'CLDHISW', 'CLDMDSW', 'CLDLOSW', &
+            'COTLOPAR', 'COTMDPAR', 'COTHIPAR', 'COTTTPAR', &
+            'TAULOPAR', 'TAUMDPAR', 'TAUHIPAR', 'TAUTTPAR')
+         def = MAPL_UNDEF
+      case default
+         def = 0.0
+      end select
+   end function solar_internal_default
 
    ! ---------------------------------------------------------------------------
    ! Compute gas optical properties for one block of columns.

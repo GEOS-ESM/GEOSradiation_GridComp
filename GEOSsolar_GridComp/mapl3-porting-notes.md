@@ -75,11 +75,19 @@ port - referenced throughout below instead of repeated).
     `FRIENDLYTO=trim(COMP_NAME)` as a literal, ACG-ignored column with no
     `ADD2EXPORT`) looks like an incomplete/lazy port and should NOT be
     followed as precedent.
-  - `DEFAULT`: the underlying `MAPL_FriendlyVariable`-adjacent default
-    mechanism appears fully dropped in MAPL3 ACG (no real replacement
-    column found so far); `GEOS_Ocean_StateSpecs.rc` keeps it as inert
-    documentation and the real ACG accepts this with zero errors. Treat
-    as inert/droppable unless a functional replacement turns up.
+  - `DEFAULT` (**CORRECTED**): the MAPL2 column name is unsupported, but
+    the functional replacement is the MAPL3 **`FILL`** column ->
+    `fill_value=` on `MAPL_GridCompAddSpec`, applied at allocation by
+    `FieldClassAspect%allocate`. The original "inert/droppable" reading
+    here caused step 3 to drop 9 of Solar's 13 `DEFAULT=MAPL_UNDEF`
+    internals - since fixed (see step 12's `default=def` note). Rule:
+    every MAPL2 `DEFAULT=x` must become `FILL=x`. Note also that MAPL2
+    zero-filled internals with no `DEFAULT=`; MAPL3 leaves them
+    uninitialised when `FILL` is empty. To keep bootstrapped starts
+    zero-diff with MAPL2 before the first REFRESH, every Solar INTERNAL
+    row now has an explicit `FILL` (146 x `0.0`, 13 x `MAPL_UNDEF`);
+    see the comment block above the INTERNAL table in
+    `Solar_StateSpecs.rc`.
   - `AVERAGING_INTERVAL`/`REFRESH_INTERVAL` (MAPL2 IRRAD/Solar's
     `ACCUMINT`/`MY_STEP`): confirmed via the MAPL2-era ACG-fy of IRRAD
     on `origin/refactor/pchakrab/acgfication` (in the
@@ -253,6 +261,29 @@ port - referenced throughout below instead of repeated).
      existing named-private-state type, reused rather than adding a new
      private state) and fetched back in `Run` via
      `_GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)`.
+     - Re-verified 2026-09-26 against `base/SunOrbit.F90` (develop):
+       `MAPL_SunOrbitCreate` takes 19 positional args (`CLOCK,
+       ECCENTRICITY, OBLIQUITY, PERIHELION, EQUINOX, EOT, ORBIT_ANAL2B,
+       ORB2B_YEARLEN, ORB2B_REF_YYYYMMDD, ORB2B_REF_HHMMSS,
+       ORB2B_ECC_REF, ORB2B_ECC_RATE, ORB2B_OBQ_REF, ORB2B_OBQ_RATE,
+       ORB2B_LAMBDAP_REF, ORB2B_LAMBDAP_RATE, ORB2B_EQUINOX_YYYYMMDD,
+       ORB2B_EQUINOX_HHMMSS`) + optional `FIX_SUN` (defaults `.false.`
+       when absent) + `RC`; Solar's call (L697-L705) matches in order
+       and type. The `MAPL_GridCompGetResource` defaults (L678-L695)
+       equal `DEFAULT_ORBIT_*`/`DEFAULT_ORB2B_*` (0.0167, 23.45, 102.0,
+       80, 365.2596, 20000101, 115856, 0.016710, -4.2e-5, 23.44,
+       -1.3e-2, 282.947, 1.7195, 20000320, 73500) and `EOT`/
+       `ORBIT_ANAL2B` default `.false.` as in
+       `MAPL_SunOrbitCreateFromConfig`. Labels are the MAPL2 ones minus
+       the trailing `:`.
+     - `MAPL_SunOrbit`, `MAPL_SunOrbitCreate`, `MAPL_SunGetInsolation`
+       (generic: `SOLAR_1D`/`SOLAR_2D`/`SOLAR_ARR_INT`),
+       `MAPL_SunGetSolarConstant`, `MAPL_SunGetLocalSolarHourAngle` are
+       all re-exported by `base/API.F90`, so plain `use MAPL` suffices.
+     - The two `MAPL_SunGetInsolation` call sites (`SORADCORE` ~L1696
+       with `INTV=TINT, currTIME=, TIME=SUNFLAG, DIST=`; `UPDATE_EXPORT`
+       ~L4029 with `INTV=DELT, clock=, TIME=SUNFLAG, ZTHN=...`) resolve
+       to `SOLAR_2D` and are unchanged from MAPL2 - no port needed.
    - `IM`/`JM`/`LM`/`LONS`/`LATS` (previously from `MAPL_Get`): now
      `MAPL_GridCompGet(gc, num_levels=LM, _RC)` +
      `MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)` +
@@ -367,7 +398,7 @@ port - referenced throughout below instead of repeated).
      ...`).
 
 
-12. **IN PROGRESS (investigated, not yet implemented) - The
+12. **DONE (compiles with ifx) - The
     load-balancing block (`MAPL_LoadBalance`/`MAPL_BalanceWork`) in
     `Run` is unique to Solar (IRRAD has no analog).**
     - **Confirmed working, no changes needed**: `MAPL_BalanceCreate`/
@@ -438,15 +469,60 @@ port - referenced throughout below instead of repeated).
         `ugd%get_num_ungridded()` (`UngriddedDims`,
         `infrastructure/esmf/UngriddedDims.F90`). Handles the
         `ungrd_num_bands_solar` fields (`FSWBANDN`, `DRBANDN`, ...).
-      - **`default=def`** -> rely on MAPL3 applying `fill_value` at
-        allocation (`FieldClassAspect` calls
-        `FieldSet(payload, fill_value)`); drop the `def` arg in unpack
-        and verify against a baseline run. Fallback: read `/_FillValue`
-        via `ESMF_InfoGet` (`KEY_FILL_VALUE`,
-        `utils/MAPL_ESMF_InfoKeys.F90`). For SOLAR this is effectively
-        a no-op: only 4 of 159 internals set `FILL` (`TAULOPAR`,
-        `TAUMDPAR`, `TAUHIPAR`, `TAUTTPAR`), all to `MAPL_UNDEF`, which
-        is already the buffer initialization value.
+      - **`default=def`** -> **CORRECTED 2026-09-25; the two earlier
+        ideas below are both WRONG**: (a) "rely on MAPL3 allocation-time
+        `fill_value` pre-fill and drop `def`" and (b) "fallback: read
+        `/_FillValue` via `ESMF_InfoGet`". Verified against MAPL2
+        v2.71.0 (`~/workspace/code/GEOSgcm/main/src/Shared/@MAPL`) and
+        MAPL3 source:
+        - **MAPL2 zero-filled every internal with no `DEFAULT=`**
+          (`generic/VarSpec.F90:256` `usableDEFAULT=0.0`;
+          `base/Base/Base_Base_implementation.F90:159` `init_value =
+          0.0`). **MAPL3 does NOT**: `FieldClassAspect%allocate`
+          (`superstructure/generic/specs/FieldClassAspect.F90:254`)
+          only calls `FieldSet(payload, fill_value)` `if
+          (allocated(this%fill_value))`; otherwise the payload is left
+          uninitialised. So the 155 non-`FILL` internals cannot get
+          their `def` from MAPL3 - it must be an explicit `0.0`.
+        - **`fill_value` is not runtime-introspectable**: nothing in
+          MAPL3 writes `KEY_FILL_VALUE` (`/_FillValue`) onto a field's
+          `ESMF_Info` (`FieldInfo.F90` only imports the key; the only
+          `_FillValue` writers are NCIO/Mesh file metadata). The
+          `ESMF_InfoGet` fallback would always miss. Drop
+          `SolarFieldGetFill` from the plan.
+        - **Step 3 silently lost 9 defaults**: the MAPL2 source had 13
+          `AddInternalSpec`s with `DEFAULT=MAPL_UNDEF` (`COSZSW`,
+          `CLDTTSW`, `CLDHISW`, `CLDMDSW`, `CLDLOSW`, `COTLOPAR`,
+          `COTMDPAR`, `COTHIPAR`, `COTTTPAR`, `TAULOPAR`, `TAUMDPAR`,
+          `TAUHIPAR`, `TAUTTPAR`) but `Solar_StateSpecs.rc` only carried
+          `FILL=MAPL_UNDEF` on the 4 `TAU*PAR` rows. **FIXED**: added
+          `FILL=MAPL_UNDEF` to the other 9 rows (re-ran the real ACG:
+          13 `fill_value=MAPL_UNDEF` emissions, names match).
+        - **Chosen replacement for site 3**: a module-level private
+          `pure function solar_internal_default(name) result(def)` -
+          `select case (trim(name))` returning `MAPL_UNDEF` for the 13
+          names above, `0.0` otherwise - called as `def =
+          solar_internal_default(NamesInt(K))` in the Out-only branch.
+          Keep passing `def` to `UnPackIt` exactly as today. The `.rc`
+          `FILL` column stays as the documented source of truth and
+          must be kept in sync with the `select case` by hand (add a
+          one-line comment at both sites saying so). Rejected
+          alternative: `FILL=0.0` on all 155 rows - noisy, and still
+          wouldn't make the value queryable.
+        - **`MAPL_UNDEF` changed sign**: MAPL2 `MAPL_UNDEFINED_REAL =
+          huge(1.)` (`shared/Constants/InternalConstants.F90:20`);
+          MAPL3 `= -huge(1.)` (`utils/Constants/InternalConstants.F90:18`).
+          Solar has zero hard-coded undef literals (`grep huge|1e15`
+          empty) and ACG passes `fill_value=MAPL_UNDEF` textually, so a
+          MAPL3 build is self-consistent (`where (RI == MAPL_UNDEF)`,
+          `BufOut = MAPL_UNDEF`, `def`, exports all agree). Exposure is
+          only data crossing the build boundary: (i) MAPL2-written
+          Solar internal restarts / ExtData carrying `+huge` must be
+          regenerated from a MAPL3 run (or converted `+huge -> -huge`
+          once); (ii) baseline validation against MAPL2 output needs an
+          undef-aware comparison (treat `+huge` and `-huge` as equal);
+          (iii) never introduce a literal - always the symbolic
+          constant.
         - **What `def` actually does** (`INT_VARS_3` unpack loop at
           ~L3746-3800, `UnPackIt` at ~L6860): the load balancer only
           computes **daytime** columns (`daytime`/`MSK` true). When
@@ -477,7 +553,7 @@ port - referenced throughout below instead of repeated).
       | `SHORT_NAME` | `ESMF_StateGet(itemNameList=)` |
       | `DIMS` | `ESMF_FieldGet(rank=)` + `horizontal_dims_spec == HORIZONTAL_DIMS_NONE` |
       | `UNGRIDDED_DIMS` | `ungridded_dims%get_num_ungridded()` |
-      | `default` | MAPL3 `fill_value` pre-fill (drop arg); fallback `/_FillValue` |
+      | `default` | `solar_internal_default(name)` lookup (see CORRECTED note above) |
 
       **Concrete edit plan (spec arrays -> ESMF_State).** Verified there
       are exactly THREE `MAPL_VarSpecGet` calls (L1807, L2033, L3754;
@@ -527,11 +603,10 @@ port - referenced throughout below instead of repeated).
 
       5. Site 3 - unpack loop (replace the L3754 `default=def` call):
          ```fortran
-         call ESMF_StateGet(internal, InternalNames(K), field, _RC)
-         call SolarFieldGetFill(field, def, _RC)
+         def = solar_internal_default(NamesInt(K))
          ```
-         (Or drop `def` entirely and rely on MAPL3 `fill_value`
-         pre-fill; for SOLAR it's a no-op as noted above.)
+         (No field/state access needed. Do NOT drop `def`: MAPL3 does
+         not zero-fill, see the CORRECTED note above.)
 
       Full replacement mapping:
 
@@ -543,7 +618,7 @@ port - referenced throughout below instead of repeated).
       | `size(ImportSpec)` / `size(InternalSpec)` | `ESMF_StateGet(state, itemCount=)` |
       | `MAPL_VarSpecGet(spec, SHORT_NAME=)` | the `itemNameList` entry |
       | `MAPL_VarSpecGet(spec, DIMS=, UNGRIDDED_DIMS=)` | `SolarFieldGetDims(field, ...)` |
-      | `MAPL_VarSpecGet(spec, default=)` | `SolarFieldGetFill(field, ...)` or drop |
+      | `MAPL_VarSpecGet(spec, default=)` | `solar_internal_default(NamesInt(K))` |
 
       **Local helper routine (recommended structure)**: wrap the per-field
       metadata reads in one module-scope private subroutine so the two
@@ -577,21 +652,22 @@ port - referenced throughout below instead of repeated).
          _RETURN(_SUCCESS)
       end subroutine SolarFieldGetDims
       ```
-      Optional companion for the fill-value fallback (only the internal
-      unpack loop needs it):
+      Companion for the unpack loop's `def` (replaces the withdrawn
+      `SolarFieldGetFill`; see CORRECTED note above):
       ```fortran
-      subroutine SolarFieldGetFill(field, def, rc)
-         type(ESMF_Field), intent(in) :: field
-         real, intent(out) :: def
-         integer, optional, intent(out) :: rc
-         integer :: status
-         type(ESMF_Info) :: info
-         def = MAPL_UNDEF
-         call ESMF_InfoGetFromHost(field, info, _RC)
-         if (ESMF_InfoIsPresent(info, KEY_FILL_VALUE, _RC)) &
-              call ESMF_InfoGet(info, KEY_FILL_VALUE, def, _RC)
-         _RETURN(_SUCCESS)
-      end subroutine SolarFieldGetFill
+      ! Keep in sync with the FILL column of Solar_StateSpecs.rc.
+      pure function solar_internal_default(name) result(def)
+         character(*), intent(in) :: name
+         real :: def
+         select case (trim(name))
+         case ('COSZSW', 'CLDTTSW', 'CLDHISW', 'CLDMDSW', 'CLDLOSW', &
+               'COTLOPAR', 'COTMDPAR', 'COTHIPAR', 'COTTTPAR', &
+               'TAULOPAR', 'TAUMDPAR', 'TAUHIPAR', 'TAUTTPAR')
+            def = MAPL_UNDEF
+         case default
+            def = 0.0 ! MAPL2's implicit default for internals
+         end select
+      end function solar_internal_default
       ```
       Loop usage collapses to:
       ```fortran
@@ -611,8 +687,7 @@ port - referenced throughout below instead of repeated).
         `use mapl_HorizontalDimsSpec_mod` there)
       - `UngriddedDims` <- `mapl_esmf_api`, **aliased as
         `MAPL_UngriddedDims`** (use that spelling for the type)
-      - `KEY_FILL_VALUE` <- `mapl_utils_api` (utils/API.F90 bare
-        `use mapl_esmf_info_keys_mod`)
+      - (`KEY_FILL_VALUE` no longer needed - fallback withdrawn.)
 
       One `.rc` cross-check when wiring in: ungridded-only fields
       (`FSWBANDN` = `xy` + `ungrd_num_bands_solar`) come back as
@@ -622,6 +697,109 @@ port - referenced throughout below instead of repeated).
 
       Deferred for now at the user's request - pick this up as the next
       concrete task when resuming step 12.
+
+      **Status: DONE.** `GEOS_SolarGridComp.F90` now builds against
+      MAPL3 with ifx (`make GEOSsolar_GridComp` in `build/ifx/Debug`;
+      only pre-existing unused-variable remarks). What was changed:
+      - `use mapl_LoadBalance_mod, only: MAPL_Distribute, MAPL_Retrieve`
+        and `use mapl_HorizontalDimsSpec_mod, only: HorizontalDimsSpec,
+        HORIZONTAL_DIMS_NONE, operator(==)` added to the module.
+      - `ImportSpec`/`ExportSpec`/`InternalSpec` (`MAPL_VarSpec`)
+        replaced by `ImportNames(:)`/`InternalNames(:)` filled via
+        `ESMF_StateGet(state, itemCount=)` + `itemNameList=`.
+      - New module helper `SolarFieldGetDims(field, dims,
+        num_ungridded, ug_extent, rc)` (after `end subroutine Run`)
+        rebuilds the VarSpec `DIMS`/`UNGRIDDED_DIMS` view from
+        `MAPL_FieldGet(horizontal_dims_spec=, ungridded_dims=,
+        num_levels=)`.
+      - New module helper `solar_internal_default(name)` (pure) returns
+        `MAPL_UNDEF` for the 13 rows with `FILL: MAPL_UNDEF` in
+        `Solar_StateSpecs.rc`, `0.0` otherwise; replaces
+        `MAPL_VarSpecGet(default=)` in `INT_VARS_3`. Must be kept in
+        sync with the `.rc` FILL column.
+      - `INPUT_VARS_1` checks `itemType`; `AERO` (nested state) keeps
+        `DIMS = MAPL_DimsHorzOnly` and goes down the existing branch.
+      - `INT_VARS_1`: `if (associated(ugdims))` -> `if (num_ungridded >
+        0)`, `ugDim(K) = ug_extent`. Slice counts still come from
+        `size(ptr,3)` on the state pointers (zero-diff).
+      - All 13 `ESMFL_StateGetPointerToData(` -> `MAPL_StateGetPointer(`.
+      Not yet run-tested; still needs the regression comparison against
+      MAPL2 once the full model links.
+
+      Facts found while re-verifying, on top of the plan above:
+      - `HorizontalDimsSpec`/`HORIZONTAL_DIMS_NONE`/`operator(==)` are
+        NOT reachable via `use MAPL` (esmf/API.F90 `use`s the module
+        but never `public ::`s them) - add `use
+        mapl_HorizontalDimsSpec_mod, only: HorizontalDimsSpec,
+        HORIZONTAL_DIMS_NONE, operator(==)` next to the
+        `mapl_LoadBalance_mod` line.
+      - `ESMFL_StateGetPointerToData` (13 call sites, L1844-L3790) does
+        not exist in MAPL3; drop-in is `MAPL_StateGetPointer(state,
+        ptr, name, _RC)` (same arg order).
+      - The `import` state holds `AERO` as a nested `ESMF_State`
+        (SetServices `itemtype=MAPL_STATEITEM_STATE`), so the
+        `itemNameList` walk must check `itemType` and route `AERO`
+        to the existing special case instead of the field helper.
+      - `MAPL_FieldGet(ungridded_dims=)` EXCLUDES the vertical dim;
+        use `num_levels=` (>0 -> `MAPL_DimsHorzVert`) rather than
+        `rank` to tell `xyz` from `xy`+ungridded (both rank 3).
+        `ugDim(K)` = `ugd%get_ith_dim_spec(1)%get_extent()` when
+        `get_num_ungridded()==1`, else 0.
+
+      **Optional follow-on (analysed, deferred): extract the two
+      `"-BALANCE"` blocks out of `SORADCORE` into module-level
+      routines.** SUPERSEDED by step 17 (which generalises this to the
+      whole of `SORADCORE`; the balance extraction is its sub-steps
+      17.1-17.3, and step 17 should now run BEFORE this step's
+      `MAPL_VarSpec` rewrite). Original findings kept for reference:
+      - Extents: distribute block ~L1726-L2598 (~873 lines, from the
+        `"-BALANCE"` timer start through the second
+        `MAPL_BalanceWork(Direction=MAPL_Distribute)` and `NCOL =
+        size(Q,1)`); retrieve block ~L3729-L3811 (~83 lines,
+        `MAPL_BalanceWork(Direction=MAPL_Retrieve)` + `INT_VARS_3`
+        unpack + `MAPL_BalanceDestroy`).
+      - The retrieve block is fully generic and moves cleanly.
+      - The distribute block is NOT self-contained: the generic work
+        (slice counting, `BufInp`/`BufInOut`/`BufOut` allocation,
+        `PackIt`, `MAPL_BalanceWork`) is interleaved with two large
+        `select case (NamesInp(K))` / `select case (NamesInt(K))`
+        blocks (~L1961-L2016 and ~L2199-L2583) that bind ~200 named
+        pointer locals of `SORADCORE` (`PLE`, `T`, `Q`, ..., `FSW`,
+        `OSRBRGN(k)%p`, every `SOLAR_RADVAL` diagnostic) to
+        rank-remapped slices of the buffers. Those pointers are what
+        the Chou/RRTMG/RRTMGP code consumes, so they cannot move to a
+        module routine without ~200 pointer dummy args.
+      - Host-associated state from `Run` that would have to become
+        explicit arguments: `gc`, `import`, `internal`,
+        `ImportSpec`/`InternalSpec` (or their MAPL3 replacement),
+        `LATS`, `AEROSOL_EXT`/`SSA`/`ASY`, `implements_aerosol_optics`,
+        `NUM_BANDS_SOLAR`, `USE_RRTMG`, `USE_RRTMGP`, `band_output`,
+        `SolarBalanceHandle`, `DYCORE`, `ibnd`, `bb`.
+      - State shared between the two blocks (created in distribute,
+        consumed in retrieve): `NumMax`, `Num2do`, `daytime`,
+        `HorzDims`, `SlicesInp`/`SlicesInt`, `NamesInp`/`NamesInt`,
+        `IntInOut`, `rgDim`, `ugDim`, `BufInp`/`BufInOut`/`BufOut`.
+      - Proposed design (zero-diff: identical pack order and buffer
+        layout):
+        - a module-level `type SolarBalance` holding all the shared
+          state above plus per-variable buffer offsets `OffInp(:)`/
+          `OffInt(:)`;
+        - `solar_balance_distribute(gc, import, internal, <names/
+          metadata source>, ZTH, SLR, LATS, Ig, Jg, AEROSOL_*,
+          include_aerosols, ..., bal, rc)` - the generic part only;
+          records offsets instead of binding pointers;
+        - `solar_balance_retrieve(gc, internal, <metadata source>,
+          LoadBalance, bal, rc)` - the whole retrieve block;
+        - type-bound accessors `bal%inp2d(name)` / `bal%out2d(name)`
+          (and 1D/3D variants as needed) returning a rank-remapped
+          pointer into the buffer, so the two `select case` blocks in
+          `SORADCORE` collapse to one-liners (`PLE => bal%inp2d('PLE')`,
+          `FSW => bal%out2d('FSWN')`) and stay in `SORADCORE` where the
+          pointers live.
+      - Payoff: `SORADCORE` shrinks by ~700 lines, the pointer bindings
+        lose all loop/offset bookkeeping, and the MAPL3
+        `ESMF_StateGet`-based metadata walk from the plan above only
+        has to be written once, inside the two new routines.
 
 13. **DONE - `Irrad_SetServices`-style external wrapper.** Added a
     standalone `Solar_SetServices(gc, rc)` subroutine after `end
@@ -693,3 +871,105 @@ port - referenced throughout below instead of repeated).
     correctness - step 1 already covers the bulk of macro/indentation
     style): `ESMF_Attribute*`->`ESMF_Info*` (Solar doesn't appear to use
     Attribute get/set based on what's visible, but verify).
+
+17. **TODO - Slim `SORADCORE` down to a ~100-line driver by hoisting
+    everything else to module scope.** Analysed 2026-09-25, not started.
+    `SORADCORE` is ~L1349-L3816 (~2470 lines); ~2100 of those can move.
+    This supersedes the "Optional follow-on" sketch under step 12 (the
+    load-balancing extraction is sub-steps 17.1-17.3 below) and should
+    be done BEFORE the step-12 `MAPL_VarSpec` rewrite, so that rewrite
+    lands entirely inside two small routines. Solar is now wired into
+    CMake (step 15), so every sub-step can be compile-checked, unlike the
+    step-2 hoists. Zero-diff throughout: same pack order, buffer layout,
+    and call arguments.
+
+    **Why nothing downstream of the balance block can move today**: all
+    three schemes (Chou/RRTMG/RRTMGP) consume ~30 input pointers (`PLE`,
+    `T`, `Q`, `QL`, ..., `ALBVR`, `ZT`, `SLR1D`, `Ig1D`, `Jg1D`, `ALAT`)
+    and write ~200 output pointers (`FSW`, `FSC`, ..., `OSRBRGN(:)`,
+    every `SOLAR_RADVAL` diagnostic), all `SORADCORE` locals bound by
+    the two `select case` blocks (~L1961-L2016, ~L2199-L2583). The
+    enabler is to move those pointers into a derived type.
+
+    **Supporting types (module scope, private)**:
+    - `type SolarColumns` - every input/output column pointer listed
+      above, incl. `type(rptr1d_wrap) :: OSRBRGN(nbndsw), ISRBRGN(nbndsw)`
+      and the whole `#ifdef SOLAR_RADVAL` pointer block (~100 decl lines
+      leave `SORADCORE`). The existing `rrtmg_sw(...)` /
+      `PROCESS_RRTMGP_BLOCK(...)` calls keep their signatures; args just
+      become `cols%COTDTP, ...`.
+    - `type SolarBalance` - load-balancing shared state: `handle`,
+      `NumMax`, `Num2do`, `NumLit`, `HorzDims(2)`, `daytime(:,:)`,
+      `NamesInp/NamesInt`, `SlicesInp/SlicesInt`, `IntInOut`, `rgDim`,
+      `ugDim`, per-variable offsets `OffInp(:)/OffInt(:)`,
+      `BufInp/BufInOut/BufOut` (allocatable, target), plus the three
+      `BUFIMP_AEROSOL_*` pointers.
+    - `type SolarWork` - scheme-independent aux arrays, allocatable
+      components: `PL`, `RH`, `PLhPa`, `QQ3`, `RR3`, `O3`, `taua`,
+      `ssaa`, `asya`. Auto-deallocated on scope exit, replacing the two
+      explicit `deallocate` blocks.
+    - `type SolarConfig` - the ~20 `Run`-local scalars both schemes
+      read: `LM`, `NCOL`, `CO2`, `DIST`, `DOY`, `MG`, `SB`, `SC`,
+      `LCLDLM`, `LCLDMH`, `include_aerosols`,
+      `implements_aerosol_optics`, `SOLAR_TO_OBIO`, `USE_RRTMG`,
+      `USE_RRTMGP`, `band_output(:)`, `SolCycFileName`, `USE_NRLSSI2`,
+      `IM_World`, `num_aero_vars`, `currTIME`, `alarm`. Filled once in
+      `SORADCORE`. (Alternative is ~20 explicit args on each scheme
+      routine; the type is cleaner. IRRAD's `LW_Driver` didn't need
+      this because it has one scheme path.)
+
+    **Sub-steps (do in this order; each is a separate commit)**:
+
+    | # | New module routine | Source lines | Notes |
+    | --- | --- | --- | --- |
+    | 17.0 | define the four types | - | plus `cols` local in `SORADCORE`; no behaviour change |
+    | 17.1 | `solar_bind_columns(bal, cols)` | the two `select case` blocks (~450) | pure `bal` -> `cols` pointer binding; the ONLY sub-step touching pointer targets, do first |
+    | 17.2 | `solar_balance_distribute(gc, import, internal, <spec/names>, ZTH, SLR, LATS, Ig, Jg, AEROSOL_*, cfg, bal, rc)` | L1726-L2598 minus 17.1 (~420) | `"-BALANCE"` start through 2nd `MAPL_BalanceWork(Distribute)`; records offsets instead of binding pointers |
+    | 17.3 | `solar_balance_retrieve(gc, internal, <spec/names>, LoadBalance, bal, rc)` | L3729-L3811 (~83) | already fully generic |
+    | 17.4 | `solar_get_insolation(alarm, orbit, LONS, LATS, currTIME, SUNFLAG, SC, esmfgrid, ZTH, SLR, DIST, Ig, Jg, rc)` | L1690-L1720 (~35) | `MAPL_SunGetInsolation` + `SLR*SC` + `Ig/Jg` fill |
+    | 17.5 | `solar_prepare_aux(cols, cfg, bal, work, rc)` | L2602-L2691 (~90) | `RH`/`PL`/`PLhPa`/`QQ3`/`RR3`/`O3`/aerosol copy; reads `bal%BUFIMP_AEROSOL_*` |
+    | 17.6 | `run_rrtmgp_sw(gc, cfg, cols, work, rc)` | L2715-L3243 (~530) | incl. `_GET_NAMED_PRIVATE_STATE` (needs only `gc`) and the `TEST_` macro define/undef |
+    | 17.7 | `run_rrtmg_sw(gc, cfg, cols, work, rc)` | L3245-L3711 (~467) | |
+
+    Optional later sub-splits once 17.6/17.7 compile: `rrtmgp_setup_inputs`
+    (mu0/tsi/albedos/p_lay/t_lay/kluges/dzmid, ~120) and `rrtmgp_post`
+    (flux normalisation + output load + super-band sums, ~110);
+    `rrtmg_flip_inputs` (the `--RRTMG_FLIP` block, ~150) and
+    `rrtmg_unflip_outputs` (unflip + `CLDTS` + `COTTP` `where` blocks, ~80).
+
+    **Target shape of `SORADCORE` after 17.7**:
+    ```fortran
+    subroutine SORADCORE(IM, JM, LM, include_aerosols, currTIME, MaxPasses, LoadBalance, rc)
+       ! ~40 decl lines: ZTH, SLR, Ig, Jg, DIST, bal, cols, work, cfg, NCOL
+       call solar_get_insolation(..., ZTH, SLR, DIST, Ig, Jg, _RC)
+       call solar_balance_distribute(..., bal, _RC)
+       call solar_bind_columns(bal, cols)
+       NCOL = size(cols%Q, 1)
+       cols%COSZSW = cols%ZT
+       if (.not. include_aerosols) then ! alias to the "A" internals
+          cols%FSW => cols%FSWA; cols%FSC => cols%FSCA; ...
+       end if
+       cfg = SolarConfig(...)
+       call solar_prepare_aux(cols, cfg, bal, work, _RC)
+       if (USE_CHOU) then
+          call shrtwave(... cols%... , gc, _RC)
+       else if (USE_RRTMGP) then
+          call run_rrtmgp_sw(gc, cfg, cols, work, _RC)
+       else if (USE_RRTMG) then
+          call run_rrtmg_sw(gc, cfg, cols, work, _RC)
+       else
+          _FAIL('unknown SW radiation scheme!')
+       end if
+       call solar_balance_retrieve(..., bal, _RC)
+       _RETURN(_SUCCESS)
+    end subroutine SORADCORE
+    ```
+
+    **Caveats**:
+    - The `FSW => FSWA` (etc.) aliasing at ~L2610 must stay in
+      `SORADCORE` (or at the end of `solar_bind_columns`): it happens
+      after binding and before the schemes run.
+    - `RADSW_BINARY_CLOUDS` resource read + `where (CL > 0.) CL = 1.`
+      (~L2622) belongs in 17.5.
+    - Step 12's `MAPL_VarSpec` -> `ESMF_StateGet` rewrite then touches
+      only 17.2 and 17.3.
