@@ -403,19 +403,53 @@ contains
       integer :: status
       integer :: irrad_dt
       real :: run_dt
-      type(ESMF_TimeInterval) :: lw_alarm_interval
+      type(ESMF_TimeInterval) :: lw_alarm_interval, time_step
+      type(ESMF_Time) :: current_time, ring_time
+      type(ESMF_Calendar) :: cal
+      integer :: yy, mm, dd, reference_date, reference_time
+      logical :: run_at_interval_start
       type(ESMF_Alarm) :: lw_alarm
       type(ESMF_HConfig) :: hconfig
       type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
+      ! same checks as MAPL2's handle_clock_and_main_alarm; a zero interval would hang the ring_time loop below
+      _ASSERT(irrad_dt > 0, "IRRAD_DT must be a positive number of seconds")
+      _ASSERT(mod(irrad_dt, nint(run_dt)) == 0, "IRRAD_DT must be a multiple of the clock time step")
       call ESMF_TimeIntervalSet(lw_alarm_interval, s=irrad_dt, _RC)
+
+      ! LW alarm set up as in MAPL2's handle_clock_and_main_alarm (MAPL_Generic.F90),
+      ! which MAPL3 no longer provides for components
+      call ESMF_ClockGet(clock, currTime=current_time, timeStep=time_step, calendar=cal, _RC)
+      call ESMF_TimeGet(current_time, yy=yy, mm=mm, dd=dd, _RC)
+      call MAPL_GridCompGetResource(gc, "RUN_AT_INTERVAL_START", run_at_interval_start, default=.false., _RC)
+      ! alarm reference date and time default to midnight of the current day
+      call MAPL_GridCompGetResource(gc, "REFERENCE_DATE", reference_date, default=yy*10000 + mm*100 + dd, _RC)
+      call MAPL_GridCompGetResource(gc, "REFERENCE_TIME", reference_time, default=0, _RC)
+      call ESMF_TimeSet(ring_time, &
+           yy=reference_date/10000, mm=mod(reference_date, 10000)/100, dd=mod(reference_date, 100), &
+           h=reference_time/10000, m=mod(reference_time, 10000)/100, s=mod(reference_time, 100), &
+           calendar=cal, _RC)
+      if (ring_time > current_time) then
+         ring_time = ring_time - (int((ring_time - current_time)/lw_alarm_interval) + 1)*lw_alarm_interval
+      end if
+      ! back off by the clock's dt since the clock advances AFTER the run method
+      if (.not. run_at_interval_start) ring_time = ring_time - time_step
+      ! make sure that ring_time is not in the past
+      do while (ring_time < current_time)
+         ring_time = ring_time + lw_alarm_interval
+      end do
+
       lw_alarm = ESMF_AlarmCreate( &
            name="irrad_lw_alarm", &
            clock=clock, &
+           ringTime=ring_time, &
            ringInterval=lw_alarm_interval, &
-           sticky=.true., _RC)
+           sticky=.false., _RC)
+      if (ring_time == current_time) then
+         call ESMF_AlarmRingerOn(lw_alarm, _RC)
+      end if
 
       call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
       _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
