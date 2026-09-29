@@ -455,11 +455,6 @@ contains
       character(len=ESMF_MAXSTR) :: comp_name
       integer :: status
 
-      integer :: run_dt
-      integer :: my_step
-      integer :: accumint
-      real :: dt
-
       logical :: USE_RRTMGP, USE_RRTMG, USE_CHOU
       integer :: NUM_BANDS_SOLAR
       logical :: SOLAR_TO_OBIO
@@ -477,18 +472,6 @@ contains
 
       ! attach the RRTMGP internal state to the gc as a named private state
       _SET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE)
-
-      ! Get the intervals; "heartbeat" must exist
-      call MAPL_GridCompGetResource(gc, "RUN_DT", dt, _RC)
-      run_dt = nint(dt)
-
-      ! Refresh interval defaults to heartbeat.
-      call MAPL_GridCompGetResource(gc, trim(comp_name) // "_DT", dt, default=dt, _RC)
-      my_step = nint(dt)
-
-      ! Averaging interval defaults to refresh interval.
-      call MAPL_GridCompGetResource(gc, trim(comp_name) // "Avrg", dt, default=dt, _RC)
-      accumint = nint(dt)
 
       ! Decide which radiation to use:
       ! Needed in SetServices because we Export a per-band flux and the
@@ -622,7 +605,7 @@ contains
 
       ! Set entry points (Finalize uses MAPL generic default)
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
-      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, phase_name='run', _RC)
 
       _RETURN(ESMF_SUCCESS)
    end subroutine SetServices
@@ -648,7 +631,11 @@ contains
       integer :: status
       character(len=ESMF_MAXSTR) :: comp_name
       real :: run_dt, my_dt
-      type(ESMF_TimeInterval) :: run_alarm_interval
+      type(ESMF_TimeInterval) :: run_alarm_interval, time_step
+      type(ESMF_Time) :: current_time, ring_time
+      type(ESMF_Calendar) :: cal
+      integer :: yy, mm, dd, reference_date, reference_time
+      logical :: run_at_interval_start
       type(ESMF_Alarm) :: run_alarm
       type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
@@ -669,11 +656,38 @@ contains
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, trim(comp_name) // "_DT", my_dt, default=run_dt, _RC)
       call ESMF_TimeIntervalSet(run_alarm_interval, s=nint(my_dt), _RC)
+
+      ! Run alarm set up as in MAPL2's handle_clock_and_main_alarm (MAPL_Generic.F90),
+      ! which MAPL3 no longer provides for components
+      call ESMF_ClockGet(clock, currTime=current_time, timeStep=time_step, calendar=cal, _RC)
+      call ESMF_TimeGet(current_time, yy=yy, mm=mm, dd=dd, _RC)
+      call MAPL_GridCompGetResource(gc, "RUN_AT_INTERVAL_START", run_at_interval_start, default=.false., _RC)
+      ! alarm reference date and time default to midnight of the current day
+      call MAPL_GridCompGetResource(gc, "REFERENCE_DATE", reference_date, default=yy*10000 + mm*100 + dd, _RC)
+      call MAPL_GridCompGetResource(gc, "REFERENCE_TIME", reference_time, default=0, _RC)
+      call ESMF_TimeSet(ring_time, &
+           yy=reference_date/10000, mm=mod(reference_date, 10000)/100, dd=mod(reference_date, 100), &
+           h=reference_time/10000, m=mod(reference_time, 10000)/100, s=mod(reference_time, 100), &
+           calendar=cal, _RC)
+      if (ring_time > current_time) then
+         ring_time = ring_time - (int((ring_time - current_time)/run_alarm_interval) + 1)*run_alarm_interval
+      end if
+      ! back off by the clock's dt since the clock advances AFTER the run method
+      if (.not. run_at_interval_start) ring_time = ring_time - time_step
+      ! make sure that ring_time is not in the past
+      do while (ring_time < current_time)
+         ring_time = ring_time + run_alarm_interval
+      end do
+
       run_alarm = ESMF_AlarmCreate( &
            name="solar_run_alarm", &
            clock=clock, &
+           ringTime=ring_time, &
            ringInterval=run_alarm_interval, &
-           sticky=.true., _RC)
+           sticky=.false., _RC)
+      if (ring_time == current_time) then
+         call ESMF_AlarmRingerOn(run_alarm, _RC)
+      end if
 
       call MAPL_GridCompGetResource(gc, "ECCENTRICITY", eccentricity, default=0.0167, _RC)
       call MAPL_GridCompGetResource(gc, "OBLIQUITY", obliquity, default=23.45, _RC)
@@ -703,6 +717,16 @@ contains
            orb2b_lambdap_ref, orb2b_lambdap_rate, &
            orb2b_equinox_yyyymmdd, orb2b_equinox_hhmmss, &
            FIX_SUN=.false., _RC)
+
+      ! Borrowed from GEOSradiation_GridCompMod::Initialize(), for testing purposes only
+      ! (standalone regression runs have no RADIATION parent to set this)
+      ! TODO: pchakrab - eventually remove this
+      block
+         use cloud_condensate_inhomogeneity, only: set_inhomogeneity
+         integer :: ih
+         call MAPL_GridCompGetResource(gc, "RAD_CONDENSATE_INHOMOGENEITY", ih, default=1, _RC)
+         call set_inhomogeneity(ih)
+      end block
 
       _RETURN(ESMF_SUCCESS)
       _UNUSED_DUMMY(import)
@@ -783,6 +807,7 @@ contains
       real, pointer, contiguous, dimension(:, :, :) :: p3d
 
       type(ESMF_State) :: AERO
+      type(ESMF_Info) :: aero_info
       character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
       integer :: AS_STATUS
       real, pointer, dimension(:, :, :) :: AS_PTR_3D
@@ -825,6 +850,7 @@ contains
       real :: SC, HK(8), HK_IR_TEMP(3, 10), HK_UV_TEMP(5), MG, SB
       integer :: SUNFLAG
       real, pointer, dimension(:) :: PREF
+      real, pointer, dimension(:) :: p1d
 
       logical :: REFRESH_FLUXES
       logical :: UPDATE_FIRST
@@ -861,14 +887,14 @@ contains
       real, parameter :: ASY_MAX = 0.999
 
       ! Get the target components name and set-up traceback handle.
-      call ESMF_GridCompGet(gc, NAME=comp_name, GRID=esmfgrid, _RC)
+      call ESMF_GridCompGet(gc, NAME=comp_name, _RC)
       IAm = trim(comp_name) // "Run"
 
       call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
       call MAPL_GridCompTimerStart(gc, "PRELIMS", _RC)
 
       ! Get parameters from the generic state.
-      call MAPL_GridCompGet(gc, num_levels=LM, _RC)
+      call MAPL_GridCompGet(gc, num_levels=LM, grid=esmfgrid, _RC)
       call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
       call MAPL_GridGetCoordinates(esmfgrid, longitudes=LONS, latitudes=LATS, _RC)
       call MAPL_GridCompGetInternalState(gc, internal, _RC)
@@ -984,8 +1010,7 @@ contains
       end if
 
       ! Decide if should make OBIO exports
-      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, rc=status)
-      _VERIFY(status)
+      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, _RC)
       SOLAR_TO_OBIO = (DO_OBIO/=0)
 
       ! Decide how to do solar forcing
@@ -1066,6 +1091,9 @@ contains
 
       ! Use the reference pressures to separate high, middle, and low clouds.
       call MAPL_StateGetPointer(import, PREF, 'PREF', _RC)
+      ! MAPL3 returns edge fields 1-based; remap to MAPL2's 0:LM so the
+      ! level search below (starting at K=1) is unchanged
+      p1d => PREF; PREF(0:LM) => p1d
 
       _ASSERT(PRS_MID_HIGH > PREF(1), 'mid-high pressure band boundary too high!')
       _ASSERT(PRS_LOW_MID > PRS_MID_HIGH, 'pressure band misordering!')
@@ -1144,14 +1172,13 @@ contains
          ! -----------------------------------------------------
          call MAPL_GridCompTimerStart(gc, "-AEROSOLS", _RC)
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
-         call ESMF_AttributeGet(AERO, &
-              NAME='implements_aerosol_optics_method', &
+         call ESMF_InfoGetFromHost(AERO, aero_info, _RC)
+         call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', &
               value=implements_aerosol_optics, _RC)
          if (implements_aerosol_optics) then
 
             ! set RH for aerosol optics
-            call ESMF_AttributeGet(AERO, &
-                 NAME='relative_humidity_for_aerosol_optics', &
+            call ESMF_InfoGet(aero_info, key='relative_humidity_for_aerosol_optics', &
                  value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
                call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
@@ -1167,8 +1194,7 @@ contains
             end if
 
             ! set PLE for aerosol optics
-            call ESMF_AttributeGet(AERO, &
-                 NAME='air_pressure_for_aerosol_optics', &
+            call ESMF_InfoGet(aero_info, key='air_pressure_for_aerosol_optics', &
                  value=AS_FIELD_NAME, _RC)
             if (AS_FIELD_NAME /= '') then
                call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
@@ -1190,8 +1216,7 @@ contains
 
             ! compute aerosol optics at all solar bands
             SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
-               call ESMF_AttributeSet(AERO, &
-                    NAME='band_for_aerosol_optics', &
+               call ESMF_InfoSet(aero_info, key='band_for_aerosol_optics', &
                     value=(BANDS_SOLAR_OFFSET + band), _RC)
 
                ! execute the aero provider's optics method
@@ -1204,8 +1229,7 @@ contains
                call MAPL_GridCompTimerStop(gc, "---AEROSOL_OPTICS")
 
                ! EXT from AERO_PROVIDER
-               call ESMF_AttributeGet(AERO, &
-                    NAME='extinction_in_air_due_to_ambient_aerosol', &
+               call ESMF_InfoGet(aero_info, key='extinction_in_air_due_to_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
@@ -1213,8 +1237,7 @@ contains
                end if
 
                ! SSA from AERO_PROVIDER (actually EXT * SSA)
-               call ESMF_AttributeGet(AERO, &
-                    NAME='single_scattering_albedo_of_ambient_aerosol', &
+               call ESMF_InfoGet(aero_info, key='single_scattering_albedo_of_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
@@ -1222,8 +1245,7 @@ contains
                end if
 
                ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
-               call ESMF_AttributeGet(AERO, &
-                    NAME='asymmetry_parameter_of_ambient_aerosol', &
+               call ESMF_InfoGet(aero_info, key='asymmetry_parameter_of_ambient_aerosol', &
                     value=AS_FIELD_NAME, _RC)
                if (AS_FIELD_NAME /= '') then
                   call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
@@ -1602,6 +1624,7 @@ contains
 
          ! for global gcolumn index seeding of PRNGs
          integer :: iBeg, iEnd, jBeg, jEnd
+         integer, allocatable :: interior(:)
          integer :: IM_World, JM_World
          integer, allocatable :: Gdims(:)
          integer, dimension(IM, JM) :: Ig, Jg
@@ -1711,7 +1734,11 @@ contains
          call MAPL_GridGetGlobalCellCountPerDim(esmfgrid, globalCellCountPerDim=Gdims, _RC)
          IM_World = Gdims(1)
          JM_World = Gdims(2)
-         call MAPL_GridGetInterior(esmfgrid, iBeg, iEnd, jBeg, jEnd)
+         call MAPL_GridGet(esmfgrid, interior=interior, _RC)
+         iBeg = interior(1)
+         iEnd = interior(2)
+         jBeg = interior(3)
+         jEnd = interior(4)
          do J = 1, JM
             do I = 1, IM
                Ig(I, J) = iBeg + I - 1
@@ -3305,13 +3332,9 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GridCompGetResource(gc, 'RRTMG_LIQFLG', LIQFLGSW, default=1, _RC)
 
             if (LM > 72) then
-               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.true.&
-                    &, rc=status)
-               _VERIFY(status)
+               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.true., _RC)
             else
-               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.false.&
-                    , rc=status)
-               _VERIFY(status)
+               call MAPL_GridCompGetResource(gc, 'RRTMGSW_USE_PRECIP_IN_RADIATION', USE_PRECIP_IN_RADIATION, default=.false., _RC)
             end if
 
             ! Normalize aerosol inputs
@@ -3812,6 +3835,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          end do INT_VARS_3
 
          ! clean up
+         deallocate(ImportNames, InternalNames, _STAT)
          deallocate(SlicesInp, NamesInp, _STAT)
          deallocate(SlicesInt, NamesInt, _STAT)
          deallocate(IntInOut, grd_dim, ungrd_dim, _STAT)

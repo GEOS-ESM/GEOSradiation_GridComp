@@ -723,8 +723,9 @@ port - referenced throughout below instead of repeated).
         0)`, `ugDim(K) = ug_extent`. Slice counts still come from
         `size(ptr,3)` on the state pointers (zero-diff).
       - All 13 `ESMFL_StateGetPointerToData(` -> `MAPL_StateGetPointer(`.
-      Not yet run-tested; still needs the regression comparison against
-      MAPL2 once the full model links.
+      Run-testing in progress via `regression/solar-sa` (see step 18);
+      still needs the regression comparison against MAPL2 once the full
+      model links.
 
       Facts found while re-verifying, on top of the plan above:
       - `HorizontalDimsSpec`/`HORIZONTAL_DIMS_NONE`/`operator(==)` are
@@ -973,3 +974,106 @@ port - referenced throughout below instead of repeated).
       (~L2622) belongs in 17.5.
     - Step 12's `MAPL_VarSpec` -> `ESMF_StateGet` rewrite then touches
       only 17.2 and 17.3.
+
+18. **IN PROGRESS - Standalone run-testing via `regression/solar-sa`**
+    (`mpirun --n 6 ../install/bin/GEOS.x mapl.yaml` from
+    `build/ifx/Debug/solar-sa`; failures show up as a `FAIL at line=`
+    traceback in `log.run`, with the Solar line at the top). Fixes so far,
+    2026-09-28:
+    - `MAPL_GridCompSetEntryPoint` calls in `SetServices` now pass
+      `phase_name='initialize'` / `phase_name='run'`, matching the
+      convention in `docs/mapl2-to-mapl3-port.md`.
+    - **`ESMF_GridCompGet(gc, GRID=esmfgrid)` fails at runtime in MAPL3**
+      (first `Run` call, old L857): the user-level `gc` has no ESMF grid
+      attached - the geom lives on the outer meta component. Replaced
+      with `MAPL_GridCompGet(gc, num_levels=LM, grid=esmfgrid, _RC)`
+      (`gridcomp_get` in `MAPL_Generic.F90` accepts optional `geom=` /
+      `grid=`), which is what IRRAD's `Run` already does. `ESMF_GridCompGet`
+      is still fine for `NAME=` only. Same rule applies to any other
+      ported component: never ask ESMF for the grid, ask MAPL.
+
+    Fixes 2026-09-29 (run now completes; results match MAPL2 baseline,
+    see "Comparison status" below):
+    - **Run alarm never rang, so REFRESH (`SORADCORE`) never executed.**
+      `solar_run_alarm` was created with only `ringInterval`, and ESMF
+      then first rings at `currTime + interval`. MAPL2's generic main
+      alarm (`handle_clock_and_main_alarm`, `MAPL_Generic.F90`
+      L1328-1411) did much more, and MAPL3 provides nothing equivalent
+      for component alarms, so `Initialize` now reproduces it verbatim:
+      `RUN_AT_INTERVAL_START` (default `.false.`), `REFERENCE_DATE`
+      (default yyyymmdd of currTime) / `REFERENCE_TIME` (default 0) ->
+      `ring_time`; if `ring_time > currTime` step it back by whole
+      intervals; unless `run_at_interval_start`, back off one clock dt
+      (clock advances AFTER Run); walk forward `while ring_time <
+      currTime`; `ESMF_AlarmCreate(..., ringTime=, ringInterval=,
+      sticky=.false.)`; `ESMF_AlarmRingerOn` if `ring_time == currTime`.
+      `Run` keeps its `ESMF_AlarmRingerOff` as in MAPL2. IRRAD has the
+      same latent bug - see the TODO in its porting notes.
+    - **`ESMF_Attribute*` on the AERO state fails (status 57).** MAPL3
+      providers (and `FakeGOCART`) set state attributes with `ESMF_Info`,
+      so `Run`'s AERO block now does `ESMF_InfoGetFromHost(AERO,
+      aero_info)` once, then `ESMF_InfoGet(aero_info, key=, value=)` for
+      `implements_aerosol_optics_method`, `*_for_aerosol_optics`,
+      `extinction_in_air_due_to_ambient_aerosol`, etc., and
+      `ESMF_InfoSet(aero_info, key='band_for_aerosol_optics', ...)`.
+    - **`MAPL_GridGetInterior` no longer exists** (link error).
+      Replaced in `SORADCORE` with `MAPL_GridGet(esmfgrid,
+      interior=interior, _RC)` (allocatable `integer :: interior(:)`,
+      `iBeg/iEnd/jBeg/jEnd = interior(1:4)`), as IRRAD already does.
+    - **Stat 151 (already allocated) at the second `SORADCORE` call.**
+      `ImportNames`/`InternalNames` are `Run`-scope allocatables that
+      `SORADCORE` allocates each call, and it is called twice per REFRESH
+      when `do_no_aero_calc`. Added `deallocate(ImportNames,
+      InternalNames, _STAT)` to `SORADCORE`'s cleanup.
+    - **Edge field `PREF` is 1-based in MAPL3, 0-based in MAPL2**, and the
+      `LCLDMH`/`LCLDLM` level search starts at `K=1`, so both super-layer
+      boundaries were off by one (122/142 instead of 121/141) and
+      `COT{NUM,DEN}{HI,MD,LO}PAR` / `CLD{HI,MD,LO}SW` were wrong. Same
+      remap IRRAD uses: `p1d => PREF; PREF(0:LM) => p1d` right after the
+      `MAPL_StateGetPointer`. Check every `VLOC=E` pointer this way.
+
+    Run procedure (from `build/ifx/Debug/solar-sa`):
+    - Rebuild/install: `cd build/ifx/Debug && bash -c 'module load
+      ifx-stack && make -j8 install'`.
+    - Each run advances `cap_restart.yaml` to 22:20; reset first with
+      `printf 'currTime: 2000-04-14T22:00:00\nrepeatCount: 0\n' >
+      cap_restart.yaml`.
+    - `bash -c 'module load ifx-stack; export
+      LD_LIBRARY_PATH=$PWD/../install/lib:$LD_LIBRARY_PATH; mpirun --n 6
+      ../install/bin/GEOS.x mapl.yaml > run.log 2>&1'`. Without the
+      `LD_LIBRARY_PATH` export the shared `libGEOSradiation_GridComp.so`
+      is "not found" (FAIL in `UserSetServices.F90`).
+    - Checkpoints land in `checkpoints/2000-04-14T22:20:00/` (`last`
+      symlink); compare with `cmpchk.py` (needs `module load ifx-stack`
+      for netCDF4). The script treats a cell as undef if the baseline is
+      `_FillValue`-masked or either side is `|huge|` (MAPL2 `MAPL_UNDEF`
+      is `+huge`, MAPL3 is `-huge`) and reports undef-mask mismatches
+      separately.
+
+    Comparison status vs `/home/pchakrab/input/solar/C12L181/after/
+    new-style/SOLAR_{import,internal,export}_after_runPhase1.nc`:
+    **bit-for-bit identical in all three states** (2026-09-29), once the
+    MAPL2 baseline was captured with a configuration matching the
+    standalone:
+    - `AERO_PROVIDER: none` in `AGCM.rc` (default `GOCART2G`; options
+      `GOCART2G, MAM, none`). `GEOS_ChemGridComp` then creates an empty
+      `AERO` state with `implements_aerosol_optics_method = .false.`,
+      which is what `FakeGOCART` does here. With the original GOCART2G
+      baseline, `FSWN/FSCN/FSWUN/FSCUN/DR*/DF*/FSWBANDN` differed
+      O(1e-5 - 7e-3) on day cells (current `FSWN == FSWNAN`).
+    - `HISTORY.rc` requesting `[IO]SRB{08..11}RG` from `SOLAR` (only
+      bands 08-11 are in `band_output_supported`). The standalone's
+      `activate_all_exports: true` turns `band_output` on for those
+      bands, so `[IO]SRBbbRGN` are computed here; in the original
+      baseline they were never written and held 0 or load-balance
+      buffer `MAPL_UNDEF` garbage on day cells.
+    - After re-capturing, **also refresh the internal restart** in
+      `checkpoints/2000-04-14T22:00:00/SOLAR_internal.nc` from the new
+      `before/new-style/SOLAR_internal_before_runPhase1.nc`. With
+      `CALLED_LAST` defaulting to 1, `UPDATE_EXPORT` runs before the
+      refresh and `[IO]SRBbbRG = [IO]SRBbbRGN * SLR` comes from the
+      restart; a stale restart gave `1e15 * SLR` values and `-huge`
+      (all-zero faces) in the `*RG` exports.
+    - The remaining `RI`/`RL` "undef mismatch" (baseline `_FillValue`
+      masked outside cloud, current literal `1e15`) is a file-encoding
+      artifact that `cmpchk.py` now treats as undef on both sides.

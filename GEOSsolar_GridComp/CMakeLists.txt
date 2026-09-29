@@ -9,7 +9,7 @@ set (srcs
 esma_add_library (${this}
   SRCS ${srcs}
   SUBDIRS RRTMG
-  DEPENDENCIES MAPL GEOS_Shared GEOS_RadiationShared RRTMG_SW RRTMG_SW_mods RRTMGP TYPE SHARED)
+  DEPENDENCIES MAPL GEOS_Shared GEOS_RadiationShared RRTMG_SW RRTMG_SW_mods RRTMGP)
 
 if(MKL_FOUND)
    target_compile_definitions(${this} PRIVATE HAVE_MKL)
