@@ -1,11 +1,12 @@
 # GEOS_SolarGridComp MAPL3 porting plan
 
-Status: in progress. `GEOSsolar_GridComp` is now uncommented in the
-parent container's `alldirs` (see `../CMakeLists.txt`) and wired as a
-child of `GEOS_RadiationGridComp.F90`. Steps 1-11 and 13-15 below are
-done (see branch `feature/pchakrab/port-solar-to-mapl3`); step 12 has
-been investigated but not yet implemented (see its notes below). The
-port has **not yet been build-verified end-to-end**.
+Status: functionally complete. `GEOSsolar_GridComp` is uncommented in
+the parent container's `alldirs` (see `../CMakeLists.txt`) and wired as
+a child of `GEOS_RadiationGridComp.F90`. Steps 1-15, 18 and 19 below
+are done (branch `feature/pchakrab/port-solar-to-mapl3`); the
+`regression/solar-sa` standalone is bit-for-bit against the MAPL2
+baseline and runs under ctest. Steps 16 (style cleanup) and 17 (slim
+`SORADCORE`) remain open.
 
 This plan was derived by comparing against the already-completed IRRAD
 port (`../GEOSirrad_GridComp/`, see its own `mapl3-porting-notes.md` for
@@ -975,11 +976,12 @@ port - referenced throughout below instead of repeated).
     - Step 12's `MAPL_VarSpec` -> `ESMF_StateGet` rewrite then touches
       only 17.2 and 17.3.
 
-18. **IN PROGRESS - Standalone run-testing via `regression/solar-sa`**
+18. **DONE - Standalone run-testing via `regression/solar-sa`**
     (`mpirun --n 6 ../install/bin/GEOS.x mapl.yaml` from
     `build/ifx/Debug/solar-sa`; failures show up as a `FAIL at line=`
-    traceback in `log.run`, with the Solar line at the top). Fixes so far,
-    2026-09-28:
+    traceback in `log.run`, with the Solar line at the top). Now also a
+    ctest (`ctest -R solar-sa`, `run_case.cmake` does the `nccmp`
+    comparison; IntelLLVM only). Fixes so far, 2026-09-28:
     - `MAPL_GridCompSetEntryPoint` calls in `SetServices` now pass
       `phase_name='initialize'` / `phase_name='run'`, matching the
       convention in `docs/mapl2-to-mapl3-port.md`.
@@ -1077,3 +1079,47 @@ port - referenced throughout below instead of repeated).
     - The remaining `RI`/`RL` "undef mismatch" (baseline `_FillValue`
       masked outside cloud, current literal `1e15`) is a file-encoding
       artifact that `cmpchk.py` now treats as undef on both sides.
+
+19. **DONE (2026-09-30) - Hoisted the AERO-provider block out of `Run`
+    into module-scope `compute_provider_aerosol_optics`**, and
+    converged it with IRRAD's routine of the same name so the two are
+    now textually identical apart from "IR"/"solar" wording and the
+    loop label. Final shared signature:
+    ```fortran
+    compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NUM_BANDS, OFFSET, &
+         AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY, aerosol_optics, rc)
+    ```
+    `AERO` is `intent(inout)`; `RH, PLE` are `intent(in)` computed by
+    the caller (Solar's `Run` now fetches `PLE`/`QV`/`T` from import
+    and does `PL = 0.5*(PLE(:,:,1:LM)+PLE(:,:,2:LM+1))`, `RH = Q /
+    MAPL_EQSAT(T, PL=PL)` unconditionally, as IRRAD always did);
+    `AEROSOL_*` are `allocatable, intent(out)`, allocated zeroed inside
+    and left unallocated when the provider lacks optics
+    (`_RETURN_UNLESS(aerosol_optics)`). Inside: `ESMF_InfoGetFromHost`
+    / `ESMF_InfoGet` for the method flag and field names, RH/PLE copied
+    into the provider's named fields, then per band `ESMF_InfoSet(...
+    'band_for_aerosol_optics', OFFSET+band)` + `ESMF_MethodExecute(AERO,
+    label='run_aerosol_optics', userRC=user_status, rc=status)` with
+    both codes `_VERIFY`d, and EXT/SSA/ASY fetched with the
+    `max(,0)`/`SSA_MAX`/`ASY_MAX` clamps. Iterations on the way (each
+    zero-diff on `irrad-sa`/`solar-sa`): dropped `gc` (only used for an
+    inner `---AEROSOL_OPTICS` timer; the caller's `-AEROSOLS` timer
+    already brackets the call); dropped `import` (RH/PLE now inputs);
+    removed `Run`'s `AS_*`/`p3d`/`band`/`SSA_MAX`/`ASY_MAX` locals.
+    IRRAD-side changes made to converge: `TAUA/SSAA/ASYA` became the
+    routine's allocatable outputs (caller allocates them zeroed itself
+    only `if (.not. aerosol_optics)`, since Chou `IRRAD` and RRTMG read
+    them unconditionally); `NA` removed from the signature and set at
+    the call site with `NA = merge(3, 0, aerosol_optics)` (Chou-IRRAD's
+    `do_aerosol = na > 0` is its only consumer; Solar has no `NA`);
+    adopted Solar's `userRC` check on `ESMF_MethodExecute`; dummy names
+    changed to `NUM_BANDS` and `AEROSOL_EXT/SSA/ASY`. Note the old
+    "accumulate" comments were misleading - the code has always been
+    plain assignment per band; the provider does the species sum.
+    Solar's SSA/ASY are un-normalized (`EXT*SSA`, `EXT*SSA*ASY`), same
+    as IRRAD's, which is why IRRAD's RRTMG path uses `TAUA - SSAA` for
+    absorption. While re-running solar-sa the SW RRTMGP data files
+    (`rrtmgp-gas-sw-g112.nc`, `rrtmgp-clouds-sw.nc`) turned out to have
+    been trashed from the regression `ExtData`; restored from
+    `~/.local/share/Trash` - check there first if regression data
+    disappears.

@@ -251,7 +251,6 @@ module GEOS_SolarGridCompMod
         .false. ] !  14
    ! PMN TODO: change to a more flexible runtime-selectable method? An in LW too.
 
-   ! -----------------------------------------------
    ! RRTMGP internal state:
    ! Will be attached to the Gridded Component.
    ! Used to provide efficient initialization
@@ -432,7 +431,6 @@ module GEOS_SolarGridCompMod
         1.605962e-01, 1.610349e-01, 1.614266e-01, 1.617693e-01, 1.620614e-01,&
         1.623011e-01 &
         ], shape(fdlice3_rrtmgp)), kind=wp)
-   ! ----------------------------------------------------------------
 
 contains
 
@@ -800,28 +798,14 @@ contains
       real, pointer, dimension(:, :, :) :: ptr3d
       real, pointer, dimension(:, :) :: ptr2d
 
-      ! scratch pointer to satisfy Fortran's rank-remapping rule for the
-      ! Edge-array remap below (self-remap alone isn't enough - gfortran
-      ! rejects a self-referencing rank remap unless the target is
-      ! CONTIGUOUS)
-      real, pointer, contiguous, dimension(:, :, :) :: p3d
-
       type(ESMF_State) :: AERO
-      type(ESMF_Info) :: aero_info
-      character(len=ESMF_MAXSTR) :: AS_FIELD_NAME
-      integer :: AS_STATUS
-      real, pointer, dimension(:, :, :) :: AS_PTR_3D
-      real, pointer, dimension(:, :, :) :: AS_PTR_PLE
-      real, pointer, dimension(:, :, :) :: AS_PTR_T
-      real, pointer, dimension(:, :, :) :: AS_PTR_Q
-      real, allocatable, dimension(:, :, :) :: AS_ARR_RH
-      real, allocatable, dimension(:, :, :) :: AS_ARR_PL
+      real, pointer, dimension(:, :, :) :: PLE, Q, T
+      real, allocatable, dimension(:, :, :) :: RH, PL
 
       real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT
       real, allocatable, dimension(:, :, :, :) :: AEROSOL_SSA
       real, allocatable, dimension(:, :, :, :) :: AEROSOL_ASY
 
-      integer :: band
       logical :: implements_aerosol_optics
       logical :: USE_RRTMGP, USE_RRTMGP_IRRAD
       logical :: USE_RRTMG, USE_RRTMG_IRRAD
@@ -882,9 +866,6 @@ contains
       logical :: band_output(nbndsw)
       integer :: ibnd
       character*2 :: bb
-
-      real, parameter :: SSA_MAX = 0.999999
-      real, parameter :: ASY_MAX = 0.999
 
       ! Get the target components name and set-up traceback handle.
       call ESMF_GridCompGet(gc, NAME=comp_name, _RC)
@@ -983,7 +964,6 @@ contains
       end if
 
       ! select which bands require OSRB output ...
-      ! ------------------------------------------
       ! Only available for RRTMG[P]
       ! Must be supported AND requested by exports 'OSRBbbRG', 'ISRBbbRG', or 'TBRBbbRG'
       if (USE_RRTMG .or. USE_RRTMGP) then
@@ -1139,7 +1119,6 @@ contains
       call MAPL_GridCompTimerStop(gc, "PRELIMS", _RC)
 
       ! Update the Sun position and weight the export variables
-      ! -------------------------------------------------------
       if (UPDATE_FIRST) then
          call MAPL_GridCompTimerStart(gc, "UPDATE", _RC)
          call UPDATE_EXPORT(IM, JM, LM, _RC)
@@ -1147,7 +1126,6 @@ contains
       end if
 
       ! Periodically, refresh the internal state with a full solar calc
-      ! ---------------------------------------------------------------
       REFRESH_FLUXES = ESMF_AlarmIsRinging(alarm, _RC)
 
       REFRESH: if (REFRESH_FLUXES) then
@@ -1157,7 +1135,6 @@ contains
          call ESMF_ClockGet(clock, currTIME=current_time, _RC)
 
          ! Beginning of REFRESH period is current time PLUS offset intDT
-         ! -------------------------------------------------------------
          if (UPDATE_FIRST) then
             ! The UPDATE is already done, so the REFRESH interval should start one
             ! timestep beyond current time so it is consistent with the NEXT update.
@@ -1169,96 +1146,23 @@ contains
          end if
 
          ! Get optical properties of radiatively active aerosols
-         ! -----------------------------------------------------
          call MAPL_GridCompTimerStart(gc, "-AEROSOLS", _RC)
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
-         call ESMF_InfoGetFromHost(AERO, aero_info, _RC)
-         call ESMF_InfoGet(aero_info, key='implements_aerosol_optics_method', &
-              value=implements_aerosol_optics, _RC)
-         if (implements_aerosol_optics) then
-
-            ! set RH for aerosol optics
-            call ESMF_InfoGet(aero_info, key='relative_humidity_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, _RC)
-            if (AS_FIELD_NAME /= '') then
-               call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
-               p3d => AS_PTR_PLE; AS_PTR_PLE(1:IM, 1:JM, 0:LM) => p3d
-               call MAPL_StateGetPointer(import, AS_PTR_Q, 'QV', _RC)
-               call MAPL_StateGetPointer(import, AS_PTR_T, 'T', _RC)
-               allocate(AS_ARR_RH(IM, JM, LM), AS_ARR_PL(IM, JM, LM), _STAT)
-               AS_ARR_PL = 0.5 * (AS_PTR_PLE(:, :, 1:LM) + AS_PTR_PLE(:, :, 0:LM - 1))
-               AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T, PL=AS_ARR_PL)
-               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-               AS_PTR_3D = AS_ARR_RH
-               deallocate(AS_ARR_RH, AS_ARR_PL, _STAT)
-            end if
-
-            ! set PLE for aerosol optics
-            call ESMF_InfoGet(aero_info, key='air_pressure_for_aerosol_optics', &
-                 value=AS_FIELD_NAME, _RC)
-            if (AS_FIELD_NAME /= '') then
-               call MAPL_StateGetPointer(import, AS_PTR_PLE, 'PLE', _RC)
-               p3d => AS_PTR_PLE; AS_PTR_PLE(1:IM, 1:JM, 0:LM) => p3d
-               call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-               AS_PTR_3D = AS_PTR_PLE
-            end if
-
-            ! allocate memory for TOTAL aerosol ext, ssa and asy at all solar bands
-            allocate(AEROSOL_EXT(IM, JM, LM, NUM_BANDS_SOLAR), &
-                 AEROSOL_SSA(IM, JM, LM, NUM_BANDS_SOLAR), &
-                 AEROSOL_ASY(IM, JM, LM, NUM_BANDS_SOLAR), _STAT)
-
-            ! zero by default
-            ! (in case aero provider cant provide some of them)
-            AEROSOL_EXT = 0.
-            AEROSOL_SSA = 0.
-            AEROSOL_ASY = 0.
-
-            ! compute aerosol optics at all solar bands
-            SOLAR_BANDS: do band = 1, NUM_BANDS_SOLAR
-               call ESMF_InfoSet(aero_info, key='band_for_aerosol_optics', &
-                    value=(BANDS_SOLAR_OFFSET + band), _RC)
-
-               ! execute the aero provider's optics method
-               call MAPL_GridCompTimerStart(gc, "---AEROSOL_OPTICS")
-               call ESMF_MethodExecute(AERO, &
-                    Label="run_aerosol_optics", &
-                    userRC=AS_STATUS, rc=status)
-               _VERIFY(AS_STATUS)
-               _VERIFY(status)
-               call MAPL_GridCompTimerStop(gc, "---AEROSOL_OPTICS")
-
-               ! EXT from AERO_PROVIDER
-               call ESMF_InfoGet(aero_info, key='extinction_in_air_due_to_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) AEROSOL_EXT(:, :, :, band) = MAX(AS_PTR_3D, 0.0)
-               end if
-
-               ! SSA from AERO_PROVIDER (actually EXT * SSA)
-               call ESMF_InfoGet(aero_info, key='single_scattering_albedo_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) AEROSOL_SSA(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), SSA_MAX)
-               end if
-
-               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
-               call ESMF_InfoGet(aero_info, key='asymmetry_parameter_of_ambient_aerosol', &
-                    value=AS_FIELD_NAME, _RC)
-               if (AS_FIELD_NAME /= '') then
-                  call MAPL_StateGetPointer(AERO, AS_PTR_3D, trim(AS_FIELD_NAME), _RC)
-                  if (associated(AS_PTR_3D)) AEROSOL_ASY(:, :, :, band) = MIN(MAX(AS_PTR_3D, 0.0), ASY_MAX)
-               end if
-
-            end do SOLAR_BANDS
-
-         end if ! implements_aerosol_optics
+         call MAPL_StateGetPointer(import, PLE, 'PLE', _RC)
+         call MAPL_StateGetPointer(import, Q, 'QV', _RC)
+         call MAPL_StateGetPointer(import, T, 'T', _RC)
+         allocate(RH(IM, JM, LM), PL(IM, JM, LM), _STAT)
+         PL = 0.5 * (PLE(:, :, 1:LM) + PLE(:, :, 2:LM + 1))
+         RH = Q / MAPL_EQSAT(T, PL=PL)
+         call compute_provider_aerosol_optics( &
+              AERO, RH, PLE, &
+              IM, JM, LM, NUM_BANDS_SOLAR, BANDS_SOLAR_OFFSET, &
+              AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY, &
+              implements_aerosol_optics, _RC)
+         deallocate(RH, PL, _STAT)
          call MAPL_GridCompTimerStop(gc, "-AEROSOLS", _RC)
 
          ! Optional without-aerosol diagnostics
-         ! ------------------------------------
 
          ! are without-aerosol exports requested?
          do_no_aero_calc = .false.
@@ -1336,7 +1240,6 @@ contains
          end if
 
          ! Regular with-aerosol calculations
-         ! ---------------------------------
          call SORADCORE(IM, JM, LM, &
               include_aerosols=.true., &
               currTIME=current_time + intDT,&
@@ -1345,7 +1248,6 @@ contains
               _RC)
 
          ! Clean up aerosol optical properties
-         ! -----------------------------------
          if (implements_aerosol_optics) then
             deallocate(AEROSOL_EXT, _STAT)
             deallocate(AEROSOL_SSA, _STAT)
@@ -1356,7 +1258,6 @@ contains
       end if REFRESH
 
       ! Update the Sun position and weight the export variables
-      ! -------------------------------------------------------
       if (.not. UPDATE_FIRST) then
          call MAPL_GridCompTimerStart(gc, "UPDATE", _RC)
          call UPDATE_EXPORT(IM, JM, LM, _RC)
@@ -1432,7 +1333,6 @@ contains
          logical, dimension(IM, JM) :: daytime
 
          ! Daytime ONLY copy of variables
-         ! ------------------------------
 
          ! inputs
          real, pointer, dimension(:, :) :: PLE, CH4, N2O, T, Q, OX, CL, &
@@ -1502,7 +1402,6 @@ contains
 #endif
 
          ! variables for RRTMG code
-         ! ------------------------
 
          integer :: ICEFLGSW ! Flag for ice particle specification
          integer :: LIQFLGSW ! Flag for liquid droplet specification
@@ -1534,7 +1433,6 @@ contains
          real :: SOLCYCFRAC
 
          ! variables for RRTMGP code
-         ! -------------------------
 
          ! conversion factor (see below)
          real(kind=wp), parameter :: cwp_fac = real(1000. / MAPL_GRAV, kind=wp)
@@ -1829,7 +1727,6 @@ contains
 
          ! Count the 2D slices in the Input variables and calculate
          ! the required length of the 1D Input buffer (BufInp)
-         ! --------------------------------------------------------
          INPUT_VARS_1: do K = 1, NumInp
 
             ! Get names and dimensions of Inputs
@@ -1896,13 +1793,11 @@ contains
          ! Allocate buffer with enough space to hold both the unbalanced
          ! and balanced data on the local PE for Input vars. The inner
          ! dimension of its 2D representation must be NumMax.
-         ! -------------------------------------------------------------
          allocate(BufInp(NumMax * sum(SlicesInp)), _STAT)
          BufInp = MAPL_UNDEF
 
          ! Loop over imports, packing into the buffer that will be
          ! load balanced and used in the solar calculations.
-         ! -------------------------------------------------------
          iN = 0
          INPUT_VARS_2: do K = 1, NumInp
             if (SlicesInp(K) == 0) cycle
@@ -2051,7 +1946,6 @@ contains
          end do INPUT_VARS_2
 
          ! Load balance the Inputs
-         ! -----------------------
 
          call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE")
          if (LoadBalance) call MAPL_BalanceWork(BufInp, NumMax, Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
@@ -2064,7 +1958,6 @@ contains
 
          ! Count the 2D slices in the Int (InOut/Out) vars and calc
          ! the required length of their 1D buffers (BufInOut/BufOut).
-         ! ----------------------------------------------------------
          INT_VARS_1: do K = 1, NumInt
 
             ! InOut or Out?
@@ -2153,7 +2046,6 @@ contains
 
          ! Allocate buffers with enough space to hold both the unbalanced
          ! and balanced data on the local PE for InOut/Out vars
-         ! --------------------------------------------------------------
          allocate(BufInOut(NumMax * sum(SlicesInt, MASK=IntInOut)), _STAT)
          BufInOut = MAPL_UNDEF
          allocate(BufOut(NumMax * sum(SlicesInt, MASK=.not. IntInOut)), _STAT)
@@ -2161,7 +2053,6 @@ contains
 
          ! Loop over Internals (InOuts/Outs), packing them into buffers
          ! that will be load balanced and used in the solar calculations.
-         ! --------------------------------------------------------------
          iNInOut = 0
          iNOut = 0
          INT_VARS_2: do K = 1, NumInt
@@ -2236,7 +2127,6 @@ contains
 
             ! Handles for the working InOut/Out variables.
             ! These have an inner dimension of the balanced work.
-            ! ---------------------------------------------------
             select case (NamesInt(K))
             case ('FSWN')
                FSW => ptr2(1:Num2do, :)
@@ -2657,7 +2547,6 @@ contains
          if (ibinary /= 0) where (CL > 0.) CL = 1.
 
          ! Prepare auxilliary variables
-         ! ----------------------------
 
          allocate(RH(NCOL, LM), _STAT)
          allocate(PL(NCOL, LM), _STAT)
@@ -2730,7 +2619,6 @@ contains
          call MAPL_GridCompTimerStop(gc, "-MISC")
 
          ! Call the requested Shortwave scheme
-         ! -----------------------------------
 
          SCHEME: if (USE_CHOU) then
             call shrtwave( &
@@ -3287,7 +3175,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GridCompTimerStart(gc, "-RRTMG")
 
             ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
-            ! -------------------------------------------------------------------
 
             ! interface (between layer) variables
             allocate(TLEV(NCOL, LM + 1), _STAT)
@@ -3327,7 +3214,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             allocate(SWDFLXCR(NCOL, LM + 1), _STAT)
 
             ! Set flags related to cloud properties (see RRTMG_SW)
-            ! ----------------------------------------------------
             call MAPL_GridCompGetResource(gc, 'RRTMG_ICEFLG', ICEFLGSW, default=3, _RC)
             call MAPL_GridCompGetResource(gc, 'RRTMG_LIQFLG', LIQFLGSW, default=1, _RC)
 
@@ -3338,7 +3224,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             end if
 
             ! Normalize aerosol inputs
-            ! ------------------------
 
             if (num_aero_vars > 0) then
                where (taua > 0. .and. ssaa > 0.)
@@ -3352,7 +3237,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             end if
 
             ! Flip in vertical, Convert units, and interpolate T, etc.
-            ! --------------------------------------------------------
             ! RRTMG convention is that vertical indices increase from bot -> top
 
             call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
@@ -3580,7 +3464,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GridCompGetResource(gc, 'SOLCYCFRAC', SOLCYCFRAC, default=1.0, _RC)
 
             ! call RRTMG SW
-            ! -------------
 
             call rrtmg_sw(gc, &
                  RPART, NCOL, LM, &
@@ -3645,7 +3528,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
 
             ! unflip the outputs in the vertical
-            ! ----------------------------------
 
             SWUFLXR(:, 1:LM + 1) = SWUFLX(:, LM + 1:1:-1)
             SWDFLXR(:, 1:LM + 1) = SWDFLX(:, LM + 1:1:-1)
@@ -3655,7 +3537,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP")
 
             ! required outputs
-            ! ----------------
 
             ! convert super-layer clearCounts to cloud fractions
             if (include_aerosols) then
@@ -3868,8 +3749,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          real, dimension(IM, JM) :: ZTH, SLR, ALB, CLD, SLN, ZTHN
 
          ! scratch pointer to satisfy Fortran's rank-remapping rule for the
-         ! Edge-array remaps below (see the matching remap + explanation in
-         ! Run, right after its own AS_PTR_PLE fetches)
+         ! Edge-array remaps below (self-remap alone isn't enough - gfortran
+         ! rejects a self-referencing rank remap unless the target is CONTIGUOUS)
          real, pointer, contiguous, dimension(:, :, :) :: p3d
 
          real, pointer, dimension(:, :) :: ALBEXP, ALBIMP
@@ -4758,21 +4639,18 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          do L = 0, LM
             ! Fill Export Net Fluxes from Internal
-            ! ------------------------------------
             if (associated(FSW)) FSW(:, :, L) = FSWN(:, :, L) * SLR
             if (associated(FSC)) FSC(:, :, L) = FSCN(:, :, L) * SLR
             if (associated(FSWNA)) FSWNA(:, :, L) = FSWNAN(:, :, L) * SLR
             if (associated(FSCNA)) FSCNA(:, :, L) = FSCNAN(:, :, L) * SLR
 
             ! Fill Export Up Fluxes from Internal
-            ! -----------------------------------
             if (associated(FSWU)) FSWU(:, :, L) = FSWUN(:, :, L) * SLR
             if (associated(FSCU)) FSCU(:, :, L) = FSCUN(:, :, L) * SLR
             if (associated(FSWUNA)) FSWUNA(:, :, L) = FSWUNAN(:, :, L) * SLR
             if (associated(FSCUNA)) FSCUNA(:, :, L) = FSCUNAN(:, :, L) * SLR
 
             ! Fill Export Down Fluxes from (Net + Up) Internal
-            ! ------------------------------------------------
             if (associated(FSWD)) FSWD(:, :, L) = (FSWN(:, :, L) + FSWUN(:, :, L)) * SLR
             if (associated(FSCD)) FSCD(:, :, L) = (FSCN(:, :, L) + FSCUN(:, :, L)) * SLR
             if (associated(FSWDNA)) FSWDNA(:, :, L) = (FSWNAN(:, :, L) + FSWUNAN(:, :, L)) * SLR
@@ -4780,7 +4658,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          end do
 
          ! Fill 3D per-band Fluxes
-         ! -----------------------
 
          do ib = 1, NUM_BANDS_SOLAR
             if (associated(FSWBAND)) FSWBAND(:, :, ib) = FSWBANDN(:, :, ib) * SLR
@@ -4803,7 +4680,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          if (associated(OSRCNA)) OSRCNA = (1. - FSCNAN(:, :, 0)) * SLR
 
          ! band OSR, ISR, and/or TBR output
-         ! --------------------------------
 
          if (USE_RRTMG .or. USE_RRTMGP) then
 
@@ -4912,7 +4788,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 
          ! SOLAR TO OBIO conversion ...
          ! Done in wavenum [cm^-1] space for reasons detailed under OBIO_bands_wavenum declaration
-         ! ---------------------------------------------------------------------------------------
 
          if (SOLAR_TO_OBIO) then
             if (associated(DROBIO) .or. associated(DFOBIO)) then
@@ -5131,6 +5006,92 @@ TEST_('RRTMGP-SW: does not seem to be SW')
          def = 0.0
       end select
    end function solar_internal_default
+
+   ! compute_provider_aerosol_optics: reports back (via aerosol_optics) whether
+   !   the AERO provider implements the aerosol_optics method; if so, also
+   !   hands it RH/PLE (via its Info attributes), runs its
+   !   "run_aerosol_optics" method once per solar band, and stores the
+   !   resulting extinction/SSA/asymmetry into the freshly allocated
+   !   AEROSOL_EXT/SSA/ASY. A no-op (arrays left unallocated) if the
+   !   provider does not implement it.
+   subroutine compute_provider_aerosol_optics( &
+        AERO, &                                   ! input/output
+        RH, PLE, IM, JM, LM, NUM_BANDS, OFFSET, & ! input
+        AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY, &  ! output
+        aerosol_optics, rc)                       ! output
+      type(ESMF_State), intent(inout) :: AERO
+      real, dimension(:, :, :), intent(in) :: RH, PLE
+      integer, intent(in) :: IM, JM, LM, NUM_BANDS, OFFSET
+      real, allocatable, dimension(:, :, :, :), intent(out) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
+      logical, intent(out) :: aerosol_optics
+      integer, optional, intent(out) :: rc
+
+      integer :: status, user_status, band
+      type(ESMF_Info) :: info
+      character(len=ESMF_MAXSTR) :: field_name
+      real, pointer, dimension(:, :, :) :: ptr3d
+      real, parameter :: SSA_MAX = 0.999999
+      real, parameter :: ASY_MAX = 0.999
+
+      call ESMF_InfoGetFromHost(AERO, info, _RC)
+      call ESMF_InfoGet(info, key='implements_aerosol_optics_method', value=aerosol_optics, _RC)
+      _RETURN_UNLESS(aerosol_optics)
+
+      ! set RH for aerosol optics
+      call ESMF_InfoGet(info, key='relative_humidity_for_aerosol_optics', value=field_name, _RC)
+      if (field_name /= '') then
+         call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+         ptr3d = RH
+      end if
+
+      ! set PLE for aerosol optics
+      call ESMF_InfoGet(info, key='air_pressure_for_aerosol_optics', value=field_name, _RC)
+      if (field_name /= '') then
+         call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+         ptr3d = PLE
+      end if
+
+      ! allocate memory for TOTAL aerosol ext, ssa and asy at all solar bands
+      ! (zero by default, in case aero provider cant provide some of them)
+      allocate(AEROSOL_EXT(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_SSA(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_ASY(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+
+      ! compute aerosol optics at all solar bands
+      SOLAR_BANDS: do band = 1, NUM_BANDS
+
+         call ESMF_InfoSet(info, key='band_for_aerosol_optics', value=(OFFSET + band), _RC)
+
+         ! execute the aero provider's optics method
+         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=user_status, rc=status)
+         _VERIFY(user_status)
+         _VERIFY(status)
+
+         ! EXT from AERO_PROVIDER
+         call ESMF_InfoGet(info, key='extinction_in_air_due_to_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_EXT(:, :, :, band) = max(ptr3d, 0.0)
+         end if
+
+         ! SSA from AERO_PROVIDER (actually EXT * SSA)
+         call ESMF_InfoGet(info, key='single_scattering_albedo_of_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_SSA(:, :, :, band) = min(max(ptr3d, 0.0), SSA_MAX)
+         end if
+
+         ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
+         call ESMF_InfoGet(info, key='asymmetry_parameter_of_ambient_aerosol', value=field_name, _RC)
+         if (field_name /= '') then
+            call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
+            if (associated(ptr3d)) AEROSOL_ASY(:, :, :, band) = min(max(ptr3d, 0.0), ASY_MAX)
+         end if
+
+      end do SOLAR_BANDS
+
+      _RETURN(_SUCCESS)
+   end subroutine compute_provider_aerosol_optics
 
    ! ---------------------------------------------------------------------------
    ! Compute gas optical properties for one block of columns.
@@ -6748,7 +6709,6 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
 
       ! REFRESH super-layer diagnostics (before delta-scaling TAUs).
       ! ** Calculated from subcolumn ensemble, so stochastic **
-      ! -------------------------------------------------------
       call compute_sprlyr_diags_predelta( &
            colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
            include_aerosols, &
@@ -6787,7 +6747,6 @@ TEST_(optical_props%alloc_nstr(nmom, ncols_block, LM))
 #ifdef SOLAR_RADVAL
       ! REFRESH super-layer diagnostics (after delta-scaling TAUs).
       ! ** Calculated from subcolumn ensemble, so stochastic **
-      ! -------------------------------------------------------
       call compute_sprlyr_diags_postdelta( &
            colS, ncols_block, LM, ngpt, nbnd, LCLDLM, LCLDMH, &
            include_aerosols, &

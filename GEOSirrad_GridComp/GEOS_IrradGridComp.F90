@@ -952,21 +952,16 @@ contains
             OFFSET = NB_CHOU_SORAD
          end if
 
-         ! Allocate per-band aerosol arrays
-         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
-
-         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
-         NA = 0
-         TAUA = 0.
-         SSAA = 0.
-         ASYA = 0.
-
-         ! If we have aerosols, accumulate the arrays
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &
-              NA, TAUA, SSAA, ASYA, aerosol_optics, _RC)
+              TAUA, SSAA, ASYA, aerosol_optics, _RC)
+         NA = merge(3, 0, aerosol_optics)
+         if (.not. aerosol_optics) then
+            ! Chou and RRTMG consume these unconditionally; zeros with NA == 0 mean no aerosol
+            allocate(TAUA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+            allocate(SSAA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+            allocate(ASYA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+         end if
 
          call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
@@ -1520,7 +1515,6 @@ contains
                   ! condensate inhomogeneous?
                   ! see RadiationGC initialization
                   cond_inhomo = condensate_inhomogeneous()
-                  _HERE, "cond_inhomo = ", cond_inhomo
                   ! Compute decorrelation length scales [m]
                   allocate(adl(ncol), _STAT)
                   call correlation_length_cloud_fraction(ncol, ncol, DOY, reshape(lats,[ncol]), adl)
@@ -2836,27 +2830,27 @@ contains
 
    ! compute_provider_aerosol_optics: reports back (via aerosol_optics) whether
    !   the AERO provider implements the aerosol_optics method; if so, also
-   !   queries it (via its Info attributes) for RH/PLE, runs its
-   !   "run_aerosol_optics" method once per IR band, and accumulates the
-   !   resulting extinction/SSA/asymmetry into TAUA/SSAA/ASYA. A no-op
-   !   (NA/TAUA/SSAA/ASYA left untouched) if the provider does not implement it.
-   subroutine compute_provider_aerosol_optics(AERO, & ! input/output
-        RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &      ! input
-        NA, TAUA, SSAA, ASYA, &                       ! input/output
-        aerosol_optics, rc)                           ! output
+   !   hands it RH/PLE (via its Info attributes), runs its
+   !   "run_aerosol_optics" method once per IR band, and stores the
+   !   resulting extinction/SSA/asymmetry into the freshly allocated
+   !   AEROSOL_EXT/SSA/ASY. A no-op (arrays left unallocated) if the
+   !   provider does not implement it.
+   subroutine compute_provider_aerosol_optics( &
+        AERO, &                                   ! input/output
+        RH, PLE, IM, JM, LM, NUM_BANDS, OFFSET, & ! input
+        AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY, &  ! output
+        aerosol_optics, rc)                       ! output
       type(ESMF_State), intent(inout) :: AERO
       real, dimension(:, :, :), intent(in) :: RH, PLE
-      integer, intent(in) :: IM, JM, LM, NB_IRRAD, OFFSET
-      integer, intent(inout) :: NA
-      real, dimension(:, :, :, :), intent(inout) :: TAUA, SSAA, ASYA
+      integer, intent(in) :: IM, JM, LM, NUM_BANDS, OFFSET
+      real, allocatable, dimension(:, :, :, :), intent(out) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
       logical, intent(out) :: aerosol_optics
       integer, optional, intent(out) :: rc
 
-      integer :: status, band
+      integer :: status, user_status, band
       type(ESMF_Info) :: info
       character(len=ESMF_MAXSTR) :: field_name
       real, pointer, dimension(:, :, :) :: ptr3d
-      real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
       real, parameter :: SSA_MAX = 0.999999
       real, parameter :: ASY_MAX = 0.999
 
@@ -2878,18 +2872,21 @@ contains
          ptr3d = PLE
       end if
 
-      ! allocate memory for total aerosol ext, ssa and asy at all solar bands
-      allocate(AEROSOL_EXT(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
-      allocate(AEROSOL_SSA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
-      allocate(AEROSOL_ASY(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+      ! allocate memory for TOTAL aerosol ext, ssa and asy at all IR bands
+      ! (zero by default, in case aero provider cant provide some of them)
+      allocate(AEROSOL_EXT(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_SSA(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_ASY(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
 
-      ! compute aerosol optics at all solar bands
-      IR_BANDS: do band = 1, NB_IRRAD
+      ! compute aerosol optics at all IR bands
+      IR_BANDS: do band = 1, NUM_BANDS
 
          call ESMF_InfoSet(info, key='band_for_aerosol_optics', value=(OFFSET + band), _RC)
 
          ! execute the aero provider's optics method
-         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
+         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=user_status, rc=status)
+         _VERIFY(user_status)
+         _VERIFY(status)
 
          ! EXT from AERO_PROVIDER
          call ESMF_InfoGet(info, key='extinction_in_air_due_to_ambient_aerosol', value=field_name, _RC)
@@ -2898,14 +2895,14 @@ contains
             if (associated(ptr3d)) AEROSOL_EXT(:, :, :, band) = max(ptr3d, 0.0)
          end if
 
-         ! SSA from AERO_PROVIDER
+         ! SSA from AERO_PROVIDER (actually EXT * SSA)
          call ESMF_InfoGet(info, key='single_scattering_albedo_of_ambient_aerosol', value=field_name, _RC)
          if (field_name /= '') then
             call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
             if (associated(ptr3d)) AEROSOL_SSA(:, :, :, band) = min(max(ptr3d, 0.0), SSA_MAX)
          end if
 
-         ! ASY from AERO_PROVIDER
+         ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
          call ESMF_InfoGet(info, key='asymmetry_parameter_of_ambient_aerosol', value=field_name, _RC)
          if (field_name /= '') then
             call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
@@ -2913,12 +2910,6 @@ contains
          end if
 
       end do IR_BANDS
-
-      NA = 3
-
-      TAUA = AEROSOL_EXT
-      SSAA = AEROSOL_SSA
-      ASYA = AEROSOL_ASY
 
       _RETURN(_SUCCESS)
    end subroutine compute_provider_aerosol_optics

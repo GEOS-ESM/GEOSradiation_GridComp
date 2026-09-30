@@ -53,7 +53,7 @@ mapl:
       RR:
         units: m
         vertical_dim_spec: "c"
-        standard_name: "effective_radius_of_rain_water_particles"
+        standard_name: "effective_radius_of_rain_particles"
       RS:
         units: m
         vertical_dim_spec: "c"

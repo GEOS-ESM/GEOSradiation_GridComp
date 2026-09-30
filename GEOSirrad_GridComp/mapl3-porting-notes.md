@@ -994,3 +994,28 @@ into the `IRRAD_import.nc` checkpoint, so it no longer matched the
 baseline. Both provider yamls now use the dictionary name. With that,
 `irrad-sa` and `solar-sa` pass the exact `nccmp` comparison and the
 profile shows `LW_DRIVER` running on the first step.
+
+## `compute_provider_aerosol_optics` converged with Solar's (2026-09-30)
+Solar's AERO-provider block was hoisted into a routine of the same
+name (Solar porting notes, step 19) and the two were then made
+textually identical apart from "IR"/"solar" wording and the loop
+label. Changes on the IRRAD side, all zero-diff on `irrad-sa`:
+- `TAUA/SSAA/ASYA` are now the routine's `allocatable, intent(out)`
+  outputs (dummies renamed `AEROSOL_EXT/SSA/ASY`), allocated zeroed
+  inside and filled directly; the local `AEROSOL_*` copies and the
+  final copy-back are gone. The routine leaves them unallocated when
+  the provider lacks optics, so `LW_Driver` allocates them zeroed itself
+  `if (.not. aerosol_optics)` - Chou `IRRAD` and RRTMG read them
+  unconditionally.
+- `NA` removed from the signature; `LW_Driver` sets `NA = merge(3, 0,
+  aerosol_optics)` after the call. Chou-IRRAD's `do_aerosol = na > 0`
+  is the only consumer.
+- `ESMF_MethodExecute(AERO, label='run_aerosol_optics', userRC=
+  user_status, rc=status)` with both `_VERIFY`d (was `_RC` only, which
+  misses failures inside the provider's method).
+- Band-count dummy renamed `NUM_BANDS`; header comment fixed (RH/PLE
+  are inputs, not queried); SSA/ASY comments note they are
+  un-normalized (`EXT*SSA`, `EXT*SSA*ASY`) - which is why the RRTMG
+  path uses `TAUA - SSAA` for absorption.
+- The old "accumulate the arrays" comments were misleading; the code
+  has always been plain per-band assignment (the provider sums species).
