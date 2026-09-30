@@ -1123,3 +1123,14 @@ port - referenced throughout below instead of repeated).
     been trashed from the regression `ExtData`; restored from
     `~/.local/share/Trash` - check there first if regression data
     disappears.
+
+20. **TODO - Move `compute_provider_aerosol_optics` to a shared location.**
+    Solar's and IRRAD's copies are now identical (step 19), so the
+    routine should live once in `GEOS_RadiationShared/rad_utils.F90`
+    (both GridComps already `use rad_utils` and link
+    `GEOS_RadiationShared`, which depends on MAPL). Plan: add it to
+    `rad_utils` with a generic `BANDS` loop label and band-neutral
+    comments, export it via `public ::`, add it to both `use rad_utils,
+    only:` lists, and delete the two module-scope copies (Solar: after
+    `solar_internal_default`; IRRAD: after `compute_lw_aer_optics`).
+    Deferred so the port commits stay Solar/IRRAD-local.

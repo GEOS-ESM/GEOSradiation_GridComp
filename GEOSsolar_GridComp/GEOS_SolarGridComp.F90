@@ -486,8 +486,7 @@ contains
       end if
 
       ! Decide if should make OBIO exports
-      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, rc=status)
-      _VERIFY(status)
+      call MAPL_GridCompGetResource(gc, "USE_OCEANOBIOGEOCHEM", DO_OBIO, default=0, _RC)
 
       SOLAR_TO_OBIO = (DO_OBIO/=0)
 
@@ -1602,7 +1601,7 @@ contains
          real, allocatable, dimension(:) :: ILWT
 
          IAm = trim(comp_name) // "Soradcore"
-         call MAPL_GridCompTimerStart(gc, "-MISC")
+         call MAPL_GridCompTimerStart(gc, "-MISC", _RC)
 
          ! Get the average insolation for the next alarm "REFRESH" interval
          ! @ In standard (legacy) mode, this longer REFRESH interval forms the basis of
@@ -1644,11 +1643,11 @@ contains
             end do
          end do
 
-         call MAPL_GridCompTimerStop(gc, "-MISC")
+         call MAPL_GridCompTimerStop(gc, "-MISC", _RC)
 
          !  Load balancing by packing the lit points and sharing work with night regions
 
-         call MAPL_GridCompTimerStart(gc, "-BALANCE")
+         call MAPL_GridCompTimerStart(gc, "-BALANCE", _RC)
 
          !  Identify lit soundings with the daytime mask
 
@@ -1676,7 +1675,7 @@ contains
          call ESMF_VMGetCurrent(VM, _RC)
          call ESMF_VMGet(VM, mpiCommunicator=COMM, _RC)
 
-         call MAPL_GridCompTimerStart(gc, "--CREATE")
+         call MAPL_GridCompTimerStart(gc, "--CREATE", _RC)
 
          if (LoadBalance) then
             call MAPL_BalanceCreate( &
@@ -1687,7 +1686,7 @@ contains
             NumMax = NumLit
          end if
 
-         call MAPL_GridCompTimerStop(gc, "--CREATE")
+         call MAPL_GridCompTimerStop(gc, "--CREATE", _RC)
 
          !  The number of Input and Output/InOut variables to the load balancing.
          !    The Input number is five more than the number of IMPORTS because the
@@ -1947,10 +1946,10 @@ contains
 
          ! Load balance the Inputs
 
-         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE", _RC)
          if (LoadBalance) call MAPL_BalanceWork(BufInp, NumMax, Direction=MAPL_Distribute, Handle=SolarBalanceHandle, &
               _RC)
-         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE", _RC)
 
          ! @@@@@@@@@@@@@@@@@@@@@@
          ! @@@ InOuts/Outputs @@@
@@ -2514,21 +2513,21 @@ contains
          end do INT_VARS_2
 
          ! Load balance the InOuts for Input
-         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE", _RC)
          if (size(BufInOut) > 0) then
             if (LoadBalance) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Distribute, Handle=&
                  SolarBalanceHandle, _RC)
          end if
-         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE")
+         call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE", _RC)
 
          ! number of columns after load balancing
          NCOL = size(Q, 1)
 
-         call MAPL_GridCompTimerStop(gc, "-BALANCE")
+         call MAPL_GridCompTimerStop(gc, "-BALANCE", _RC)
 
          ! Do shortwave calculations on a list of soundings
 
-         call MAPL_GridCompTimerStart(gc, "-MISC")
+         call MAPL_GridCompTimerStart(gc, "-MISC", _RC)
 
          ! report cosine solar zenith angle actually used by REFRESH
          COSZSW = ZT
@@ -2616,7 +2615,7 @@ contains
             asya = BUFIMP_AEROSOL_ASY
          end if
 
-         call MAPL_GridCompTimerStop(gc, "-MISC")
+         call MAPL_GridCompTimerStop(gc, "-MISC", _RC)
 
          ! Call the requested Shortwave scheme
 
@@ -3172,7 +3171,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          else if (USE_RRTMG) then
 
             ! regular RRTMG
-            call MAPL_GridCompTimerStart(gc, "-RRTMG")
+            call MAPL_GridCompTimerStart(gc, "-RRTMG", _RC)
 
             ! reversed (flipped) vertical dimension arrays and other RRTMG arrays
 
@@ -3239,7 +3238,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             ! Flip in vertical, Convert units, and interpolate T, etc.
             ! RRTMG convention is that vertical indices increase from bot -> top
 
-            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP", _RC)
 
             DPR(:, 1:LM) = (PLE(:, 2:LM + 1) - PLE(:, 1:LM))
 
@@ -3357,14 +3356,14 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             SSAAER(:, 1:LM, :) = ssaa(:, LM:1:-1, :)
             ASMAER(:, 1:LM, :) = asya(:, LM:1:-1, :)
 
-            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP")
-            call MAPL_GridCompTimerStart(gc, "--RRTMG_INIT")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP", _RC)
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_INIT", _RC)
 
             ! initialize RRTMG SW
             call rrtmg_sw_ini
 
-            call MAPL_GridCompTimerStop(gc, "--RRTMG_INIT")
-            call MAPL_GridCompTimerStart(gc, "--RRTMG_RUN")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_INIT", _RC)
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_RUN", _RC)
 
             ! partition size for columns (profiles) used to improve efficiency
             call MAPL_GridCompGetResource(gc, 'RRTMGSW_PARTITION_SIZE', RPART, default=0, _RC)
@@ -3524,8 +3523,8 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                  BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
                  _RC)
 
-            call MAPL_GridCompTimerStop(gc, "--RRTMG_RUN")
-            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_RUN", _RC)
+            call MAPL_GridCompTimerStart(gc, "--RRTMG_FLIP", _RC)
 
             ! unflip the outputs in the vertical
 
@@ -3534,7 +3533,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             SWUFLXCR(:, 1:LM + 1) = SWUFLXC(:, LM + 1:1:-1)
             SWDFLXCR(:, 1:LM + 1) = SWDFLXC(:, LM + 1:1:-1)
 
-            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP")
+            call MAPL_GridCompTimerStop(gc, "--RRTMG_FLIP", _RC)
 
             ! required outputs
 
@@ -3624,7 +3623,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             deallocate(SWUFLXCR, _STAT)
             deallocate(SWDFLXCR, _STAT)
 
-            call MAPL_GridCompTimerStop(gc, "-RRTMG")
+            call MAPL_GridCompTimerStop(gc, "-RRTMG", _RC)
 
          else
 
@@ -3642,16 +3641,16 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
 
          ! Complete load balancing by retrieving work done remotely
 
-         call MAPL_GridCompTimerStart(gc, "-BALANCE")
+         call MAPL_GridCompTimerStart(gc, "-BALANCE", _RC)
 
-         call MAPL_GridCompTimerStart(gc, "--RETRIEVE")
+         call MAPL_GridCompTimerStart(gc, "--RETRIEVE", _RC)
          if (LoadBalance) then
             if (size(BufOut) > 0) call MAPL_BalanceWork(BufOut, NumMax, Direction=MAPL_Retrieve, Handle=&
                  SolarBalanceHandle, _RC)
             if (size(BufInOut) > 0) call MAPL_BalanceWork(BufInOut, NumMax, Direction=MAPL_Retrieve, Handle=&
                  SolarBalanceHandle, _RC)
          end if
-         call MAPL_GridCompTimerStop(gc, "--RETRIEVE")
+         call MAPL_GridCompTimerStop(gc, "--RETRIEVE", _RC)
 
          ! Unpack the results. Fills "masked" (night) locations with default value from internal state
          ! resulting internals are then contiguous versions
@@ -3721,11 +3720,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(SlicesInt, NamesInt, _STAT)
          deallocate(IntInOut, grd_dim, ungrd_dim, _STAT)
          deallocate(BufInp, BufInOut, BufOut, _STAT)
-         call MAPL_GridCompTimerStart(gc, "--DESTROY")
+         call MAPL_GridCompTimerStart(gc, "--DESTROY", _RC)
          if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, _RC)
-         call MAPL_GridCompTimerStop(gc, "--DESTROY")
+         call MAPL_GridCompTimerStop(gc, "--DESTROY", _RC)
 
-         call MAPL_GridCompTimerStop(gc, "-BALANCE")
+         call MAPL_GridCompTimerStop(gc, "-BALANCE", _RC)
 
          _RETURN(ESMF_SUCCESS)
 
@@ -6857,14 +6856,14 @@ TEST_(aer_props%increment(optical_props))
 
       ! Begin
 
-      call MAPL_GridCompTimerStart(gc, "-MISC")
+      call MAPL_GridCompTimerStart(gc, "-MISC", _RC)
 
       IRUN = size(TA, 1)
       LN = size(TA, 2)
 
-      call MAPL_GridCompTimerStop(gc, "-MISC")
+      call MAPL_GridCompTimerStop(gc, "-MISC", _RC)
 
-      call MAPL_GridCompTimerStart(gc, "-SORAD")
+      call MAPL_GridCompTimerStart(gc, "-SORAD", _RC)
 
       call MAPL_GridCompTimerStart(gc, "--SORAD_RUN", _RC)
       call SORAD(IRUN, LN, NB_CHOU, COSZ, PLhPa, TA, WA, OA, CO2, &
@@ -6877,7 +6876,7 @@ TEST_(aer_props%increment(optical_props))
            do_drfband, DRBAND, DFBAND)
       call MAPL_GridCompTimerStop(gc, "--SORAD_RUN", _RC)
 
-      call MAPL_GridCompTimerStop(gc, "-SORAD")
+      call MAPL_GridCompTimerStop(gc, "-SORAD", _RC)
 
       _RETURN(ESMF_SUCCESS)
 

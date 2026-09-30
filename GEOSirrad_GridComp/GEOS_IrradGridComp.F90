@@ -2777,13 +2777,11 @@ contains
       use mo_rte_kind, only: wp
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
       integer, intent(in) :: colS, colE
       real, dimension(:, :, :), intent(in) :: TAUA_3d, SSAA_3d, ASYA_3d
       class(ty_optical_props_arry), intent(inout) :: aer_props
       integer, optional, intent(out) :: rc
-
-      integer :: status
 
       select type (aer_props)
       class is (ty_optical_props_2str)
@@ -2820,7 +2818,6 @@ contains
          aer_props%g = max(min(aer_props%g, 1._wp), -1._wp)
 
       class default
-         status = 1
          TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
       end select
 
@@ -2943,7 +2940,7 @@ contains
       use mo_rng_mt19937, only: ty_rng_mt
 #endif
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE, ncols_block, LM, ngpt
       logical, intent(in) :: gen_mro, cond_inhomo
@@ -2964,7 +2961,6 @@ contains
       logical, dimension(:, :, :), intent(out) :: cld_mask
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
       integer :: isub, icol, ilay, igpt, i, j
       integer :: seeds(3)
@@ -3033,7 +3029,6 @@ contains
          error_msg = sampled_mask_max_ran(urand(:, :, 1:ncols_block), cf_wp(colS:colE, :), cld_mask)
          TEST_(error_msg)
       case ("EXP_RAN_OVERLAP")
-         status = 1
          TEST_('EXP_RAN_OVERLAP not implemented yet')
       case ("GEN_MAX_RAN_OVERLAP")
          error_msg = sampled_urand_gen_max_ran(alpha, &
@@ -3070,7 +3065,6 @@ contains
             end do
          end do
       case default
-         status = 1
          TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
       end select
 
@@ -3101,7 +3095,7 @@ contains
       use mo_optical_props, only: ty_optical_props_arry
       use mo_source_functions, only: ty_source_func_lw
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE
       type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
@@ -3112,7 +3106,6 @@ contains
       type(ty_source_func_lw), intent(inout) :: sources
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
 
       ! get gas optical properties and Planck source functions
@@ -3154,7 +3147,7 @@ contains
       use mo_fluxes_byband, only: ty_fluxes_byband
       use mo_rte_lw, only: rte_lw
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE, ncols_block, LM, nmom
       logical, intent(in) :: top_at_1, u2s
@@ -3177,7 +3170,6 @@ contains
       real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
       type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
       type(ty_fluxes_byband) :: fluxes_byband_allnoa, fluxes_byband_allsky
@@ -3363,7 +3355,7 @@ contains
       use mo_source_functions, only: ty_source_func_lw
       use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga
       integer, intent(in) :: IM, IM_World, iBeg, jBeg
