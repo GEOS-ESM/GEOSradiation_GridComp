@@ -136,18 +136,46 @@ spelled out below; everything else is "do what Solar did".
    shapes SatSim has (2D, 2D+7, 3D). `MAPL_DoNotDeferExport` has no
    MAPL3 counterpart - check whether it is still needed.
 
-5. **Private state** - `SatSim_State`/`SatSim_Wrap` +
-   `ESMF_UserCompSet/GetInternalState` -> `_SET_NAMED_PRIVATE_STATE` /
-   `_GET_NAMED_PRIVATE_STATE` (setter and both getters together). The
-   state only holds the mask table, so it could instead be re-read from
-   HConfig in `Run` and the private state dropped.
+5. **Private state** DONE 2026-10-01.
+   - Kept the private state (the mask table is parsed once in
+     `SetServices`; re-reading HConfig in `Run` would duplicate the
+     parse for no gain) but dropped the hand-rolled `SatSim_Wrap`
+     type - `_SET/_GET_NAMED_PRIVATE_STATE` declare their own wrapper.
+   - Added `character(*), parameter :: PRIVATE_STATE = "SatSim_state"`
+     at module scope (Solar's `PRIVATE_STATE` pattern).
+   - `SetServices`: `allocate(self)` + `wrap%PTR => self` ->
+     `_SET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE)`
+     immediately followed by `_GET_NAMED_PRIVATE_STATE(..., self)`;
+     the trailing `ESMF_UserCompSetInternalState` is gone (the macro
+     allocates and attaches in one shot, so the set has to move to the
+     top where `self` is first used).
+   - `SIM_DRIVER`: `ESMF_UserCompGetInternalState` + `self => wrap%PTR`
+     -> `_GET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE,
+     self)`.
+   - Gave `nmask_vars` a `= 0` default: the macro-allocated state is
+     no longer zeroed by the old `else self%nmask_vars = 0` path only.
+   - The macros come from `MAPL_private_state.h`, already pulled in via
+     `MAPL_Generic.h` -> `MAPL.h`; no new include needed.
 
-6. **Resources** - 9 `MAPL_GetResource(MAPL, ..., LABEL="X:")` ->
-   `MAPL_GridCompGetResource(gc, "X", ..., default=..., _RC)`. Derive
-   `imsize` for the `SATSIM_NCOLUMNS` default from the grid
-   (`MAPL_GridCompGet` / `ESMF_GridGet` global dims) instead of
-   string-parsing `AGCM_GRIDNAME`. `USE_SATSIM*` integer flags: keep as
-   integers with `default=0`, or convert to logicals.
+6. **Resources** DONE 2026-10-01.
+   - All 9 `MAPL_GetResource(MAPL, x, LABEL="X:")` ->
+     `MAPL_GridCompGetResource(GC, "X", x, default=..., _RC)` (note:
+     no trailing colon on the MAPL3 key). Kept `USE_SATSIM*` as
+     integers with `default=0` - they are summed
+     (`use_satsim + use_satsim_isccp > 0`) in ~15 places, so converting
+     to logicals would mean rewriting all of those.
+   - Dropped `AGCM_GRIDNAME` entirely. `imsize` (only used to pick the
+     `SATSIM_NCOLUMNS` default) now comes from the grid:
+     `MAPL_GridCompGet(GC, grid=esmfgrid)` ->
+     `MAPL_GridGetGlobalCellCountPerDim`, then
+     `imsize = 4*IM_World` if `JM_World == 6*IM_World` else `IM_World`.
+     That is the same cubed-sphere rule MAPL3's own Orbit GridComp uses
+     (`MAPL_OrbGridCompMod.F90` L338-345) and reproduces the MAPL2
+     `dateline == 'CF'` branch without string parsing. Removed the
+     `GRIDNAME`/`imchar`/`dateline`/`nn` locals.
+   - Removed the `MAPL_GetObjectFromGC(GC, MAPL, ...)` call and the
+     `type(MAPL_MetaComp), pointer :: MAPL` local from `SIM_DRIVER`;
+     the two in `SetServices`/`Run` stay until steps 4 and 7.
 
 7. **`Run` plumbing** - drop `MAPL_MetaComp` / `MAPL_GetObjectFromGC` /
    `MAPL_Get`: `IM/JM/LM` via `MAPL_GridCompGet`/grid; delete the unused

@@ -24,24 +24,19 @@ module GEOS_SatsimGridCompMod
 
    public SetServices
 
+   character(*), parameter :: PRIVATE_STATE = "SatSim_state"
+
    ! Private State
    type SatSim_State
       private
 
-      integer :: nmask_vars ! number of masked variables
+      integer :: nmask_vars = 0 ! number of masked variables
       character(len=ESMF_MAXSTR), pointer :: export_name(:) => null()
       character(len=ESMF_MAXSTR), pointer :: mask_name(:) => null()
       character(len=ESMF_MAXSTR), pointer :: newvar_name(:) => null()
       logical, pointer :: newvar(:) => null()
 
    end type SatSim_State
-
-   ! Hook for ESMF
-   ! -------------
-
-   type SatSim_Wrap
-      type(SatSim_State), pointer :: PTR => null()
-   end type SatSim_Wrap
 
 contains
 
@@ -61,7 +56,6 @@ contains
       !   Local derived type aliases
       !   --------------------------
       type(SatSim_State), pointer :: self => null() ! internal, that is
-      type(SatSim_Wrap) :: wrap
 
       integer :: nLines, nCols, m, vindex
       character(len=ESMF_MAXSTR) :: tmpname
@@ -74,10 +68,10 @@ contains
       type(MAPL_VarSpec), pointer :: ExportSpec(:) => null()
       logical :: found
 
-      !   Wrap internal state for storing in GC; rename legacyState
-      !   -------------------------------------
-      allocate(self, _STAT)
-      wrap%PTR => self
+      !   Attach the internal state to the GC as a named private state
+      !   ------------------------------------------------------------
+      _SET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE)
+      _GET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE, self)
 
       ! Set the Run entry point
       ! -----------------------
@@ -183,11 +177,6 @@ contains
          end if
          call MAPL_DoNotDeferExport(GC, self%export_name, _RC)
       end do
-
-      !   Store internal state in GC
-      !   --------------------------
-      call ESMF_UserCompSetInternalState(GC, 'SatSim_State', wrap, status)
-      _VERIFY(status)
 
       ! Set generic init and final methods
       ! ----------------------------------
@@ -439,7 +428,6 @@ contains
          integer :: BEGSEG, ENDSEG
 
          type(SatSim_State), pointer :: self => null()
-         type(SatSim_Wrap) :: wrap
          integer :: mapl_dims, vindex
          integer, pointer :: ungridded_dims(:)
          type(MAPL_VarSpec), pointer :: ExportSpec(:)
@@ -447,47 +435,45 @@ contains
          real, pointer, dimension(:, :) :: ptr_mask
          real, pointer, dimension(:, :, :) :: ptr3d, ptr3d_new
          type(ESMF_FieldBundle) :: bundle
-         type(MAPL_MetaComp), pointer :: MAPL
 
          integer :: use_satsim, use_satsim_isccp, use_satsim_modis, use_satsim_lidar, use_satsim_radar, use_satsim_misr
          integer :: ncolumns
 
-         character(len=ESMF_MAXSTR) :: GRIDNAME
-         character(len=5) :: imchar
-         character(len=2) :: dateline
-         integer :: imsize, nn
+         type(ESMF_Grid) :: esmfgrid
+         integer, allocatable :: Gdims(:)
+         integer :: IM_World, JM_World, imsize
 
          DEBUG_GC = .false.
 
-         ! Get my MAPL_Generic state
-         !--------------------------
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM", use_satsim, default=0, _RC)
 
-         call MAPL_GetObjectFromGC(GC, MAPL, _RC)
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM_ISCCP", use_satsim_isccp, default=0, _RC)
 
-         call MAPL_GetResource(MAPL, use_satsim, LABEL="USE_SATSIM:", default=0, _RC)
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM_MODIS", use_satsim_modis, default=0, _RC)
 
-         call MAPL_GetResource(MAPL, use_satsim_isccp, LABEL="USE_SATSIM_ISCCP:", default=0, _RC)
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM_RADAR", use_satsim_radar, default=0, _RC)
 
-         call MAPL_GetResource(MAPL, use_satsim_modis, LABEL="USE_SATSIM_MODIS:", default=0, _RC)
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM_LIDAR", use_satsim_lidar, default=0, _RC)
 
-         call MAPL_GetResource(MAPL, use_satsim_radar, LABEL="USE_SATSIM_RADAR:", default=0, _RC)
+         call MAPL_GridCompGetResource(GC, "USE_SATSIM_MISR", use_satsim_misr, default=0, _RC)
 
-         call MAPL_GetResource(MAPL, use_satsim_lidar, LABEL="USE_SATSIM_LIDAR:", default=0, _RC)
-
-         call MAPL_GetResource(MAPL, use_satsim_misr, LABEL="USE_SATSIM_MISR:", default=0, _RC)
-
-         call MAPL_GetResource(MAPL, GRIDNAME, 'AGCM_GRIDNAME:', _RC)
-         GRIDNAME = adjustl(GRIDNAME)
-         nn = len_trim(GRIDNAME)
-         dateline = GRIDNAME(nn - 1:nn)
-         imchar = GRIDNAME(3:index(GRIDNAME, 'x') - 1)
-         read(imchar, *) imsize
-         if (dateline == 'CF') imsize = imsize * 4
+         ! imsize is the equivalent number of longitudes, used only to pick the
+         ! default subcolumn count. MAPL2 string-parsed AGCM_GRIDNAME for this;
+         ! take it from the grid instead (cubed-sphere has JM_World = 6*IM_World).
+         call MAPL_GridCompGet(GC, grid=esmfgrid, _RC)
+         call MAPL_GridGetGlobalCellCountPerDim(esmfgrid, globalCellCountPerDim=Gdims, _RC)
+         IM_World = Gdims(1)
+         JM_World = Gdims(2)
+         if (JM_World == 6 * IM_World) then
+            imsize = 4 * IM_World
+         else
+            imsize = IM_World
+         end if
          associate(default_Ncolumns => min(30, max(1, int(4 * 5760 * 4 / imsize))))
-            call MAPL_GetResource(MAPL, ncolumns, LABEL="SATSIM_NCOLUMNS:", default=default_Ncolumns, _RC)
+            call MAPL_GridCompGetResource(GC, "SATSIM_NCOLUMNS", ncolumns, default=default_Ncolumns, _RC)
          end associate
 
-         call MAPL_GetResource(MAPL, Npoints_it, LABEL="SATSIM_POINTS_PER_ITERATION:", default=-999, _RC)
+         call MAPL_GridCompGetResource(GC, "SATSIM_POINTS_PER_ITERATION", Npoints_it, default=-999, _RC)
 
          allocate(frac_out(IM * JM, ncolumns, LM), _STAT)
          allocate(lidar_beta_tot(IM * JM, ncolumns, LM), _STAT)
@@ -1960,9 +1946,7 @@ contains
             MISRFQ18000 = reshape(fq_MISR(:, :, 16), (/IM, JM, 7 /))
          end if
 
-         call ESMF_UserCompGetInternalState(GC, 'SatSim_State', wrap, status)
-         _VERIFY(status)
-         self => wrap%PTR
+         _GET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE, self)
 
          if (self%nmask_vars > 0) then
             ! get orb bundle
