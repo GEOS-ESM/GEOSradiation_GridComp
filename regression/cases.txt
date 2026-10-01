@@ -1,1 +1,2 @@
 irrad-sa
+solar-sa

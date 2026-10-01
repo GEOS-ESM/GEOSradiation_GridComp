@@ -403,19 +403,53 @@ contains
       integer :: status
       integer :: irrad_dt
       real :: run_dt
-      type(ESMF_TimeInterval) :: lw_alarm_interval
+      type(ESMF_TimeInterval) :: lw_alarm_interval, time_step
+      type(ESMF_Time) :: current_time, ring_time
+      type(ESMF_Calendar) :: cal
+      integer :: yy, mm, dd, reference_date, reference_time
+      logical :: run_at_interval_start
       type(ESMF_Alarm) :: lw_alarm
       type(ESMF_HConfig) :: hconfig
       type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
 
       call MAPL_ClockGet(clock, dt=run_dt, _RC)
       call MAPL_GridCompGetResource(gc, "IRRAD_DT", irrad_dt, default=nint(run_dt), _RC)
+      ! same checks as MAPL2's handle_clock_and_main_alarm; a zero interval would hang the ring_time loop below
+      _ASSERT(irrad_dt > 0, "IRRAD_DT must be a positive number of seconds")
+      _ASSERT(mod(irrad_dt, nint(run_dt)) == 0, "IRRAD_DT must be a multiple of the clock time step")
       call ESMF_TimeIntervalSet(lw_alarm_interval, s=irrad_dt, _RC)
+
+      ! LW alarm set up as in MAPL2's handle_clock_and_main_alarm (MAPL_Generic.F90),
+      ! which MAPL3 no longer provides for components
+      call ESMF_ClockGet(clock, currTime=current_time, timeStep=time_step, calendar=cal, _RC)
+      call ESMF_TimeGet(current_time, yy=yy, mm=mm, dd=dd, _RC)
+      call MAPL_GridCompGetResource(gc, "RUN_AT_INTERVAL_START", run_at_interval_start, default=.false., _RC)
+      ! alarm reference date and time default to midnight of the current day
+      call MAPL_GridCompGetResource(gc, "REFERENCE_DATE", reference_date, default=yy*10000 + mm*100 + dd, _RC)
+      call MAPL_GridCompGetResource(gc, "REFERENCE_TIME", reference_time, default=0, _RC)
+      call ESMF_TimeSet(ring_time, &
+           yy=reference_date/10000, mm=mod(reference_date, 10000)/100, dd=mod(reference_date, 100), &
+           h=reference_time/10000, m=mod(reference_time, 10000)/100, s=mod(reference_time, 100), &
+           calendar=cal, _RC)
+      if (ring_time > current_time) then
+         ring_time = ring_time - (int((ring_time - current_time)/lw_alarm_interval) + 1)*lw_alarm_interval
+      end if
+      ! back off by the clock's dt since the clock advances AFTER the run method
+      if (.not. run_at_interval_start) ring_time = ring_time - time_step
+      ! make sure that ring_time is not in the past
+      do while (ring_time < current_time)
+         ring_time = ring_time + lw_alarm_interval
+      end do
+
       lw_alarm = ESMF_AlarmCreate( &
            name="irrad_lw_alarm", &
            clock=clock, &
+           ringTime=ring_time, &
            ringInterval=lw_alarm_interval, &
-           sticky=.true., _RC)
+           sticky=.false., _RC)
+      if (ring_time == current_time) then
+         call ESMF_AlarmRingerOn(lw_alarm, _RC)
+      end if
 
       call MAPL_GridCompGet(gc, hconfig=hconfig, _RC)
       _GET_NAMED_PRIVATE_STATE(gc, ty_RRTMGP_state, PRIVATE_STATE, rrtmgp_state)
@@ -918,21 +952,16 @@ contains
             OFFSET = NB_CHOU_SORAD
          end if
 
-         ! Allocate per-band aerosol arrays
-         allocate(TAUA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(SSAA(IM, JM, LM, NB_IRRAD), _STAT)
-         allocate(ASYA(IM, JM, LM, NB_IRRAD), _STAT)
-
-         ! Zero out aerosol arrays. If NA == 0, these zeroes are then used inside IRRAD.
-         NA = 0
-         TAUA = 0.
-         SSAA = 0.
-         ASYA = 0.
-
-         ! If we have aerosols, accumulate the arrays
          call ESMF_StateGet(import, 'AERO', AERO, _RC)
          call compute_provider_aerosol_optics(AERO, RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &
-              NA, TAUA, SSAA, ASYA, aerosol_optics, _RC)
+              TAUA, SSAA, ASYA, aerosol_optics, _RC)
+         NA = merge(3, 0, aerosol_optics)
+         if (.not. aerosol_optics) then
+            ! Chou and RRTMG consume these unconditionally; zeros with NA == 0 mean no aerosol
+            allocate(TAUA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+            allocate(SSAA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+            allocate(ASYA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+         end if
 
          call MAPL_GridCompTimerStop(gc, "AEROSOLS", _RC)
 
@@ -1486,7 +1515,6 @@ contains
                   ! condensate inhomogeneous?
                   ! see RadiationGC initialization
                   cond_inhomo = condensate_inhomogeneous()
-                  _HERE, "cond_inhomo = ", cond_inhomo
                   ! Compute decorrelation length scales [m]
                   allocate(adl(ncol), _STAT)
                   call correlation_length_cloud_fraction(ncol, ncol, DOY, reshape(lats,[ncol]), adl)
@@ -2749,13 +2777,11 @@ contains
       use mo_rte_kind, only: wp
       use mo_optical_props, only: ty_optical_props_arry, ty_optical_props_2str
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
       integer, intent(in) :: colS, colE
       real, dimension(:, :, :), intent(in) :: TAUA_3d, SSAA_3d, ASYA_3d
       class(ty_optical_props_arry), intent(inout) :: aer_props
       integer, optional, intent(out) :: rc
-
-      integer :: status
 
       select type (aer_props)
       class is (ty_optical_props_2str)
@@ -2792,7 +2818,6 @@ contains
          aer_props%g = max(min(aer_props%g, 1._wp), -1._wp)
 
       class default
-         status = 1
          TEST_('compute_lw_aer_optics: aerosol optical properties hardwired 2-stream for now')
       end select
 
@@ -2802,27 +2827,27 @@ contains
 
    ! compute_provider_aerosol_optics: reports back (via aerosol_optics) whether
    !   the AERO provider implements the aerosol_optics method; if so, also
-   !   queries it (via its Info attributes) for RH/PLE, runs its
-   !   "run_aerosol_optics" method once per IR band, and accumulates the
-   !   resulting extinction/SSA/asymmetry into TAUA/SSAA/ASYA. A no-op
-   !   (NA/TAUA/SSAA/ASYA left untouched) if the provider does not implement it.
-   subroutine compute_provider_aerosol_optics(AERO, & ! input/output
-        RH, PLE, IM, JM, LM, NB_IRRAD, OFFSET, &      ! input
-        NA, TAUA, SSAA, ASYA, &                       ! input/output
-        aerosol_optics, rc)                           ! output
+   !   hands it RH/PLE (via its Info attributes), runs its
+   !   "run_aerosol_optics" method once per IR band, and stores the
+   !   resulting extinction/SSA/asymmetry into the freshly allocated
+   !   AEROSOL_EXT/SSA/ASY. A no-op (arrays left unallocated) if the
+   !   provider does not implement it.
+   subroutine compute_provider_aerosol_optics( &
+        AERO, &                                   ! input/output
+        RH, PLE, IM, JM, LM, NUM_BANDS, OFFSET, & ! input
+        AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY, &  ! output
+        aerosol_optics, rc)                       ! output
       type(ESMF_State), intent(inout) :: AERO
       real, dimension(:, :, :), intent(in) :: RH, PLE
-      integer, intent(in) :: IM, JM, LM, NB_IRRAD, OFFSET
-      integer, intent(inout) :: NA
-      real, dimension(:, :, :, :), intent(inout) :: TAUA, SSAA, ASYA
+      integer, intent(in) :: IM, JM, LM, NUM_BANDS, OFFSET
+      real, allocatable, dimension(:, :, :, :), intent(out) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
       logical, intent(out) :: aerosol_optics
       integer, optional, intent(out) :: rc
 
-      integer :: status, band
+      integer :: status, user_status, band
       type(ESMF_Info) :: info
       character(len=ESMF_MAXSTR) :: field_name
       real, pointer, dimension(:, :, :) :: ptr3d
-      real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
       real, parameter :: SSA_MAX = 0.999999
       real, parameter :: ASY_MAX = 0.999
 
@@ -2844,18 +2869,21 @@ contains
          ptr3d = PLE
       end if
 
-      ! allocate memory for total aerosol ext, ssa and asy at all solar bands
-      allocate(AEROSOL_EXT(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
-      allocate(AEROSOL_SSA(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
-      allocate(AEROSOL_ASY(IM, JM, LM, NB_IRRAD), source=0.0, _STAT)
+      ! allocate memory for TOTAL aerosol ext, ssa and asy at all IR bands
+      ! (zero by default, in case aero provider cant provide some of them)
+      allocate(AEROSOL_EXT(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_SSA(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
+      allocate(AEROSOL_ASY(IM, JM, LM, NUM_BANDS), source=0.0, _STAT)
 
-      ! compute aerosol optics at all solar bands
-      IR_BANDS: do band = 1, NB_IRRAD
+      ! compute aerosol optics at all IR bands
+      IR_BANDS: do band = 1, NUM_BANDS
 
          call ESMF_InfoSet(info, key='band_for_aerosol_optics', value=(OFFSET + band), _RC)
 
          ! execute the aero provider's optics method
-         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
+         call ESMF_MethodExecute(AERO, label="run_aerosol_optics", userRC=user_status, rc=status)
+         _VERIFY(user_status)
+         _VERIFY(status)
 
          ! EXT from AERO_PROVIDER
          call ESMF_InfoGet(info, key='extinction_in_air_due_to_ambient_aerosol', value=field_name, _RC)
@@ -2864,14 +2892,14 @@ contains
             if (associated(ptr3d)) AEROSOL_EXT(:, :, :, band) = max(ptr3d, 0.0)
          end if
 
-         ! SSA from AERO_PROVIDER
+         ! SSA from AERO_PROVIDER (actually EXT * SSA)
          call ESMF_InfoGet(info, key='single_scattering_albedo_of_ambient_aerosol', value=field_name, _RC)
          if (field_name /= '') then
             call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
             if (associated(ptr3d)) AEROSOL_SSA(:, :, :, band) = min(max(ptr3d, 0.0), SSA_MAX)
          end if
 
-         ! ASY from AERO_PROVIDER
+         ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
          call ESMF_InfoGet(info, key='asymmetry_parameter_of_ambient_aerosol', value=field_name, _RC)
          if (field_name /= '') then
             call MAPL_StateGetPointer(AERO, ptr3d, trim(field_name), _RC)
@@ -2879,12 +2907,6 @@ contains
          end if
 
       end do IR_BANDS
-
-      NA = 3
-
-      TAUA = AEROSOL_EXT
-      SSAA = AEROSOL_SSA
-      ASYA = AEROSOL_ASY
 
       _RETURN(_SUCCESS)
    end subroutine compute_provider_aerosol_optics
@@ -2918,7 +2940,7 @@ contains
       use mo_rng_mt19937, only: ty_rng_mt
 #endif
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE, ncols_block, LM, ngpt
       logical, intent(in) :: gen_mro, cond_inhomo
@@ -2939,7 +2961,6 @@ contains
       logical, dimension(:, :, :), intent(out) :: cld_mask
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
       integer :: isub, icol, ilay, igpt, i, j
       integer :: seeds(3)
@@ -3008,7 +3029,6 @@ contains
          error_msg = sampled_mask_max_ran(urand(:, :, 1:ncols_block), cf_wp(colS:colE, :), cld_mask)
          TEST_(error_msg)
       case ("EXP_RAN_OVERLAP")
-         status = 1
          TEST_('EXP_RAN_OVERLAP not implemented yet')
       case ("GEN_MAX_RAN_OVERLAP")
          error_msg = sampled_urand_gen_max_ran(alpha, &
@@ -3045,7 +3065,6 @@ contains
             end do
          end do
       case default
-         status = 1
          TEST_('compute_lw_cloud_optics_mcica: unknown cloud overlap type')
       end select
 
@@ -3076,7 +3095,7 @@ contains
       use mo_optical_props, only: ty_optical_props_arry
       use mo_source_functions, only: ty_source_func_lw
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE
       type(ty_gas_optics_rrtmgp), intent(inout) :: k_dist
@@ -3087,7 +3106,6 @@ contains
       type(ty_source_func_lw), intent(inout) :: sources
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
 
       ! get gas optical properties and Planck source functions
@@ -3129,7 +3147,7 @@ contains
       use mo_fluxes_byband, only: ty_fluxes_byband
       use mo_rte_lw, only: rte_lw
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: colS, colE, ncols_block, LM, nmom
       logical, intent(in) :: top_at_1, u2s
@@ -3152,7 +3170,6 @@ contains
       real(kind=wp), dimension(:, :, :), intent(inout), target, optional :: bnd_flux_up_allsky, bnd_dfupdts_allsky
       integer, optional, intent(out) :: rc
 
-      integer :: status
       character(len=256) :: error_msg
       type(ty_fluxes_broadband) :: fluxes_clrsky, fluxes_clrnoa, fluxes_allnoa, fluxes_allsky
       type(ty_fluxes_byband) :: fluxes_byband_allnoa, fluxes_byband_allsky
@@ -3338,7 +3355,7 @@ contains
       use mo_source_functions, only: ty_source_func_lw
       use mo_cloud_optics_rrtmgp, only: ty_cloud_optics_rrtmgp
 
-#define TEST_(msg) if (msg /= '') then; write(0,*) trim(msg); VERIFY_(STATUS); end if
+#define TEST_(msg) if (msg /= '') then; _FAIL(trim(msg)); end if
 
       integer, intent(in) :: b, rrtmgp_blockSize, ncol, LM, nmom, ngpt, nga
       integer, intent(in) :: IM, IM_World, iBeg, jBeg

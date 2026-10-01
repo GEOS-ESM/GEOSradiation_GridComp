@@ -27,7 +27,7 @@ function(run_case case_name regression_data_dir)
     )
   endif()
 
-  # file(REMOVE_RECURSE ${expdir})
+  file(REMOVE_RECURSE ${expdir})
 endfunction()
 
 run_case(${TEST_CASE} ${REGRESSION_DATA_DIR})

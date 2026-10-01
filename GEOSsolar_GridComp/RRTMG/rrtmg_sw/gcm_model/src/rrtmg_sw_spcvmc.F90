@@ -31,7 +31,7 @@ module rrtmg_sw_spcvmc
 contains
 
    ! ---------------------------------------------------------------------------
-   subroutine spcvmc_sw (MAPL, &
+   subroutine spcvmc_sw (gc, &
       cc, pncol, ncol, nlay, &
       palbd, palbp, &
       pcldymc, ptaucmc, pasycmc, pomgcmc, ptaormc, &
@@ -135,7 +135,7 @@ contains
 
       ! ------- Input -------
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(ESMF_GridComp), intent(inout) :: gc
 
       integer, intent(in) :: pncol, ncol, cc
       integer, intent(in) :: nlay
@@ -391,7 +391,7 @@ contains
       end if
 
       ! Calculate the optical depths for gaseous absorption and Rayleigh scattering     
-      call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
+      call MAPL_GridCompTimerStart(gc,"---RRTMG_TAUMOL",__RC__)
       call taumol_sw( &
          pncol, ncol, nlay, &
          colh2o, colco2, colch4, colo2, colo3, colmol, &
@@ -399,7 +399,7 @@ contains
          selffac, selffrac, indself, forfac, forfrac, indfor, &
          isolvar, svar_f, svar_s, svar_i, svar_f_bnd, svar_s_bnd, svar_i_bnd, &
          ssi, zsflxzen, ztaug, ztaur)
-      call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
+      call MAPL_GridCompTimerStop(gc,"---RRTMG_TAUMOL",__RC__)
 
       ! Set fixed boundary values.
       ! The sfc (jk=nlay+1) zref[d] & ztra[d] never change from these.
@@ -451,11 +451,11 @@ contains
       ! Clear-sky reflectivities / transmissivities
       ! note: pcldymc may not be defined here but the
       !       last arg .false. means it is not used anyway.
-      call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
+      call MAPL_GridCompTimerStart(gc,"---RRTMG_REFTRA",__RC__)
       call reftra_sw (pncol, ncol, nlay, &
                       pcldymc, zgco, prmu0, ztauo, zomco, &
                       zref, zrefd, ztra, ztrad, .false.)
-      call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
+      call MAPL_GridCompTimerStop(gc,"---RRTMG_REFTRA",__RC__)
 
       ! Clear-sky direct beam transmittance        
       do icol = 1,ncol
@@ -468,12 +468,12 @@ contains
       end do
 
       ! Vertical quadrature for clear-sky fluxes
-      call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
+      call MAPL_GridCompTimerStart(gc,"---RRTMG_VRTQDR",__RC__)
       call vrtqdr_sw(pncol, ncol, nlay, &
                      zref, zrefd, ztra, ztrad, &
                      zdbt, ztdbt, &
                      zfd, zfu)
-      call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+      call MAPL_GridCompTimerStop(gc,"---RRTMG_VRTQDR",__RC__)
 
       ! Band integration for clear cases      
       do icol = 1,ncol
@@ -549,11 +549,11 @@ contains
 
          ! Update reflectivities / transmissivities for cloudy cells only
          ! note: since cc==2 here pcldymc is defined
-         call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
+         call MAPL_GridCompTimerStart(gc,"---RRTMG_REFTRA",__RC__)
          call reftra_sw (pncol, ncol, nlay, &
                          pcldymc, zgco, prmu0, ztauo, zomco, &
                          zref, zrefd, ztra, ztrad, .true.)
-         call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
+         call MAPL_GridCompTimerStop(gc,"---RRTMG_REFTRA",__RC__)
 
          ! Recalculate direct transmission
          do icol = 1,ncol
@@ -571,12 +571,12 @@ contains
          end do
 
          ! Vertical quadrature for total-sky fluxes
-         call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
+         call MAPL_GridCompTimerStart(gc,"---RRTMG_VRTQDR",__RC__)
          call vrtqdr_sw(pncol, ncol, nlay, &
                         zref, zrefd, ztra, ztrad, &
                         zdbt, ztdbt, &
                         zfd, zfu)
-         call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+         call MAPL_GridCompTimerStop(gc,"---RRTMG_VRTQDR",__RC__)
 
          ! Upwelling and downwelling fluxes at levels
          !   Two-stream calculations go from top to bottom; 

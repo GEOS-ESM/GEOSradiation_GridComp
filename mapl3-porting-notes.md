@@ -2,19 +2,37 @@
 
 Status as of this session: `GEOS_RadiationGridComp.F90` (the composite
 container that used to own SOLAR + IRRAD + SATSIM children) has been ported
-to MAPL3, wired to its **only currently-ported child, IRRAD**. SOLAR and
-SATSIM remain commented out / unbuilt (`CMakeLists.txt`'s `alldirs` already
-had them commented as "NOT ported to MAPL3 yet" before this session).
+to MAPL3, wired to **both IRRAD and SOLAR** (see "SOLAR wiring" section
+below, added once `GEOSsolar_GridComp`'s own MAPL3 port reached its step
+14/15). SATSIM remains commented out / unbuilt (`CMakeLists.txt`'s
+`alldirs` still has it commented as "NOT ported to MAPL3 yet").
+
+## SOLAR wiring (added once GEOSsolar_GridComp's own port reached step 14/15)
+The "Scope decision: LW-only for now" section right below describes the
+original IRRAD-only state; it's now superseded by SOLAR being wired in.
+See `GEOSsolar_GridComp/mapl3-porting-notes.md`'s own step 14 entry for the
+full writeup (child creation, connection, `Radiation_StateSpecs.rc` rows,
+`Run` formulas, and `CHILD_ID=SOL` reexports) - not repeated here in full
+to avoid duplication/drift between the two notes files. Key formulas
+(`RADSW`/`RADSWC`/`RADSWNA`/`RADSWCNA`/`DTDT`/`RADSRF`) were taken verbatim
+from `git show 9c9a00f:GEOS_RadiationGridComp.F90` - the last commit before
+the later, unrelated GEOS-MLT/ML-radiation-blending feature additions - not
+from the more recent pre-port HEAD, to avoid pulling in that unrelated
+feature work.
 
 ## Files touched
 - `Radiation_StateSpecs.rc` (new; originally created as
   `RADIATION_StateSpecs.rc`, renamed for consistency) - ACG input for this container's own
   Import/Export specs.
-- `CMakeLists.txt` - added the `mapl_acg()` call for the new specs file.
+- `CMakeLists.txt` - added the `mapl_acg()` call for the new specs file;
+  later uncommented `GEOSsolar_GridComp` from `alldirs` once Solar's own
+  port reached step 15.
 - `GEOS_RadiationGridComp.F90` - full rewrite (see below).
 
-## Scope decision: LW-only for now
-Solar isn't wired, so any export that needs both LW (IRRAD) and SW (Solar)
+## Scope decision: LW-only for now (SUPERSEDED - see "SOLAR wiring" above)
+This section describes the state from the initial IRRAD-only porting
+session; kept for history. Solar isn't wired, so any export that needs
+both LW (IRRAD) and SW (Solar)
 flux can't be correctly computed yet:
 - **Populated in `Run`**: `RADLW`, `RADLWC`, `RADLWNA`, `RADLWCNA`, `ALW`,
   `BLW` - these only need IRRAD's exports.

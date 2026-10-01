@@ -1,0 +1,156 @@
+---
+mapl:
+
+  setServices:
+    sharedObj: libconfigurable_gridcomp
+    userRoutine: setservices_
+
+  geometry:
+    esmf_geom:
+      class: CubedSphere
+      im_world: 12
+    vertical_grid:
+      class: model
+      standard_name: air_pressure
+      units: hPa
+      num_levels: 181
+      field_edge: PLE
+      field_center: PE
+
+  children:
+    DataForSolar:
+      dso: libconfigurable_gridcomp.so
+      setservices: setservices_
+      config_file: data-for-solar.yaml
+
+    SOLAR:
+      dso: libGEOSradiation_GridComp.so
+      setservices: solar_setservices_
+      config_file: solar.yaml
+
+    FakeGOCART:
+      dso: libFakeGOCART_GridComp.so
+      setservices: fakegocart_setservices_
+      config_file: fake-gocart.yaml
+
+  connections:
+    - src_name: PLE
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: PLE
+      dst_comp: SOLAR
+    - src_name: T
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: T
+      dst_comp: SOLAR
+    - src_name: QV
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QV
+      dst_comp: SOLAR
+    - src_name: QL
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QL
+      dst_comp: SOLAR
+    - src_name: QI
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QI
+      dst_comp: SOLAR
+    - src_name: QR
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QR
+      dst_comp: SOLAR
+    - src_name: QS
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QS
+      dst_comp: SOLAR
+    - src_name: QG
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: QG
+      dst_comp: SOLAR
+    - src_name: RL
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: RL
+      dst_comp: SOLAR
+    - src_name: RI
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: RI
+      dst_comp: SOLAR
+    - src_name: RR
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: RR
+      dst_comp: SOLAR
+    - src_name: RS
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: RS
+      dst_comp: SOLAR
+    - src_name: RG
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: RG
+      dst_comp: SOLAR
+    - src_name: OX
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: OX
+      dst_comp: SOLAR
+    - src_name: CH4
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: CH4
+      dst_comp: SOLAR
+    - src_name: N2O
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: N2O
+      dst_comp: SOLAR
+    - src_name: FCLD
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: FCLD
+      dst_comp: SOLAR
+    - src_name: TS
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: TS
+      dst_comp: SOLAR
+    - src_name: ALBVR
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: ALBVR
+      dst_comp: SOLAR
+    - src_name: ALBVF
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: ALBVF
+      dst_comp: SOLAR
+    - src_name: ALBNR
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: ALBNR
+      dst_comp: SOLAR
+    - src_name: ALBNF
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: ALBNF
+      dst_comp: SOLAR
+    - src_name: PREF
+      src_comp: DataForSolar
+      src_intent: internal
+      dst_name: PREF
+      dst_comp: SOLAR
+    - src_name: AERO
+      src_comp: FakeGOCART
+      src_intent: export
+      dst_name: AERO
+      dst_comp: SOLAR

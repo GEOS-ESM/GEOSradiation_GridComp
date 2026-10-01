@@ -88,9 +88,13 @@ BasicVerticalGrid, generate_scrip_cube):
   ANSI_CPP is not defined - only the ANSI_CPP path uses Iam for
   traceback messages. Removed entirely from IRRAD's `Run`, `LW_Driver`,
   `Update_Flx` (declarations + assignments); kept the underlying
-  `ESMF_GridCompGet(gc, grid=..., rc=status)` call (still needed for
-  ESMFGRID) but dropped its `name=COMP_NAME` argument since COMP_NAME had
-  no other use. 2026-07-17.
+  grid fetch (still needed for ESMFGRID) but dropped its
+  `name=COMP_NAME` argument since COMP_NAME had no other use. 2026-07-17.
+  NOTE (2026-09-28, found while run-testing Solar): the grid fetch must
+  be `MAPL_GridCompGet(gc, grid=esmfgrid, ...)` - which is what `Run`
+  now uses - NOT `ESMF_GridCompGet(gc, grid=...)`; the latter fails at
+  runtime in MAPL3 because the user `gc` carries no ESMF grid (it lives
+  on the outer meta component).
 - MAPL_GridCompGetResource: confirmed (via GWD .fii build artifact) this
   is exported `use MAPL, only: MAPL_GridCompGet, MAPL_GridCompGetResource`
   from the top-level MAPL module (couldn't find its .F90 definition via
@@ -940,3 +944,78 @@ regardless of which LW scheme (RRTMG/RRTMGP/CHOU) is selected. This
 matches the intent already documented above (`nameRATS`/`nRATS` parsed
 once in `Initialize`, just *read* here) - the bug was that the read was
 incorrectly gated on `USE_RRTMG` instead of being unconditional.
+
+## `irrad_lw_alarm` never rang on the first step (found and fixed 2026-09-29)
+Found while run-testing Solar (see Solar's porting notes, step 18):
+an ESMF alarm created with only `ringInterval` (as `irrad_lw_alarm`
+was in `Initialize`) first rings at `currTime + IRRAD_DT`, so
+`LW_Driver` was skipped on the first step. MAPL2 avoided this because
+the generic main alarm (`handle_clock_and_main_alarm`,
+`MAPL_Generic.F90` L1328-1411) anchored `ringTime` to
+`REFERENCE_DATE`/`REFERENCE_TIME` (default midnight of the current day),
+backed it off by the clock dt unless `RUN_AT_INTERVAL_START`, walked it
+forward to `>= currTime`, created the alarm `sticky=.false.`, and called
+`ESMF_AlarmRingerOn` when `ringTime == currTime`. MAPL3 provides no
+equivalent for component alarms.
+
+Went unnoticed here because IRRAD has never been run-tested against a
+MAPL2 baseline, and `Update_Flx` runs unconditionally every step so the
+run completes with plausible exports even when `LW_Driver` never fires.
+
+Fix (done): `Initialize` now uses the same block Solar uses (search
+`RUN_AT_INTERVAL_START` in `GEOS_SolarGridComp.F90`), with
+`IRRAD_DT`/`irrad_lw_alarm`/`lw_alarm_interval` swapped in: reads
+`RUN_AT_INTERVAL_START` (default `.false.`), `REFERENCE_DATE` (default
+current yyyymmdd) and `REFERENCE_TIME` (default 0), anchors `ring_time`
+there, backs off one clock `time_step` unless `RUN_AT_INTERVAL_START`,
+walks forward to `>= current_time`, creates the alarm with
+`ringTime=ring_time, sticky=.false.`, and calls `ESMF_AlarmRingerOn`
+when `ring_time == current_time`. `Run`'s `ESMF_AlarmRingerOff` after
+the ringing check is kept (harmless with `sticky=.false.`, same as
+Solar). This supersedes the `sticky=.true.`, `ringInterval`-only
+description in the 2026-07-23 section above.
+
+First `regression/irrad-sa` run with this hung all ranks in
+`Initialize` (gdb: `ESMF_TimeInc` from the `do while (ring_time <
+current_time)` loop): `irrad-sa/irrad.yaml` had `IRRAD_DT: 0`, which
+the old `ringInterval`-only alarm silently tolerated but which makes
+the walk-forward loop infinite. MAPL2 asserted `DT /= 0` and
+`mod(DT, clock dt) == 0` in `handle_clock_and_main_alarm`; the same two
+`_ASSERT`s now sit right after the `IRRAD_DT` read, and irrad-sa uses
+`IRRAD_DT: 1200` (= the `PT20M` clock, like solar-sa's `SOLAR_DT`).
+
+Second failure was metadata only: the fake provider in
+`data-irrad.yaml` (and solar-sa's `data-for-solar.yaml`) declared `RR` as
+`effective_radius_of_rain_water_particles`, while `Irrad_StateSpecs.rc`
+/ `Solar_StateSpecs.rc` / the GEOS field dictionary use
+`effective_radius_of_rain_particles`. MAPL's standard_name enforcement
+(#5415, permissive mode: "Export value wins") wrote the provider's name
+into the `IRRAD_import.nc` checkpoint, so it no longer matched the
+baseline. Both provider yamls now use the dictionary name. With that,
+`irrad-sa` and `solar-sa` pass the exact `nccmp` comparison and the
+profile shows `LW_DRIVER` running on the first step.
+
+## `compute_provider_aerosol_optics` converged with Solar's (2026-09-30)
+Solar's AERO-provider block was hoisted into a routine of the same
+name (Solar porting notes, step 19) and the two were then made
+textually identical apart from "IR"/"solar" wording and the loop
+label. Changes on the IRRAD side, all zero-diff on `irrad-sa`:
+- `TAUA/SSAA/ASYA` are now the routine's `allocatable, intent(out)`
+  outputs (dummies renamed `AEROSOL_EXT/SSA/ASY`), allocated zeroed
+  inside and filled directly; the local `AEROSOL_*` copies and the
+  final copy-back are gone. The routine leaves them unallocated when
+  the provider lacks optics, so `LW_Driver` allocates them zeroed itself
+  `if (.not. aerosol_optics)` - Chou `IRRAD` and RRTMG read them
+  unconditionally.
+- `NA` removed from the signature; `LW_Driver` sets `NA = merge(3, 0,
+  aerosol_optics)` after the call. Chou-IRRAD's `do_aerosol = na > 0`
+  is the only consumer.
+- `ESMF_MethodExecute(AERO, label='run_aerosol_optics', userRC=
+  user_status, rc=status)` with both `_VERIFY`d (was `_RC` only, which
+  misses failures inside the provider's method).
+- Band-count dummy renamed `NUM_BANDS`; header comment fixed (RH/PLE
+  are inputs, not queried); SSA/ASY comments note they are
+  un-normalized (`EXT*SSA`, `EXT*SSA*ASY`) - which is why the RRTMG
+  path uses `TAUA - SSAA` for absorption.
+- The old "accumulate the arrays" comments were misleading; the code
+  has always been plain per-band assignment (the provider sums species).

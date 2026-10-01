@@ -19,3 +19,8 @@ option(ENABLE_SOLAR_RADVAL "extra solar diagnostics mainly for developer validat
 if(ENABLE_SOLAR_RADVAL)
    target_compile_definitions(${this} PRIVATE SOLAR_RADVAL)
 endif ()
+
+mapl_acg (
+  ${this} Solar_StateSpecs.rc
+  IMPORT_SPECS EXPORT_SPECS INTERNAL_SPECS GET_POINTERS DECLARE_POINTERS
+)

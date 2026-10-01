@@ -66,7 +66,7 @@ module rrtmg_sw_rad
 
 contains
 
-   subroutine rrtmg_sw (MAPL, &
+   subroutine rrtmg_sw (gc, &
       rpart, ncol, nlay, &
       scon, adjes, coszen, isolvar, &
       play, plev, tlay, &
@@ -129,7 +129,7 @@ contains
 
       ! ----- Inputs -----
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(ESMF_GridComp), intent(inout) :: gc
 
       ! dimensions
       ! ----------
@@ -400,7 +400,7 @@ contains
       nbndOSR = count(OSR_band_out)
 
       ! do partitions
-      call rrtmg_sw_sub (MAPL, &
+      call rrtmg_sw_sub (gc, &
          pncol, ncol, nlay, &
          scon, adjes, coszen, isolvar, &
          play, plev, tlay, &
@@ -463,7 +463,7 @@ contains
    end subroutine rrtmg_sw                                                     
 
 
-   subroutine rrtmg_sw_sub (MAPL, &
+   subroutine rrtmg_sw_sub (gc, &
       pncol, gncol, nlay, &
       scon, adjes, gcoszen, isolvar, &
       gplay, gplev, gtlay, &
@@ -538,7 +538,7 @@ contains
       ! ----- Inputs -----
       ! (see rrtmg_sw() for more detailed comments)
 
-      type(MAPL_MetaComp), pointer, intent(inout) :: MAPL
+      type(ESMF_GridComp), intent(inout) :: gc
 
       ! dimensions
       integer, intent(in) :: pncol                     ! Nominal horiz cols in a partition
@@ -1199,32 +1199,32 @@ contains
          ! (aka npart == 0) when the load balancer is off
 
          if (npart == 0) then
-            call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_PART",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_PART",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_CLDSGEN",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_CLDSGEN",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_CLDPRMC",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_CLDPRMC",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_SETCOEF",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_SETCOEF",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_SETCOEF",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_TAUMOL",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_TAUMOL",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_TAUMOL",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_TAUMOL",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_REFTRA",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_REFTRA",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_REFTRA",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_REFTRA",__RC__)
 
-            call MAPL_TimerOn(MAPL,"---RRTMG_VRTQDR",__RC__)
-            call MAPL_TimerOff(MAPL,"---RRTMG_VRTQDR",__RC__)
+            call MAPL_GridCompTimerStart(gc,"---RRTMG_VRTQDR",__RC__)
+            call MAPL_GridCompTimerStop(gc,"---RRTMG_VRTQDR",__RC__)
          else
 
             ! loop over partitions
             do ipart = 0,npart-1
 
-               call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
+               call MAPL_GridCompTimerStart(gc,"---RRTMG_PART",__RC__)
 
                ! partition dimensions
                cols = ipart * pncol + 1
@@ -1379,7 +1379,7 @@ contains
 
                end if  ! clear or cloudy gridcolumns
 
-               call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+               call MAPL_GridCompTimerStop(gc,"---RRTMG_PART",__RC__)
 
                ! limit tiny cosine zenith angles
                do icol = 1,ncol
@@ -1411,7 +1411,7 @@ contains
                ! timers must be called on all branches and all processes
                ! and we do not want the timers in the if-block
 
-               call MAPL_TimerOn(MAPL,"---RRTMG_CLDSGEN",__RC__)
+               call MAPL_GridCompTimerStart(gc,"---RRTMG_CLDSGEN",__RC__)
                ! cloudy gridcolumns
                if (cc == 2) then
                   ! McICA subcolumn generation
@@ -1427,9 +1427,9 @@ contains
                      pncol, ncol, ngptsw, nlay, cloudLM, cloudMH, cldymcl, &
                      p_clearCounts)
                endif
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDSGEN",__RC__)
+               call MAPL_GridCompTimerStop(gc,"---RRTMG_CLDSGEN",__RC__)
 
-               call MAPL_TimerOn(MAPL,"---RRTMG_CLDPRMC",__RC__)
+               call MAPL_GridCompTimerStart(gc,"---RRTMG_CLDPRMC",__RC__)
                if (cc == 2) then
                   ! cloud optical property generation
                   call cldprmc_sw( &
@@ -1446,23 +1446,23 @@ contains
                      taormc, taucmc, ssacmc, asmcmc)
 #endif
                end if
-               call MAPL_TimerOff(MAPL,"---RRTMG_CLDPRMC",__RC__)
+               call MAPL_GridCompTimerStop(gc,"---RRTMG_CLDPRMC",__RC__)
 
                ! Calculate information needed by the radiative transfer routine
                ! that is specific to this atmosphere, especially some of the
                ! coefficients and indices needed to compute the optical depths
                ! by interpolating data from stored reference atmospheres.
 
-               call MAPL_TimerOn(MAPL,"---RRTMG_SETCOEF",__RC__)
+               call MAPL_GridCompTimerStart(gc,"---RRTMG_SETCOEF",__RC__)
                call setcoef_sw( &
                   pncol, ncol, nlay, play, tlay, coldry, &
                   colch4, colco2, colh2o, colmol, colo2, colo3, &
                   laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                   selffac, selffrac, indself, forfac, forfrac, indfor)
-               call MAPL_TimerOff(MAPL,"---RRTMG_SETCOEF",__RC__)
+               call MAPL_GridCompTimerStop(gc,"---RRTMG_SETCOEF",__RC__)
 
                ! compute sw radiative fluxes
-               call spcvmc_sw(MAPL, &
+               call spcvmc_sw(gc, &
                   cc, pncol, ncol, nlay, &
                   albdif, albdir, &
                   cldymcl, taucmc, asmcmc, ssacmc, taormc, &
@@ -1532,7 +1532,7 @@ contains
                ! Copy out up and down, clear- and all-sky fluxes to output arrays.
                ! Vertical indexing goes from bottom to top; reverse here for GCM if necessary.
 
-               call MAPL_TimerOn(MAPL,"---RRTMG_PART",__RC__)
+               call MAPL_GridCompTimerStart(gc,"---RRTMG_PART",__RC__)
 
                if (cc == 1) then  ! clear gridcolumns
 
@@ -1806,7 +1806,7 @@ contains
 
                endif  ! clear/cloudy
 
-               call MAPL_TimerOff(MAPL,"---RRTMG_PART",__RC__)
+               call MAPL_GridCompTimerStop(gc,"---RRTMG_PART",__RC__)
 
             enddo  ! over partitions
 
