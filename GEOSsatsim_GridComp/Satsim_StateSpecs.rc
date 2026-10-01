@@ -1,0 +1,262 @@
+schema_version: 2.0.0
+component: SATSIM
+
+# Ported from the MAPL2 MAPL_AddImportSpec/MAPL_AddExportSpec calls in
+# GEOS_SatsimGridComp.F90 (2026-10-01). The SATORB import is a FieldBundle
+# (MAPL2 DATATYPE=MAPL_BundleItem) and cannot be expressed here (ITEMTYPE
+# only supports F/V); it is added by hand in SetServices. The ALIAS column
+# on the imports reproduces the historical local pointer names used in
+# SIM_DRIVER (RL -> RDFL, QL -> QLTOT, ...). ungrd_7 and
+# ungrd_parasol_nrefl are type(MAPL_UngriddedDim) locals set in
+# SetServices before the generated include.
+
+category: IMPORT
+#------------------------------------------------------------------------------------
+ NAME    | ALIAS | UNITS   | DIMS | VLOC | LONG NAME
+#------------------------------------------------------------------------------------
+ T       |       | K       | xyz  | C    | air_temperature
+ QV      |       | 1       | xyz  | C    | specific_humidity
+ FCLD    |       | 1       | xyz  | C    | cloud_area_fraction
+ RL      | RDFL  | m       | xyz  | C    | liquid_cloud_particle_effective_radius
+ RI      | RDFI  | m       | xyz  | C    | ice_phase_cloud_particle_effective_radius
+ RG      | RDFG  | m       | xyz  | C    | graupel_particle_effective_radius
+ RS      | RDFS  | m       | xyz  | C    | snow_particle_effective_radius
+ RR      | RDFR  | m       | xyz  | C    | rain_cloud_particle_effective_radius
+ PLE     |       | Pa      | xyz  | E    | Edge_pressures
+ ZLE     |       | m       | xyz  | E    | Edge_heights
+ QL      | QLTOT | 1       | xyz  | C    | mass_fraction_of_cloud_liquid_water
+ QI      | QITOT | 1       | xyz  | C    | mass_fraction_of_cloud_ice_water
+ QR      | QRTOT | kg kg-1 | xyz  | C    | mass_fraction_of_falling_rain
+ QS      | QSTOT | kg kg-1 | xyz  | C    | mass_fraction_of_falling_snow
+ QG      | QGTOT | kg kg-1 | xyz  | C    | mass_fraction_of_falling_graupel
+ TS      |       | K       | xy   | N    | skin_temperature
+ MCOSZ   |       | 1       | xy   | N    | mean_cosine_of_the_solar_zenith_angle
+ FRLAND  |       | 1       | xy   | N    | fraction_of_land
+ FROCEAN |       | 1       | xy   | N    | fraction_of_ocean
+
+category: EXPORT
+#---------------------------------------------------------------------------------------------------------------------------
+ NAME              | UNITS    | DIMS | VLOC | UNGRIDDED           | LONG NAME
+#---------------------------------------------------------------------------------------------------------------------------
+ ISCCP_CU_UA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_cumulus
+ ISCCP_CU_UB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_cumulus
+ ISCCP_CU_OA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_cumulus
+ ISCCP_CU_OB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_cumulus
+ ISCCP_STCU_UA     | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_stratocumulus
+ ISCCP_STCU_UB     | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_stratocumulus
+ ISCCP_STCU_OA     | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_stratocumulus
+ ISCCP_STCU_OB     | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_stratocumulus
+ ISCCP_ST_UA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_stratus
+ ISCCP_ST_UB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_stratus
+ ISCCP_ST_OA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_stratus
+ ISCCP_ST_OB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_stratus
+ ISCCP_ACU_UA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_altocumulus
+ ISCCP_ACU_UB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_altocumulus
+ ISCCP_ACU_OA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_altocumulus
+ ISCCP_ACU_OB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_altocumulus
+ ISCCP_AST_UA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_altostratus
+ ISCCP_AST_UB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_altostratus
+ ISCCP_AST_OA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_altostratus
+ ISCCP_AST_OB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_altostratus
+ ISCCP_NST_UA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_nimbostratus
+ ISCCP_NST_UB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_nimbostratus
+ ISCCP_NST_OA      | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_nimbostratus
+ ISCCP_NST_OB      | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_nimbostratus
+ ISCCP_CI_UA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_cirrus
+ ISCCP_CI_UB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_cirrus
+ ISCCP_CI_MA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_middle_cirrus
+ ISCCP_CI_MB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_middle_cirrus
+ ISCCP_CI_OA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_cirrus
+ ISCCP_CI_OB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_cirrus
+ ISCCP_CIST_UA     | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_cirrostratus
+ ISCCP_CIST_UB     | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_cirrostratus
+ ISCCP_CIST_MA     | 1        | xy   | N    |                     | isccp_fraction_of_thin_middle_cirrostratus
+ ISCCP_CIST_MB     | 1        | xy   | N    |                     | isccp_fraction_of_thick_middle_cirrostratus
+ ISCCP_CIST_OA     | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_cirrostratus
+ ISCCP_CIST_OB     | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_cirrostratus
+ ISCCP_CB_UA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_lower_cumulonimbus
+ ISCCP_CB_UB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_lower_cumulonimbus
+ ISCCP_CB_MA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_middle_cumulonimbus
+ ISCCP_CB_MB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_middle_cumulonimbus
+ ISCCP_CB_OA       | 1        | xy   | N    |                     | isccp_fraction_of_thin_higher_cumulonimbus
+ ISCCP_CB_OB       | 1        | xy   | N    |                     | isccp_fraction_of_thick_higher_cumulonimbus
+ ISCCP_SUBV1       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_0_180_hPa
+ ISCCP_SUBV2       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_180_310_hPa
+ ISCCP_SUBV3       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_310_440_hPa
+ ISCCP_SUBV4       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_440_560_hPa
+ ISCCP_SUBV5       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_560_680_hPa
+ ISCCP_SUBV6       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_680_800_hPa
+ ISCCP_SUBV7       | 1        | xy   | N    |                     | isccp_fraction_of_subvisible_cloud_800_SFC_hPa
+ CLISCCP1          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_0_180_hPa
+ CLISCCP2          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_180_310_hPa
+ CLISCCP3          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_310_440_hPa
+ CLISCCP4          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_440_560_hPa
+ CLISCCP5          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_560_680_hPa
+ CLISCCP6          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_680_800_hPa
+ CLISCCP7          | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_800_SFC_hPa
+ ISCCP1            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_0_180_hPa
+ ISCCP2            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_180_310_hPa
+ ISCCP3            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_310_440_hPa
+ ISCCP4            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_440_560_hPa
+ ISCCP5            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_560_680_hPa
+ ISCCP6            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_680_800_hPa
+ ISCCP7            | 1        | xy   | N    | ungrd_7             | isccp_cloud_area_fraction_800_SFC_hPa
+ CLTISCCP          | 1        | xy   | N    |                     | isccp_cloud_area_fraction
+ TCLISCCP          | 1        | xy   | N    |                     | isccp_cloud_area_fraction
+ PCTISCCP          | Pa       | xy   | N    |                     | isccp_air_pressure_at_cloud_top
+ CTPISCCP          | Pa       | xy   | N    |                     | isccp_air_pressure_at_cloud_top
+ ALBISCCP          | 1        | xy   | N    |                     | isccp_cloud_albedo
+ TBISCCP           | K        | xy   | N    |                     | isccp_mean_all_sky_10.5_micron_brightness_temp
+ SGFCLD            | 1        | xyz  | C    |                     | summed_subgrid_cloud_fraction_from_scops
+ LIDARPMOL         | m-1 sr-1 | xyz  | C    |                     | calipso_molecular_attenuated_backscatter_signal_power
+ LIDARPTOT         | m-1 sr-1 | xyz  | C    |                     | calipso_total_attenuated_backscatter_signal_power
+ LIDARTAUTOT       | 1        | xyz  | C    |                     | calipso_optical_thickess_integrated_from_top_to_level_z
+ RADARZETOT        | 1        | xyz  | C    |                     | cloudsat_total_reflectivity
+ CLCALIPSO         | 1        | xyz  | C    |                     | calipso_total_cloud_fraction
+ CLLCALIPSO        | 1        | xy   | N    |                     | calipso_low_level_cloud_fraction
+ CLMCALIPSO        | 1        | xy   | N    |                     | calipso_mid_level_cloud_fraction
+ CLHCALIPSO        | 1        | xy   | N    |                     | calipso_high_level_cloud_fraction
+ CLTCALIPSO        | 1        | xy   | N    |                     | calipso_total_cloud_fraction
+ PARASOLREFL0      | 1        | xy   | N    | ungrd_parasol_nrefl | parasol_reflectance
+ PARASOLREFL1      | 1        | xy   | N    |                     | parasol_reflectance_1
+ PARASOLREFL2      | 1        | xy   | N    |                     | parasol_reflectance_2
+ PARASOLREFL3      | 1        | xy   | N    |                     | parasol_reflectance_3
+ PARASOLREFL4      | 1        | xy   | N    |                     | parasol_reflectance_4
+ PARASOLREFL5      | 1        | xy   | N    |                     | parasol_reflectance_5
+ RADARLTCC         | 1        | xy   | N    |                     | cloudsat_calipso_total_cloud_amount
+ CLCALIPSO2        | 1        | xyz  | C    |                     | calipso_no_cloudsat_cloud_fraction
+ CFADLIDARSR532_01 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_01
+ CFADLIDARSR532_02 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_02
+ CFADLIDARSR532_03 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_03
+ CFADLIDARSR532_04 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_04
+ CFADLIDARSR532_05 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_05
+ CFADLIDARSR532_06 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_06
+ CFADLIDARSR532_07 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_07
+ CFADLIDARSR532_08 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_08
+ CFADLIDARSR532_09 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_09
+ CFADLIDARSR532_10 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_10
+ CFADLIDARSR532_11 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_11
+ CFADLIDARSR532_12 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_12
+ CFADLIDARSR532_13 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_13
+ CFADLIDARSR532_14 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_14
+ CFADLIDARSR532_15 | 1        | xyz  | C    |                     | calipso_scattering_ratio_cfad_15
+ CLOUDSATCFAD01    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD02    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD03    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD04    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD05    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD06    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD07    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD08    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD09    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD10    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD11    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD12    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD13    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD14    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ CLOUDSATCFAD15    | 1        | xyz  | C    |                     | cloudsat_radar_reflectivity_cfad
+ MDSCLDFRCTTL      | 1        | xy   | N    |                     | modis_cloud_fraction_total_mean
+ MDSCLDFRCWTR      | 1        | xy   | N    |                     | modis_cloud_fraction_water_mean
+ MDSCLDFRCH2O      | 1        | xy   | N    |                     | modis_cloud_fraction_water_mean
+ MDSCLDFRCICE      | 1        | xy   | N    |                     | modis_cloud_fraction_ice_mean
+ MDSCLDFRCHI       | 1        | xy   | N    |                     | modis_cloud_fraction_high_mean
+ MDSCLDFRCMID      | 1        | xy   | N    |                     | modis_cloud_fraction_mid_mean
+ MDSCLDFRCLO       | 1        | xy   | N    |                     | modis_cloud_fraction_low_mean
+ MDSOPTHCKTTL      | 1        | xy   | N    |                     | modis_optical_thickness_total_mean
+ MDSOPTHCKWTR      | 1        | xy   | N    |                     | modis_optical_thickness_water_mean
+ MDSOPTHCKH2O      | 1        | xy   | N    |                     | modis_optical_thickness_water_mean
+ MDSOPTHCKICE      | 1        | xy   | N    |                     | modis_optical_thickness_ice_mean
+ MDSOPTHCKTTLLG    | 1        | xy   | N    |                     | modis_optical_thickness_total_logmean
+ MDSOPTHCKWTRLG    | 1        | xy   | N    |                     | modis_optical_thickness_water_logmean
+ MDSOPTHCKH2OLG    | 1        | xy   | N    |                     | modis_optical_thickness_water_logmean
+ MDSOPTHCKICELG    | 1        | xy   | N    |                     | modis_optical_thickness_ice_logmean
+ MDSCLDSZWTR       | 1        | xy   | N    |                     | modis_cloud_particle_size_water_mean
+ MDSCLDSZH20       | 1        | xy   | N    |                     | modis_cloud_particle_size_water_mean
+ MDSCLDSZICE       | 1        | xy   | N    |                     | modis_cloud_particle_size_ice_mean
+ MDSCLDTOPPS       | 1        | xy   | N    |                     | modis_cloud_top_pressure_total_mean
+ MDSWTRPATH        | 1        | xy   | N    |                     | modis_liquid_water_path_mean
+ MDSH2OPATH        | 1        | xy   | N    |                     | modis_liquid_water_path_mean
+ MDSICEPATH        | 1        | xy   | N    |                     | modis_ice_water_path_mean
+ MDSTAUPRSHIST11   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_1
+ MDSTAUPRSHIST12   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_2
+ MDSTAUPRSHIST13   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_3
+ MDSTAUPRSHIST14   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_4
+ MDSTAUPRSHIST15   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_5
+ MDSTAUPRSHIST16   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_6
+ MDSTAUPRSHIST17   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_1_7
+ MDSTAUPRSHIST21   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_1
+ MDSTAUPRSHIST22   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_2
+ MDSTAUPRSHIST23   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_3
+ MDSTAUPRSHIST24   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_4
+ MDSTAUPRSHIST25   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_5
+ MDSTAUPRSHIST26   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_6
+ MDSTAUPRSHIST27   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_2_7
+ MDSTAUPRSHIST31   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_1
+ MDSTAUPRSHIST32   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_2
+ MDSTAUPRSHIST33   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_3
+ MDSTAUPRSHIST34   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_4
+ MDSTAUPRSHIST35   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_5
+ MDSTAUPRSHIST36   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_6
+ MDSTAUPRSHIST37   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_3_7
+ MDSTAUPRSHIST41   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_1
+ MDSTAUPRSHIST42   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_2
+ MDSTAUPRSHIST43   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_3
+ MDSTAUPRSHIST44   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_4
+ MDSTAUPRSHIST45   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_5
+ MDSTAUPRSHIST46   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_6
+ MDSTAUPRSHIST47   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_4_7
+ MDSTAUPRSHIST51   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_1
+ MDSTAUPRSHIST52   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_2
+ MDSTAUPRSHIST53   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_3
+ MDSTAUPRSHIST54   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_4
+ MDSTAUPRSHIST55   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_5
+ MDSTAUPRSHIST56   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_6
+ MDSTAUPRSHIST57   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_5_7
+ MDSTAUPRSHIST61   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_1
+ MDSTAUPRSHIST62   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_2
+ MDSTAUPRSHIST63   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_3
+ MDSTAUPRSHIST64   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_4
+ MDSTAUPRSHIST65   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_5
+ MDSTAUPRSHIST66   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_6
+ MDSTAUPRSHIST67   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_6_7
+ MDSTAUPRSHIST71   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_1
+ MDSTAUPRSHIST72   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_2
+ MDSTAUPRSHIST73   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_3
+ MDSTAUPRSHIST74   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_4
+ MDSTAUPRSHIST75   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_5
+ MDSTAUPRSHIST76   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_6
+ MDSTAUPRSHIST77   | 1        | xy   | N    |                     | modis_tau_pressure_histogram_bin_7_7
+ MISRMNCLDTP       | m        | xy   | N    |                     | MISR_mead_cloud_top_height
+ MISRCLDAREA       | 1        | xy   | N    |                     | MISR_cloud_area
+ MISRLYRTP0        | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP250      | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP750      | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP1250     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP1750     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP2250     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP2750     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP3500     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP4500     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP6000     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP8000     | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP10000    | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP12000    | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP14000    | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP16000    | 1        | xy   | N    |                     | MISR_layer_top
+ MISRLYRTP18000    | 1        | xy   | N    |                     | MISR_layer_top
+ MISRFQ0           | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ250         | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ750         | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ1250        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ1750        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ2250        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ2750        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ3500        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ4500        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ6000        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ8000        | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ10000       | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ12000       | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ14000       | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ16000       | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
+ MISRFQ18000       | 1        | xy   | N    | ungrd_7             | MISR_cloud_area
