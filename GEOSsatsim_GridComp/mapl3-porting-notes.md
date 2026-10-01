@@ -177,14 +177,35 @@ spelled out below; everything else is "do what Solar did".
      `type(MAPL_MetaComp), pointer :: MAPL` local from `SIM_DRIVER`;
      the two in `SetServices`/`Run` stay until steps 4 and 7.
 
-7. **`Run` plumbing** - drop `MAPL_MetaComp` / `MAPL_GetObjectFromGC` /
-   `MAPL_Get`: `IM/JM/LM` via `MAPL_GridCompGet`/grid; delete the unused
-   `LONS/LATS`; replace the generic `RUNALARM` with
-   `ESMF_ClockGetAlarm(CLOCK, "satsim_alarm", ...)` - the alarm itself
-   is already created in `Initialize` (step 9).
-   `MAPL_TimerAdd/On/Off` -> `MAPL_GridCompTimerStart/Stop
-   (gc, name, _RC)`. Remove `DEBUG_GC` and the `write(*,*)` debug prints
-   (or route through the logger).
+7. **`Run` plumbing** DONE 2026-10-01.
+   - Dropped the `MAPL_MetaComp`/`MAPL_GetObjectFromGC`/`MAPL_Get` block
+     from `Run`. `LM` now comes from
+     `MAPL_GridCompGet(gc, grid=esmfgrid, num_levels=LM, _RC)` and
+     `IM/JM` from `MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)`, matching
+     IRRAD's `Run`.
+   - Deleted the unused `LONS`, `LATS`, `CF` and `internal` locals. The
+     MAPL2 code requested `INTERNAL_ESMF_STATE` but never used it;
+     SatSim has no internal state spec.
+   - `esmfgrid` is declared once in `Run` and host-associated into
+     `SIM_DRIVER`, so the step 6 `MAPL_GridCompGet` call there (for the
+     `imsize` default-`Ncolumns` calculation) was removed as redundant.
+   - The generic `RUNALARM` is replaced by
+     `ESMF_ClockGetAlarm(clock, alarmname="satsim_alarm", alarm=satsim_alarm, _RC)`,
+     looking up the alarm created in `Initialize` (step 9). The early
+     `_RETURN(_SUCCESS)` when it is not ringing is unchanged.
+   - `MAPL_TimerAdd`/`MAPL_TimerOn`/`MAPL_TimerOff` -> `MAPL_GridCompTimerStart`/
+     `MAPL_GridCompTimerStop(gc, name, _RC)`. MAPL3 timers do not need
+     to be registered, so the three `MAPL_TimerAdd` calls in
+     `SetServices` are gone. Note the `-MISC` timer was only ever added,
+     never started/stopped, so it disappears entirely.
+   - Removed `DEBUG_GC` and the `MAPL_AM_I_Root() .and. DEBUG_GC`
+     `write(*,*)` block around the `COSP` call. The flag was
+     hard-wired to `.false.`, so the prints were dead code.
+   - Carry-over: the masked-export loop at the end of `SIM_DRIVER` still
+     needs the MAPL2 generic state to introspect registered export specs
+     (`MAPL_Get(STATE, ExportSpec=...)`), so a scoped
+     `MAPL_GetObjectFromGC` was added there with a `TODO (step 4)`
+     comment. Step 4 removes it along with the one in `SetServices`.
 
 8. **Edge remaps** - `PLE`/`ZLE` are `VLOC=E`; MAPL3 pointers are
    1-based but `SIM_DRIVER` indexes `PLE(:,:,0:LM)` and declares
