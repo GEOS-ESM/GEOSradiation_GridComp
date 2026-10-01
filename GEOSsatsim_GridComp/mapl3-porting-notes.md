@@ -86,15 +86,37 @@ spelled out below; everything else is "do what Solar did".
      4513 lines. Structural counts (subroutines, `#if/#endif`, 244
      AddSpec, 250 GetPointer) match the original.
 
-2. **`Satsim_StateSpecs.rc`** - extract the 20 imports (`PLE`/`ZLE`
-   are `VLOC=E`) and the 224 static exports (32 with `UNGRIDDED: 7`).
-   Nothing is conditional, no internals. Add `mapl_acg(${this}
-   Satsim_StateSpecs.rc IMPORT_SPECS EXPORT_SPECS GET_POINTERS
-   DECLARE_POINTERS)` to `CMakeLists.txt` and replace the spec blocks in
-   `SetServices` with `#include "Satsim_Import___.h"` /
-   `"Satsim_Export___.h"`. Let ACG `DECLARE_POINTERS`/`GET_POINTERS`
-   replace the ~250 hand-written `MAPL_GetPointer` calls and pointer
-   declarations in `SIM_DRIVER`.
+2. **`Satsim_StateSpecs.rc`** DONE 2026-10-01.
+   - DONE - `Satsim_StateSpecs.rc` written (generated from the MAPL2
+     spec calls by a throwaway script, then validated with
+     `MAPL_GridCompSpecs_ACG.py`): 19 field imports (`PLE`/`ZLE` are
+     `VLOC=E`; the `SATORB` bundle import is excluded, ACG ITEMTYPE
+     only supports F/V) and 222 static exports (30 with `UNGRIDDED:
+     ungrd_7`, `PARASOLREFL0` with `ungrd_parasol_nrefl`). The earlier
+     "20/224" counts included `SATORB` and the 2 dynamic masked-export
+     specs. Imports carry an `ALIAS` column so the generated pointers
+     keep the historical `SIM_DRIVER` names (`RL->RDFL`, `QL->QLTOT`,
+     `QR->QRTOT`, ...). ACG output: 19 + 222 `MAPL_GridCompAddSpec`,
+     241 `MAPL_StateGetPointer` = the 241 removed `MAPL_GetPointer`
+     calls; pointer names and ranks cross-checked against the removed
+     hand declarations (no mismatches).
+   - DONE - `CMakeLists.txt`: `mapl_acg(${this} Satsim_StateSpecs.rc
+     IMPORT_SPECS EXPORT_SPECS GET_POINTERS DECLARE_POINTERS)`.
+   - DONE - `SetServices`: declared `type(MAPL_UngriddedDim) :: ungrd_7,
+     ungrd_parasol_nrefl`, set them (`MAPL_UngriddedDim(7,
+     name='bins7', units='1')`, `MAPL_UngriddedDim(PARASOL_NREFL,
+     name='parasol_nrefl', units='1')`) and replaced the 19+222 spec
+     calls with `#include "Satsim_Import___.h"` /
+     `"Satsim_Export___.h"`. `SATORB` kept as a hand-written MAPL2
+     `MAPL_AddImportSpec` for step 3; the 2 dynamic masked-export specs
+     untouched for step 4.
+   - DONE - `Run`: all export pointer declarations replaced by
+     `#include "Satsim_DeclarePointer___.h"` (which also declares the
+     imports; `SIM_DRIVER` host-associates them, its duplicate import
+     declarations were removed). `SIM_DRIVER`: the 241 `MAPL_GetPointer`
+     calls replaced by `#include "Satsim_GetPointer___.h"`. Only the
+     dynamic masked-export `MAPL_GetPointer` calls remain (step 4).
+     File is now 2112 lines (from 4513).
 
 3. **`SATORB` import bundle** - the only non-field import
    (`ESMF_StateGet(IMPORT, 'SATORB', BUNDLE)`). Decide how a bundle

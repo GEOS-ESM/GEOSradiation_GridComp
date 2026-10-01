@@ -45,3 +45,7 @@ esma_add_library (${this}
   SRCS ${srcs}
   DEPENDENCIES GEOS_Shared MAPL GEOS_RadiationShared)
 
+mapl_acg (${this} Satsim_StateSpecs.rc
+  IMPORT_SPECS EXPORT_SPECS
+  GET_POINTERS DECLARE_POINTERS)
+
