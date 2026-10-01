@@ -196,11 +196,37 @@ spelled out below; everything else is "do what Solar did".
     (SatSim has never been run-tested in this repo, same as IRRAD was)
     and add the case to `regression/cases.txt` for ctest.
 
-13. **Style cleanup afterwards** (low priority, like Solar step 16):
-    lowercase keywords, collapse column-aligned declarations, remove the
-    commented-out `frac_outinv` / `congvec` / `load_mie_table` cruft,
-    and fix the `nullify`-inside-loop bug in the masking pass (L4931)
-    once a test covers it.
+13. **Style cleanup afterwards** (low priority, like Solar step 16).
+    DONE 2026-10-01 (done out of order, before steps 3-12).
+    - Keywords/alignment: nothing to do, the step-1 `codee format` pass
+      had already lowercased every Fortran keyword and collapsed all
+      column-aligned `::` declarations. Only 7 uppercase *intrinsics*
+      remained; lowercased them (`AdjustL`, `MIN`/`MAX`/`INT` in the
+      `default_Ncolumns` associate, 4 `MAX` in the `CWC = max(Q/FCLD,
+      1e-12)` block, `EXP` in `EMISS = 1 - exp(-taucir)`).
+    - Removed the commented-out `frac_outinv` declaration/allocate/
+      deallocate (3 lines), the commented `construct_cosp_sghydro` /
+      `FREE_COSP_SGHYDRO` pair plus the now-unused
+      `type(cosp_sghydro) :: sghydro` declaration, the 5 commented
+      debug `write(*,*)` lines inside the `DEBUG_GC` block, and the
+      13-line commented-out pre-`SATSIMTEMP` `RADARZETOT` block.
+    - `CMakeLists.txt`: dropped the commented-out
+      `#  quickbeam/load_mie_table.f90` and `#  congvec.f` `srcs`
+      entries. **`congvec.f` itself must stay on disk** - `scops.f`
+      lines 177 and 246 still `include 'congvec.f'`, so it is a text
+      include, not a compiled unit. `load_mie_table.f90` is genuinely
+      unreferenced (only a comment in `cosp_types.F90:1134`).
+    - Fixed the `nullify`-inside-loop bug in the masking pass (the
+      `MAPL_DimsHorzOnly .and. associated(ungridded_dims)` branch
+      nullified `ptr3d_new`/`ptr3d` inside the
+      `do j = 1, ungridded_dims(1)` loop): moved the two `nullify`
+      calls out of the loop, matching the other branches. Done now
+      rather than "once a test covers it" - the regression test is
+      still step 12, so this one is reviewed-by-inspection.
+    - Left alone deliberately: `DEBUG_GC` and the live `write(*,*)`
+      debug prints (step 7 removes those) and the `! deallocate stuff`
+      section comment.
+    - Not recompiled (step 11); the file does not build yet.
 
 Effort concentrates in steps 2 (mechanical but ~2300 lines), 4 (needs a
 MAPL3 design decision for dynamic export cloning) and 12 (test data and
