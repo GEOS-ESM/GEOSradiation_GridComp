@@ -118,12 +118,46 @@ spelled out below; everything else is "do what Solar did".
      dynamic masked-export `MAPL_GetPointer` calls remain (step 4).
      File is now 2112 lines (from 4513).
 
-3. **`SATORB` import bundle** - the only non-field import
-   (`ESMF_StateGet(IMPORT, 'SATORB', BUNDLE)`). Decide how a bundle
-   import is declared in MAPL3 (StateSpecs or a manual spec) and how
-   the parent connects it; `ESMFL_BundleGetPointerToData` needs a
-   MAPL3 equivalent (`ESMF_FieldBundleGet` + `ESMF_FieldGet(farrayPtr)`
-   or a MAPL3 bundle-pointer helper).
+3. **`SATORB` import bundle** DONE 2026-10-01.
+   - `MAPL_AddImportSpec(..., DATATYPE=MAPL_BundleItem)` ->
+     `MAPL_GridCompAddSpec(gc, state_intent=ESMF_STATEINTENT_IMPORT,
+     short_name='SATORB', standard_name='Satellite_orbits', dims="xy",
+     vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, units='days',
+     itemtype=MAPL_STATEITEM_FIELDBUNDLE, _RC)`. This mirrors the
+     producer's export spec in
+     `src/Shared/@MAPL/gridcomps/orbit/MAPL_OrbGridCompMod.F90` exactly;
+     the ACG still cannot express bundles, so it stays hand-written.
+   - `ESMFL_BundleGetPointerToData(bundle, name, ptr, _RC)` ->
+     `MAPL_FieldBundleGetPointer(bundle, trim(name), ptr, _RC)`
+     (`infrastructure/field_bundle/FieldBundleGetPointer.F90`, exported
+     from that directory's `API.F90`). Same semantics: it nullifies the
+     pointer when the field is not `ESMF_FIELDSTATUS_COMPLETE`, so the
+     existing `associated()` guards still hold. `trim` is needed because
+     `self%mask_name` is `ESMF_MAXSTR`-padded and the lookup is by exact
+     field name.
+   - `ESMF_StateGet(import, 'SATORB', bundle, _RC)` is unchanged - that
+     is plain ESMF and still correct in MAPL3.
+   - The ORBIT producer is already fully MAPL3 (private-state macros,
+     `MAPL_GridCompSetEntryPoint`, colon-free resources) and is built as
+     the `MAPL.orbit` target, so no work is needed on that side.
+   - **Deferred to step 10 (connectivity).** In MAPL2 the only explicit
+     wiring was `MAPL_AddConnectivity(GC, SRC_NAME='SATORB',
+     DST_NAME='SATORB', SRC_ID=ORB, DST_ID=PHYS)` in
+     `GEOS_AgcmGridComp.F90`; `SATORB` reached SATSIM by MAPL2's
+     automatic propagation of unsatisfied child imports up the tree
+     (SATSIM -> RADIATION -> PHYSICS). MAPL3 has no such propagation, so
+     step 10 must re-export `SATORB` explicitly at each level with
+     `MAPL_GridCompReexport`, or connect ORBIT -> SATSIM directly. Note
+     also that `GEOS_AgcmGridComp.F90` is itself still MAPL2, so there
+     may be no live ORBIT instance to connect to yet.
+   - Mask semantics, for reference when building the step 12 fake
+     provider: ORBIT sets `field = 1.0` inside the satellite swath and
+     `MAPL_UNDEF` everywhere else, which is what SatSim's
+     `where (ptr_mask == MAPL_UNDEF)` test keys on. Bundle field names
+     are the instrument names from the `Nominal_Orbits::` table in
+     `MAPL_OrbGridComp.rc` (`MODIS_T`, `CALIPSO`, `CLOUDSAT`, ...), and
+     those are exactly the names `SatSim.rc`'s `Masked_Exports::` table
+     puts in its mask column.
 
 4. **Masked exports (`SatSim.rc` `Masked_Exports::` table)** - the
    hard part. Read the table from the component HConfig (`satsim.yaml`,
