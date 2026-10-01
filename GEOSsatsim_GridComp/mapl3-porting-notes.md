@@ -179,11 +179,10 @@ spelled out below; everything else is "do what Solar did".
 
 7. **`Run` plumbing** - drop `MAPL_MetaComp` / `MAPL_GetObjectFromGC` /
    `MAPL_Get`: `IM/JM/LM` via `MAPL_GridCompGet`/grid; delete the unused
-   `LONS/LATS`; `RUNALARM` -> create a `satsim_alarm` in a real
-   `Initialize` using Solar's `RUN_AT_INTERVAL_START` /
-   `REFERENCE_DATE` / `REFERENCE_TIME` block with `SATSIM_DT`, plus
-   `_ASSERT` `DT /= 0` and `mod(DT, clock dt) == 0` (IRRAD notes
-   2026-09-29). `MAPL_TimerAdd/On/Off` -> `MAPL_GridCompTimerStart/Stop
+   `LONS/LATS`; replace the generic `RUNALARM` with
+   `ESMF_ClockGetAlarm(CLOCK, "satsim_alarm", ...)` - the alarm itself
+   is already created in `Initialize` (step 9).
+   `MAPL_TimerAdd/On/Off` -> `MAPL_GridCompTimerStart/Stop
    (gc, name, _RC)`. Remove `DEBUG_GC` and the `write(*,*)` debug prints
    (or route through the logger).
 
@@ -192,12 +191,33 @@ spelled out below; everything else is "do what Solar did".
    `PLE2D(IM*JM,0:LM)` locals. Apply the contiguous 0-based rank-remap
    trick from Solar step 11 / IRRAD notes, or shift the indexing.
 
-9. **Entry-point signatures** - `SetServices(gc, rc)` /
-   `Initialize(gc, import, export, clock, rc)` / `Run(gc, import,
-   export, clock, rc)`, `MAPL_GridCompSetEntryPoint` for both phases,
-   MAPL3-style `SetServices` ending (no `MAPL_GenericSetServices`). The
-   container's `use ... only: satsimSetServices => SetServices` alias
-   should suffice, as for IRRAD/SOLAR.
+9. **Entry-point signatures** DONE 2026-10-01.
+   - `SetServices(GC, RC)` now takes a plain `type(ESMF_GridComp) :: GC`
+     and `integer, intent(out) :: RC`, matching MAPL3's `I_SetServices`
+     (`infrastructure/esmf/ESMF_Interfaces.F90`). The MAPL2 version had
+     `intent(inout) :: GC` and an `optional :: RC`, neither of which is
+     allowed by the abstract interface.
+   - Added an `Initialize(GC, IMPORT, EXPORT, CLOCK, RC)` with the
+     `I_Run` signature (all dummies plain, `rc` `intent(out)`); `Run`
+     was changed to match. Both are registered with
+     `MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_INITIALIZE/RUN, ...)`,
+     the Run one with `phase_name="run"` as for IRRAD/SOLAR. Finalize
+     uses the MAPL generic default.
+   - Dropped the trailing `MAPL_GenericSetServices(GC, _RC)`; MAPL3
+     wires the generic methods itself.
+   - `Initialize` creates the run alarm (step 7's alarm half, done here
+     since the new method had to exist anyway): `SATSIM_DT` seconds,
+     defaulting to the heartbeat, with `_ASSERT`s that it is positive
+     and a multiple of the clock step (a zero interval would hang the
+     `ring_time` loop). The ring-time arithmetic is copied verbatim from
+     IRRAD/SOLAR, i.e. MAPL2's `handle_clock_and_main_alarm`, honouring
+     `RUN_AT_INTERVAL_START` / `REFERENCE_DATE` / `REFERENCE_TIME`. The
+     alarm is named `satsim_alarm`; step 7 will have `Run` fetch it with
+     `ESMF_ClockGetAlarm` in place of the old generic `RUNALARM`.
+   - `_UNUSED_DUMMY(IMPORT)` / `_UNUSED_DUMMY(EXPORT)` in `Initialize`,
+     since the states are untouched there.
+   - The container's `use ... only: satsimSetServices => SetServices`
+     alias still suffices (step 10).
 
 10. **Build wiring** - `GEOSsatsim_GridComp/CMakeLists.txt`: fix
     `DEPENDENCIES` (needs `GEOS_RadiationShared` for `gettau`, `MAPL`,
