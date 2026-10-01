@@ -289,7 +289,6 @@ contains
          real, dimension(IM * JM, LM) :: RHCOSP
          integer :: Npoints
          real, dimension(:, :, :), target, allocatable :: frac_out
-         !real, dimension(:,:,:),target,allocatable :: frac_outinv
          real, dimension(IM * JM, LM) :: frac_ls
          integer :: isccp_overlap
          logical :: DEBUG_GC
@@ -318,7 +317,6 @@ contains
          type(cosp_gridbox) :: gbx ! Gridbox information. Input for COSP
          type(cosp_subgrid) :: sgx ! Subgrid outputs
          type(cosp_sgradar) :: sgradar ! Output from radar simulator
-         type(cosp_sghydro) :: sghydro ! Input to radar simulator
          type(cosp_sglidar) :: sglidar ! Output from lidar simulator
          type(cosp_isccp) :: isccp ! Output from ISCCP simulator
          type(cosp_vgrid) :: vgrid ! Information on vertical grid of stats
@@ -479,20 +477,19 @@ contains
          call MAPL_GetResource(MAPL, use_satsim_misr, LABEL="USE_SATSIM_MISR:", default=0, _RC)
 
          call MAPL_GetResource(MAPL, GRIDNAME, 'AGCM_GRIDNAME:', _RC)
-         GRIDNAME = AdjustL(GRIDNAME)
+         GRIDNAME = adjustl(GRIDNAME)
          nn = len_trim(GRIDNAME)
          dateline = GRIDNAME(nn - 1:nn)
          imchar = GRIDNAME(3:index(GRIDNAME, 'x') - 1)
          read(imchar, *) imsize
          if (dateline == 'CF') imsize = imsize * 4
-         associate(default_Ncolumns => MIN(30, MAX(1, INT(4 * 5760 * 4 / imsize))))
+         associate(default_Ncolumns => min(30, max(1, int(4 * 5760 * 4 / imsize))))
             call MAPL_GetResource(MAPL, ncolumns, LABEL="SATSIM_NCOLUMNS:", default=default_Ncolumns, _RC)
          end associate
 
          call MAPL_GetResource(MAPL, Npoints_it, LABEL="SATSIM_POINTS_PER_ITERATION:", default=-999, _RC)
 
          allocate(frac_out(IM * JM, ncolumns, LM), _STAT)
-         !allocate(      frac_outinv(IM*JM,NCOLUMNS,LM), _STAT)
          allocate(lidar_beta_tot(IM * JM, ncolumns, LM), _STAT)
          allocate(lidar_tau_tot(IM * JM, ncolumns, LM), _STAT)
          allocate(radar_ze_tot(IM * JM, ncolumns, LM), _STAT)
@@ -526,10 +523,10 @@ contains
          ! to avoid stupid high cwc, which makes for stupid high dtau_s, which
          ! crashes icarus
          where (FCLD > 0.01)
-            CWC(:, :, :, 1) = MAX(QITOT / FCLD, 1.0e-12)
-            CWC(:, :, :, 2) = MAX(QLTOT / FCLD, 1.0e-12)
-            CWC(:, :, :, 3) = MAX(QRTOT / FCLD, 1.0e-12)
-            CWC(:, :, :, 4) = MAX(QSTOT / FCLD, 1.0e-12)
+            CWC(:, :, :, 1) = max(QITOT / FCLD, 1.0e-12)
+            CWC(:, :, :, 2) = max(QLTOT / FCLD, 1.0e-12)
+            CWC(:, :, :, 3) = max(QRTOT / FCLD, 1.0e-12)
+            CWC(:, :, :, 4) = max(QSTOT / FCLD, 1.0e-12)
             elsewhere
             CWC(:, :, :, 1) = 0.
             CWC(:, :, :, 2) = 0.
@@ -596,7 +593,7 @@ contains
                   !taucir = taulw(i,j,k,1) + taulw(i,j,k,2) + taulw(i,j,k,3) + taulw(i,j,k,4)
                   taucir = taulw(i, j, k, 1) + taulw(i, j, k, 2)
 
-                  EMISS(i, j, k) = 1 - EXP(-1.0 * taucir)
+                  EMISS(i, j, k) = 1 - exp(-1.0 * taucir)
 
                end do
 
@@ -788,7 +785,6 @@ contains
 
          call construct_cosp_subgrid(Npoints, ncolumns, LM, sgx)
          if (cfg%Lisccp_sim) call construct_cosp_isccp(cfg, Npoints, ncolumns, LM, isccp)
-         !call construct_cosp_sghydro(Npoints,Ncolumns,LM,N_hydro,sghydro)
          if (cfg%Lradar_sim) call construct_cosp_sgradar(cfg, Npoints, ncolumns, LM, N_HYDRO, sgradar)
          if (cfg%Llidar_sim) call construct_cosp_sglidar(cfg, Npoints, ncolumns, LM, N_HYDRO, PARASOL_NREFL, sglidar)
          if (cfg%Lmodis_sim) call construct_cosp_modis(cfg, Npoints, modis)
@@ -846,14 +842,6 @@ contains
             write(*, *) 'lm: ', LM
             write(*, *) 'npoints: ', Npoints
             write(*, *) 'npoints_it: ', Npoints_it
-
-            !write(*,*) 'FCLD: ', FCLD
-
-            !write(*,*) 'gbx%dtau_s: ', gbx%dtau_s
-            !write(*,*) 'gbx%dem_s: ', gbx%dem_s
-
-            !write(*,*) 'gbx%tca: ', gbx%tca
-            !write(*,*) 'sgx%frac_out: ', sgx%frac_out
 
          end if
 
@@ -1476,18 +1464,6 @@ contains
             end where
             RADARZETOT = reshape(radar_ze_tot_mean(:, LM:1:-1), (/IM, JM, LM/))
          end if
-         !if (associated(RADARZETOT)) then
-         ! radar_ze_tot_mask = (radar_ze_tot .ne. MAPL_UNDEF)
-         ! ncvalid = count( radar_ze_tot_mask, 2 )
-         ! where (ncvalid > 0)
-         !    radar_ze_tot_max = maxval( radar_ze_tot, 2, radar_ze_tot_mask )
-         !    radar_ze_tot_mean = radar_ze_tot_max + 10.0*log10( sum( 10.0**((radar_ze_tot - spread(radar_ze_tot_max, 2,
-         ! NCOLUMNS))/10.0), 2, radar_ze_tot_mask ) / ncvalid )
-         ! elsewhere
-         !    radar_ze_tot_mean = MAPL_UNDEF
-         ! end where
-         ! RADARZETOT=reshape( radar_ze_tot_mean(:,LM:1:-1), (/IM , JM , LM /) )
-         !end if
 #else
          if (associated(RADARZETOT)) then
             RADARZETOT = reshape(sum(radar_ze_tot(:, :, LM:1:-1), 2) / (1. * ncolumns), (/IM, JM, LM /))
@@ -2021,9 +1997,9 @@ contains
                            where (ptr_mask == MAPL_UNDEF)
                               ptr3d_new(:, :, j) = MAPL_UNDEF
                            end where
-                           nullify(ptr3d_new)
-                           nullify(ptr3d)
                         end do
+                        nullify(ptr3d_new)
+                        nullify(ptr3d)
                      end if
                   end if
                   if (mapl_dims == MAPL_DimsHorzVert) then
@@ -2085,7 +2061,6 @@ contains
          ! deallocate stuff
          !-----------------
          deallocate(frac_out, _STAT)
-         !deallocate(      frac_outinv, _STAT)
          deallocate(lidar_beta_tot, _STAT)
          deallocate(lidar_tau_tot, _STAT)
          deallocate(radar_ze_tot, _STAT)
@@ -2095,7 +2070,6 @@ contains
          call FREE_COSP_GRIDBOX(gbx)
          call FREE_COSP_SUBGRID(sgx)
          if (cfg%Lisccp_sim) call FREE_COSP_ISCCP(isccp)
-         !call FREE_COSP_SGHYDRO(sghydro)
          if (cfg%Lradar_sim) call FREE_COSP_SGRADAR(sgradar)
          if (cfg%Llidar_sim) call FREE_COSP_SGLIDAR(sglidar)
          call FREE_COSP_VGRID(vgrid)

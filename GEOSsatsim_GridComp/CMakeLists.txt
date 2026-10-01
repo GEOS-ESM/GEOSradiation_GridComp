@@ -13,7 +13,6 @@ set (srcs
   quickbeam/format_input.f90
   quickbeam/gases.f90
   quickbeam/load_hydrometeor_classes.f90
-#  quickbeam/load_mie_table.f90
   quickbeam/math_lib.f90
   quickbeam/mrgrnk.f90
   quickbeam/optics_lib.f90
@@ -21,7 +20,6 @@ set (srcs
   quickbeam/radar_simulator_types.f90
   quickbeam/zeff.f90
   MISR_simulator.f
-#  congvec.f
   cosp.F90
   cosp_constants.F90
   cosp_isccp_simulator.F90
