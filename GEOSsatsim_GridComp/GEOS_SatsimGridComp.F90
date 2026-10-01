@@ -89,14 +89,16 @@ contains
 #include "Satsim_Export___.h"
 
       ! SATORB is a FieldBundle import; the ACG only supports fields, so it is
-      ! added by hand.
-      call MAPL_AddImportSpec(gc, &
-           SHORT_NAME='SATORB', &
-           long_name='Satellite_orbits', &
+      ! added by hand. Must mirror the ORBIT component's export spec in
+      ! MAPL_OrbGridCompMod.F90.
+      call MAPL_GridCompAddSpec(gc, &
+           state_intent=ESMF_STATEINTENT_IMPORT, &
+           short_name='SATORB', &
+           standard_name='Satellite_orbits', &
+           dims="xy", &
+           vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, &
            units='days', &
-           DIMS=MAPL_DimsHorzOnly, &
-           DATATYPE=MAPL_BundleItem, &
-           _RC)
+           itemtype=MAPL_STATEITEM_FIELDBUNDLE, _RC)
 
       ! parse resource file for masks
       CF = ESMF_ConfigCreate(_RC)
@@ -1923,7 +1925,7 @@ contains
                vindex = MAPL_VarSpecGetIndex(ExportSpec, self%export_name(i), _RC)
                call MAPL_VarSpecGet(ExportSpec(vindex), DIMS=mapl_dims, ungridded_dims=ungridded_dims, _RC)
                ! mask from bundle
-               call ESMFL_BundleGetPointerToData(bundle, self%mask_name(i), ptr_mask, _RC)
+               call MAPL_FieldBundleGetPointer(bundle, trim(self%mask_name(i)), ptr_mask, _RC)
                if (self%newvar(i)) then
 
                   ! determine what dimension pointer we need
