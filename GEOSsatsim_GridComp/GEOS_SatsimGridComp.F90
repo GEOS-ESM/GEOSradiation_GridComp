@@ -41,8 +41,8 @@ module GEOS_SatsimGridCompMod
 contains
 
    subroutine SetServices(GC, RC)
-      type(ESMF_GridComp), intent(inout) :: GC ! gridded component
-      integer, optional :: RC ! return code
+      type(ESMF_GridComp) :: GC ! gridded component
+      integer, intent(out) :: RC ! return code
 
       integer :: status
 
@@ -73,11 +73,11 @@ contains
       _SET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE)
       _GET_NAMED_PRIVATE_STATE(GC, SatSim_State, PRIVATE_STATE, self)
 
-      ! Set the Run entry point
-      ! -----------------------
+      ! Set entry points (Finalize uses the MAPL generic default)
+      ! ----------------------------------------------------------
 
-      call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_RUN, Run, &
-           _RC)
+      call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_INITIALIZE, Initialize, _RC)
+      call MAPL_GridCompSetEntryPoint(GC, ESMF_METHOD_RUN, Run, phase_name="run", _RC)
 
       ! Get the configuration from the component
       !-----------------------------------------
@@ -178,23 +178,85 @@ contains
          call MAPL_DoNotDeferExport(GC, self%export_name, _RC)
       end do
 
-      ! Set generic init and final methods
-      ! ----------------------------------
-
-      call MAPL_GenericSetServices(GC, _RC)
-
       _RETURN(_SUCCESS)
 
    end subroutine SetServices
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+   subroutine Initialize(GC, IMPORT, EXPORT, CLOCK, RC)
+      type(ESMF_GridComp) :: GC ! Gridded component
+      type(ESMF_State) :: IMPORT ! Import state
+      type(ESMF_State) :: EXPORT ! Export state
+      type(ESMF_Clock) :: CLOCK ! The clock
+      integer, intent(out) :: RC ! Error code
+
+      ! Creates the alarm that gates how often Run() calls the COSP simulators,
+      ! with ring interval set by SATSIM_DT (seconds). Run() retrieves it from
+      ! the clock by name. MAPL2 got this for free from the generic RUNALARM.
+
+      integer :: status
+      integer :: satsim_dt
+      real :: run_dt
+      type(ESMF_TimeInterval) :: satsim_alarm_interval, time_step
+      type(ESMF_Time) :: current_time, ring_time
+      type(ESMF_Calendar) :: cal
+      integer :: yy, mm, dd, reference_date, reference_time
+      logical :: run_at_interval_start
+      type(ESMF_Alarm) :: satsim_alarm
+
+      call MAPL_ClockGet(CLOCK, dt=run_dt, _RC)
+      call MAPL_GridCompGetResource(GC, "SATSIM_DT", satsim_dt, default=nint(run_dt), _RC)
+      ! same checks as MAPL2's handle_clock_and_main_alarm; a zero interval would hang the ring_time loop below
+      _ASSERT(satsim_dt > 0, "SATSIM_DT must be a positive number of seconds")
+      _ASSERT(mod(satsim_dt, nint(run_dt)) == 0, "SATSIM_DT must be a multiple of the clock time step")
+      call ESMF_TimeIntervalSet(satsim_alarm_interval, s=satsim_dt, _RC)
+
+      ! Alarm set up as in MAPL2's handle_clock_and_main_alarm (MAPL_Generic.F90),
+      ! which MAPL3 no longer provides for components
+      call ESMF_ClockGet(CLOCK, currTime=current_time, timeStep=time_step, calendar=cal, _RC)
+      call ESMF_TimeGet(current_time, yy=yy, mm=mm, dd=dd, _RC)
+      call MAPL_GridCompGetResource(GC, "RUN_AT_INTERVAL_START", run_at_interval_start, default=.false., _RC)
+      ! alarm reference date and time default to midnight of the current day
+      call MAPL_GridCompGetResource(GC, "REFERENCE_DATE", reference_date, default=yy*10000 + mm*100 + dd, _RC)
+      call MAPL_GridCompGetResource(GC, "REFERENCE_TIME", reference_time, default=0, _RC)
+      call ESMF_TimeSet(ring_time, &
+           yy=reference_date/10000, mm=mod(reference_date, 10000)/100, dd=mod(reference_date, 100), &
+           h=reference_time/10000, m=mod(reference_time, 10000)/100, s=mod(reference_time, 100), &
+           calendar=cal, _RC)
+      if (ring_time > current_time) then
+         ring_time = ring_time - (int((ring_time - current_time)/satsim_alarm_interval) + 1)*satsim_alarm_interval
+      end if
+      ! back off by the clock's dt since the clock advances AFTER the run method
+      if (.not. run_at_interval_start) ring_time = ring_time - time_step
+      ! make sure that ring_time is not in the past
+      do while (ring_time < current_time)
+         ring_time = ring_time + satsim_alarm_interval
+      end do
+
+      satsim_alarm = ESMF_AlarmCreate( &
+           name="satsim_alarm", &
+           clock=CLOCK, &
+           ringTime=ring_time, &
+           ringInterval=satsim_alarm_interval, &
+           sticky=.false., _RC)
+      if (ring_time == current_time) then
+         call ESMF_AlarmRingerOn(satsim_alarm, _RC)
+      end if
+
+      _RETURN(_SUCCESS)
+      _UNUSED_DUMMY(IMPORT)
+      _UNUSED_DUMMY(EXPORT)
+   end subroutine Initialize
+
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
    subroutine Run(GC, IMPORT, EXPORT, CLOCK, RC)
-      type(ESMF_GridComp), intent(inout) :: GC ! Gridded component
-      type(ESMF_State), intent(inout) :: IMPORT ! Import state
-      type(ESMF_State), intent(inout) :: EXPORT ! Export state
-      type(ESMF_Clock), intent(inout) :: CLOCK ! The clock
-      integer, optional, intent(out) :: RC ! Error code:
+      type(ESMF_GridComp) :: GC ! Gridded component
+      type(ESMF_State) :: IMPORT ! Import state
+      type(ESMF_State) :: EXPORT ! Export state
+      type(ESMF_Clock) :: CLOCK ! The clock
+      integer, intent(out) :: RC ! Error code
 
       integer :: status
 
