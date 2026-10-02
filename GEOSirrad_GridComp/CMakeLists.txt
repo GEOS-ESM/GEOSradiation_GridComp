@@ -14,3 +14,8 @@ esma_add_library (${this}
 if(MKL_FOUND)
    target_compile_definitions(${this} PRIVATE HAVE_MKL)
 endif ()
+
+mapl_acg (
+  ${this} Irrad_StateSpecs.rc
+  IMPORT_SPECS EXPORT_SPECS INTERNAL_SPECS GET_POINTERS DECLARE_POINTERS
+)
