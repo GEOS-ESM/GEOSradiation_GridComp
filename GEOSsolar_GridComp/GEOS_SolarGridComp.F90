@@ -173,7 +173,9 @@ module GEOS_SolarGridCompMod
    use MAPL_SatVapor_mod, only: MAPL_EQsat
    use MAPL_LoadBalance_mod, only: MAPL_Distribute, MAPL_Retrieve
    ! not re-exported through the MAPL umbrella (esmf/API.F90 has no public ::)
-   use MAPL_HorizontalDimsSpec_mod, only: HorizontalDimsSpec, HORIZONTAL_DIMS_NONE, operator(==)
+   use MAPL_HorizontalDimsSpec_mod, only: HorizontalDimsSpec, HORIZONTAL_DIMS_NONE, operator(/=)
+   ! enums/API.F90 re-exports the stagger constants but not their operators
+   use MAPL_VerticalStaggerLoc_mod, only: operator(/=)
 
    ! for RRTMGP
    use mo_gas_optics_rrtmgp, only: ty_gas_optics_rrtmgp
@@ -1583,14 +1585,16 @@ contains
          integer, target :: i1Out, iNOut, i1InOut, iNInOut
          real, pointer :: QQ3(:, :, :), RR3(:, :, :), ptr3(:, :, :), ptr4(:, :, :, :)
          real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), O3(:, :), PLhPa(:, :)
-         integer :: DIMS, NumLit, Num2do, num_aero_vars
+         integer :: NumLit, Num2do, num_aero_vars
+         logical :: has_horz_dims, has_vert_dim
          character(len=ESMF_MAXSTR) :: SHORT_NAME
          integer :: num_ungridded, ungrd_extent
          logical, allocatable :: IntInOut(:)
          character(len=ESMF_MAXSTR), allocatable :: NamesInp(:), NamesInt(:)
          integer, allocatable :: SlicesInp(:), SlicesInt(:)
          real, target, allocatable :: BufInp(:), BufInOut(:), BufOut(:)
-         integer, allocatable :: grd_dim(:), ungrd_dim(:)
+         logical, allocatable :: IntHasVert(:)
+         integer, allocatable :: ungrd_dim(:)
          real, pointer :: buf(:)
          integer :: NumImp, NumInt, NumInp
          integer :: NumMax, HorzDims(2)
@@ -1708,7 +1712,7 @@ contains
          allocate( &
               SlicesInp(NumInp), NamesInp(NumInp), &
               SlicesInt(NumInt), NamesInt(NumInt), &
-              IntInOut(NumInt), grd_dim(NumInt), ungrd_dim(NumInt), &
+              IntInOut(NumInt), IntHasVert(NumInt), ungrd_dim(NumInt), &
               _STAT)
 
          HorzDims = (/IM, JM/)
@@ -1734,14 +1738,16 @@ contains
                call ESMF_StateGet(import, trim(ImportNames(K)), itemType=itemType, _RC)
                if (itemType == ESMF_STATEITEM_FIELD) then
                   call ESMF_StateGet(import, trim(ImportNames(K)), field, _RC)
-                  call SolarFieldGetDims(field, DIMS, num_ungridded, ungrd_extent, _RC)
+                  call SolarFieldGetDims(field, has_horz_dims, has_vert_dim, num_ungridded, ungrd_extent, _RC)
                else
                   ! AERO is a nested state; sized separately below
                   _ASSERT(NamesInp(K) == "AERO", 'only AERO may be a non-field import')
-                  DIMS = MAPL_DimsHorzOnly
+                  has_horz_dims = .true.
+                  has_vert_dim = .false.
                end if
             else
-               DIMS = MAPL_DimsHorzOnly
+               has_horz_dims = .true.
+               has_vert_dim = .false.
                if (K == NumImp + 1) then
                   NamesInp(K) = "Ig"
                else if (K == NumImp + 2) then
@@ -1757,7 +1763,7 @@ contains
 
             ! Skip vertical only inputs (PREF). They dont require
             ! load-balancing since they have no horizontal dimension.
-            if (DIMS == MAPL_DimsVertOnly) then
+            if (.not. has_horz_dims) then
                SlicesInp(K) = 0
                cycle
             end if
@@ -1772,18 +1778,13 @@ contains
 
             else ! Non-aerosol input
 
-               select case (DIMS)
-               case (MAPL_DimsHorzVert)
+               if (has_vert_dim) then
                   ! We currently assume this case is 3D
                   call MAPL_StateGetPointer(import, ptr3, NamesInp(K), _RC)
                   SlicesInp(K) = size(ptr3, 3)
-
-               case (MAPL_DimsHorzOnly)
+               else
                   SlicesInp(K) = 1
-
-               case default
-                  _FAIL('invalid dimension for SOLAR import')
-               end select
+               end if
 
             end if
 
@@ -1856,7 +1857,7 @@ contains
                   call PackIt(BufInp(i1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   iN = i1 + NumMax * size(ptr3, 3) - 1
 
-               else ! case(MAPL_DIMSHORZONLY)
+               else ! horizontal-only
 
                   ! pack auxilliary variables
                   if (NamesInp(K) == 'Ig') then
@@ -1962,17 +1963,17 @@ contains
             ! InOut or Out?
             SHORT_NAME = InternalNames(K)
             call ESMF_StateGet(internal, trim(SHORT_NAME), field, _RC)
-            call SolarFieldGetDims(field, DIMS, num_ungridded, ungrd_extent, _RC)
+            call SolarFieldGetDims(field, has_horz_dims, has_vert_dim, num_ungridded, ungrd_extent, _RC)
             ! later FAR variables will be InOut ... for now there are no InOut vars
             IntInOut(K) = .false.
 
             ! save properties
             NamesInt(K) = SHORT_NAME
-            grd_dim(K) = DIMS
+            IntHasVert(K) = has_vert_dim
 
             ! Skip vertical only variables. They dont require
             ! load-balancing since they have no horizontal dimension.
-            if (DIMS == MAPL_DimsVertOnly) then
+            if (.not. has_horz_dims) then
                SlicesInt(K) = 0
                cycle
             end if
@@ -2018,27 +2019,21 @@ contains
                ! ungridded dims are present, make sure just one
                _ASSERT(num_ungridded == 1, 'Only one ungridded dimension allowed')
                ungrd_dim(K) = ungrd_extent
-               select case (DIMS)
-               case (MAPL_DimsHorzVert)
+               if (has_vert_dim) then
                   call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
                   SlicesInt(K) = size(ptr4, 3) * ungrd_dim(K)
-               case (MAPL_DimsHorzOnly)
+               else
                   SlicesInt(K) = ungrd_dim(K)
-               case default
-                  _FAIL('invalid dimension for Internal')
-               end select
+               end if
             else
                ! no ungridded dimension
                ungrd_dim(K) = 0
-               select case (DIMS)
-               case (MAPL_DimsHorzVert)
+               if (has_vert_dim) then
                   call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   SlicesInt(K) = size(ptr3, 3)
-               case (MAPL_DimsHorzOnly)
+               else
                   SlicesInt(K) = 1
-               case default
-                  _FAIL('invalid dimension for Internal')
-               end select
+               end if
             end if
 
          end do INT_VARS_1
@@ -2070,8 +2065,7 @@ contains
 
             if (ungrd_dim(K) > 0) then ! has ungridded dimensions
 
-               select case (grd_dim(K))
-               case (MAPL_DimsHorzVert)
+               if (IntHasVert(K)) then
                   call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
                   do J = 1, ungrd_dim(K)
                      !pmn compiler       call
@@ -2086,7 +2080,7 @@ contains
                   end do
                   piN = pi1 + NumMax * size(ptr4, 3) * ungrd_dim(K) - 1
                   ptr3(1:NumMax, 1:size(ptr4, 3), 1:ungrd_dim(K)) => buf(pi1:piN)
-               case (MAPL_DimsHorzOnly)
+               else
                   call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,ungrd_dim(k))
                   if (IntInOut(K)) then
@@ -2096,12 +2090,11 @@ contains
                   end if
                   piN = pi1 + NumMax * ungrd_dim(K) - 1
                   ptr2(1:NumMax, 1:ungrd_dim(K)) => buf(pi1:piN)
-               end select
+               end if
 
             else ! no ungridded dimensions
 
-               select case (grd_dim(K))
-               case (MAPL_DimsHorzVert)
+               if (IntHasVert(K)) then
                   call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr3,daytime,NumMax,HorzDims,size(ptr3,3))
                   if (IntInOut(K)) then
@@ -2110,7 +2103,7 @@ contains
                      call PackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   end if
                   piN = pi1 + NumMax * size(ptr3, 3) - 1
-               case (MAPL_DimsHorzOnly)
+               else
                   call MAPL_StateGetPointer(internal, ptr2, NamesInt(K), _RC)
                   !pmn compiler     call PackIt(Buf(pi1),ptr2,daytime,NumMax,HorzDims,1)
                   if (IntInOut(K)) then
@@ -2119,7 +2112,7 @@ contains
                      call PackIt(BufOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
                   end if
                   piN = pi1 + NumMax - 1
-               end select
+               end if
                ptr2(1:NumMax, 1:SlicesInt(K)) => buf(pi1:piN)
 
             end if
@@ -3670,8 +3663,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             end if
 
             if (ungrd_dim(K) > 0) then
-               select case (grd_dim(K))
-               case (MAPL_DimsHorzVert)
+               if (IntHasVert(K)) then
                   call MAPL_StateGetPointer(internal, ptr4, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      do J = 1, ungrd_dim(K)
@@ -3684,31 +3676,30 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
                              daytime, NumMax, HorzDims, size(ptr4, 3), def)
                      end do
                   end if
-               case (MAPL_DimsHorzOnly)
+               else
                   call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K))
                   else
                      call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, ungrd_dim(K), def)
                   end if
-               end select
+               end if
             else
-               select case (grd_dim(K))
-               case (MAPL_DimsHorzVert)
+               if (IntHasVert(K)) then
                   call MAPL_StateGetPointer(internal, ptr3, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3))
                   else
                      call UnPackIt(BufOut(pi1), ptr3, daytime, NumMax, HorzDims, size(ptr3, 3), def)
                   end if
-               case (MAPL_DimsHorzOnly)
+               else
                   call MAPL_StateGetPointer(internal, ptr2, NamesInt(K), _RC)
                   if (IntInOut(K)) then
                      call UnPackIt(BufInOut(pi1), ptr2, daytime, NumMax, HorzDims, 1)
                   else
                      call UnPackIt(BufOut(pi1), ptr2, daytime, NumMax, HorzDims, 1, def)
                   end if
-               end select
+               end if
             end if
             pi1 = pi1 + NumMax * SlicesInt(K)
 
@@ -3718,7 +3709,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(ImportNames, InternalNames, _STAT)
          deallocate(SlicesInp, NamesInp, _STAT)
          deallocate(SlicesInt, NamesInt, _STAT)
-         deallocate(IntInOut, grd_dim, ungrd_dim, _STAT)
+         deallocate(IntInOut, IntHasVert, ungrd_dim, _STAT)
          deallocate(BufInp, BufInOut, BufOut, _STAT)
          call MAPL_GridCompTimerStart(gc, "--DESTROY", _RC)
          if (LoadBalance) call MAPL_BalanceDestroy(Handle=SolarBalanceHandle, _RC)
@@ -4952,22 +4943,24 @@ TEST_('RRTMGP-SW: does not seem to be SW')
    end subroutine Run
 
    ! ---------------------------------------------------------------------------
-   ! Reconstruct the MAPL2 VarSpec DIMS/UNGRIDDED_DIMS view of a field from its
-   ! MAPL3 metadata (MAPL_VarSpecGet no longer exists). ungridded_dims in MAPL3
-   ! excludes the vertical dimension, so num_levels distinguishes xyz from xy.
+   ! Recover the dimensionality the load balancer needs (MAPL_VarSpecGet no
+   ! longer exists). ungridded_dims in MAPL3 excludes the vertical dimension,
+   ! so the vertical presence comes from vert_staggerloc.
    ! ---------------------------------------------------------------------------
-   subroutine SolarFieldGetDims(field, dims, num_ungridded, ungrd_extent, rc)
+   subroutine SolarFieldGetDims(field, has_horz_dims, has_vert_dim, num_ungridded, ungrd_extent, rc)
       type(ESMF_Field), intent(inout) :: field
-      integer, intent(out) :: dims, num_ungridded, ungrd_extent
+      logical, intent(out) :: has_horz_dims, has_vert_dim
+      integer, intent(out) :: num_ungridded, ungrd_extent
       integer, optional, intent(out) :: rc
 
-      integer :: status, num_levels
+      integer :: status
       type(HorizontalDimsSpec) :: hspec
+      type(MAPL_VerticalStaggerLoc) :: vstagger
       type(MAPL_UngriddedDims) :: ungrd
       type(MAPL_UngriddedDim), pointer :: ungrd_dim
 
       call MAPL_FieldGet(field, horizontal_dims_spec=hspec, &
-           ungridded_dims=ungrd, num_levels=num_levels, _RC)
+           ungridded_dims=ungrd, vert_staggerloc=vstagger, _RC)
 
       num_ungridded = ungrd%get_num_ungridded()
       ungrd_extent = 0
@@ -4976,13 +4969,8 @@ TEST_('RRTMGP-SW: does not seem to be SW')
          ungrd_extent = ungrd_dim%get_extent()
       end if
 
-      if (hspec == HORIZONTAL_DIMS_NONE) then
-         dims = MAPL_DimsVertOnly
-      else if (num_levels > 0) then
-         dims = MAPL_DimsHorzVert
-      else
-         dims = MAPL_DimsHorzOnly
-      end if
+      has_horz_dims = (hspec /= HORIZONTAL_DIMS_NONE)
+      has_vert_dim = (vstagger /= MAPL_VERTICAL_STAGGER_NONE)
 
       _RETURN(_SUCCESS)
    end subroutine SolarFieldGetDims
