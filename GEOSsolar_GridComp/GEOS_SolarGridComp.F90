@@ -2338,6 +2338,20 @@ contains
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
 
     call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'cloud_area_fraction_for_stratospheric_cirrus_clouds',   &
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'CLDSC',                                                 &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'cloud_area_fraction_for_polar_stratospheric_clouds',    &               
+       UNITS      = '1' ,                                                    &
+       SHORT_NAME = 'CLDPS',                                                 &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'total_cloud_area_fraction',                             &
        UNITS      = '1' ,                                                    &
        SHORT_NAME = 'CLDTT',                                                 &
@@ -2414,6 +2428,20 @@ contains
        SHORT_NAME = 'TAUHI',                                                 &
        DIMS       = MAPL_DimsHorzOnly,                                       &
        VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &   
+       LONG_NAME  = 'in_cloud_optical_thickness_of_stratospheric_cirrus_clouds', &
+       UNITS      = '1' ,                                                    &         
+       SHORT_NAME = 'TAUSC',                                                 &         
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)         
+
+    call MAPL_AddExportSpec(GC,                                              &   
+       LONG_NAME  = 'in_cloud_optical_thickness_of_polar_stratospheric_clouds', &
+       UNITS      = '1' ,                                                    &         
+       SHORT_NAME = 'TAUPS',                                                 &         
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)         
 
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  = 'in_cloud_optical_thickness_of_all_clouds__deprecated',  &
@@ -2922,7 +2950,7 @@ contains
     integer, parameter :: NB_RRTMGP_IRRAD = 16 ! Num bands in IRRAD calcs for RRTMGP
 
     integer :: CalledLast
-    integer :: LCLDMH, LCLDLM
+    integer :: LCLDPS, LCLDSC, LCLDHI, LCLDMH, LCLDLM
     integer :: YY, DOY
     integer :: K
     real    :: CO2
@@ -3190,9 +3218,31 @@ contains
     ! Use the reference pressures to separate high, middle, and low clouds.
     call MAPL_GetPointer(IMPORT, PREF, 'PREF', __RC__)
 
-    _ASSERT(PRS_MID_HIGH > PREF(1)     , 'mid-high pressure band boundary too high!')
+    _ASSERT(PRS_MID_HIGH > 10000.0     , 'mid-high pressure band boundary too high!')
     _ASSERT(PRS_LOW_MID  > PRS_MID_HIGH, 'pressure band misordering!')
     _ASSERT(PRS_LOW_MID  < PREF(LM)    , 'low-mid pressure band boundary too low!')
+
+
+    ! find cld troposphere top interface level
+    k = 1
+    do while ( PREF(k) < 1.0 )
+      k=k+1
+    end do
+    LCLDPS = k
+
+    ! find cld stratospheric cirrus top interface level
+    k = 1
+    do while ( PREF(k) < 7000.0 )
+      k=k+1
+    end do
+    LCLDSC = k
+
+    ! find cld troposphere top interface level
+    k = 1
+    do while ( PREF(k) < 10000.0 )
+      k=k+1
+    end do
+    LCLDHI = k
 
     ! find mid-high interface level
     k = 1
@@ -5184,7 +5234,7 @@ contains
 
         call PROCESS_RRTMGP_BLOCK( &
           b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
-          LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
+          LCLDLM, LCLDMH, LCLDHI, LCLDSC, LCLDPS, include_aerosols, gen_mro, cond_inhomo, &
           cloud_overlap_type, IM_World, seeds(2), &
           need_aer_optical_props, top_at_1, &
           rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
@@ -7182,7 +7232,7 @@ contains
 #define TEST_(A) error_msg = A; if (trim(error_msg)/="") then; _FAIL("RRTMGP Error: "//trim(error_msg)); endif
     subroutine PROCESS_RRTMGP_BLOCK( &
         b, ncol, rrtmgp_blockSize, LM, ngpt, nbnd, nmom, &
-        LCLDLM, LCLDMH, include_aerosols, gen_mro, cond_inhomo, &
+        LCLDLM, LCLDMH, LCLDHI, LCLDSC, LCLDPS, include_aerosols, gen_mro, cond_inhomo, &
         cloud_overlap_type, IM_World, seeds_time_key, &
         need_aer_optical_props, top_at_1, &
         rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice, &
@@ -7243,7 +7293,7 @@ contains
 
       integer,                        intent(in)    :: b, ncol, rrtmgp_blockSize
       integer,                        intent(in)    :: LM, ngpt, nbnd, nmom
-      integer,                        intent(in)    :: LCLDLM, LCLDMH
+      integer,                        intent(in)    :: LCLDLM, LCLDMH, LCLDHI, LCLDSC, LCLDPS
       logical,                        intent(in)    :: include_aerosols
       logical,                        intent(in)    :: gen_mro, cond_inhomo
       character(len=*),               intent(in)    :: cloud_overlap_type
@@ -7667,7 +7717,7 @@ contains
       real, pointer, dimension(:,:,:)   :: RRL,RRI,RRR,RRS
       real, pointer, dimension(:,:,:)   :: RQL,RQI,RQR,RQS
       real, pointer, dimension(:,:,:,:) :: TAUCLD, HYDROMETS, REFF
-      real, pointer, dimension(:,:,:)   :: TAUI,TAUW,TAUR,TAUS
+      real, pointer, dimension(:,:,:)   :: TAUCI,TAUCW,TAUCR,TAUCS
 
       ! for efficiency
       real, allocatable, dimension(:,:) :: aCLDL,aCLDM,aCLDH
@@ -7678,8 +7728,8 @@ contains
       real, dimension(LM,4) :: DUM2D
 
       real, pointer, dimension(:,:)   :: TDUST,TSALT,TSO4,TBC,TOC
-      real, pointer, dimension(:,:)   :: CLDH,CLDM,CLDL,CLDT, &
-                                         TAUH,TAUM,TAUL,TAUX,TAUT, &
+      real, pointer, dimension(:,:)   :: CLDP,CLDS,CLDH,CLDM,CLDL,CLDT, &
+                                         TAUP,TAUS,TAUH,TAUM,TAUL,TAUX,TAUT, &
                                          COTH,COTM,COTL,COTT, &
                                          CLDTMP,CLDPRS
       real, pointer, dimension(:,:)   :: COTDH,COTDM,COTDL,COTDT, &
@@ -7896,17 +7946,21 @@ contains
       call MAPL_GetPointer(IMPORT  , Q,          'QV',         __RC__)
 
       call MAPL_GetPointer(EXPORT  , FCLD,       'FCLD',       __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUI,       'TAUCLI',     __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUW,       'TAUCLW',     __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUR,       'TAUCLR',     __RC__)
-      call MAPL_GetPointer(EXPORT  , TAUS,       'TAUCLS',     __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUCI,      'TAUCLI',     __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUCW,      'TAUCLW',     __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUCR,      'TAUCLR',     __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUCS,      'TAUCLS',     __RC__)
       call MAPL_GetPointer(EXPORT  , CLDL,       'CLDLO',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDM,       'CLDMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDH,       'CLDHI',      __RC__)
+      call MAPL_GetPointer(EXPORT  , CLDS,       'CLDSC',      __RC__)
+      call MAPL_GetPointer(EXPORT  , CLDP,       'CLDPS',      __RC__)
       call MAPL_GetPointer(EXPORT  , CLDT,       'CLDTT',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUL,       'TAULO',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUM,       'TAUMD',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUH,       'TAUHI',      __RC__)
+      call MAPL_GetPointer(EXPORT  , TAUS,       'TAUSC',      __RC__) 
+      call MAPL_GetPointer(EXPORT  , TAUP,       'TAUPS',      __RC__) 
       call MAPL_GetPointer(EXPORT  , TAUT,       'TAUTT',      __RC__)
       call MAPL_GetPointer(EXPORT  , TAUX,       'TAUTX',      __RC__)
       call MAPL_GetPointer(EXPORT  , COTL,       'COTLO',      __RC__)
@@ -7940,6 +7994,23 @@ contains
 
       if (associated(FCLD)) FCLD = CLIN
 
+      ! Polar Stratospheric Clouds
+      if (associated(CLDP)) then
+         CLDP = 0.
+         do l=LCLDPS,LCLDSC-1
+            CLDP = max(CLDP,CLIN(:,:,L))
+         end do
+      end if
+
+      ! Stratospheric Cirrus Clouds
+      if (associated(CLDS)) then
+         CLDS = 0.
+         do l=LCLDSC,LCLDHI-1
+            CLDS = max(CLDS,CLIN(:,:,L))
+         end do
+      end if
+
+      ! Troposperic High Clouds
       if (associated(CLDH) .or. associated(CLDT) .or. &
           associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDH) .or. associated(COTNH) .or. &
@@ -7947,13 +8018,14 @@ contains
       then
          allocate(aCLDH(IM,JM),__STAT__)
          aCLDH = 0.
-         do l=1,LCLDMH-1
+         do l=LCLDHI,LCLDMH-1
             aCLDH = max(aCLDH,CLIN(:,:,L))
          end do
          if (associated(CLDH)) CLDH = aCLDH
          if (associated(COTDH)) COTDH = aCLDH
       end if
 
+      ! Troposperic Middle Clouds
       if (associated(CLDM) .or. associated(CLDT) .or. &
           associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDM) .or. associated(COTNM) .or. &
@@ -7968,6 +8040,7 @@ contains
          if (associated(COTDM)) COTDM = aCLDM
       end if
 
+      ! Troposperic Low Clouds
       if (associated(CLDL) .or. associated(CLDT) .or. &
           associated(TAUX) .or. associated(COTT) .or. &
           associated(COTDL) .or. associated(COTNL) .or. &
@@ -8157,7 +8230,7 @@ contains
       end if  ! CLD??SWHB
 #endif
 
-      if (associated(TAUI) .or. associated(TAUW) .or. associated(TAUR) .or. associated(TAUS).or. &
+      if (associated(TAUCI) .or. associated(TAUCW) .or. associated(TAUCR) .or. associated(TAUCS).or. &
           associated(TAUL) .or. associated(TAUM) .or. associated(TAUH) .or. &
           associated(COTL) .or. associated(COTM) .or. associated(COTH) .or. &
           associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. &
@@ -8210,10 +8283,10 @@ contains
             END DO
          END DO
 
-         if (associated(TAUI)) TAUI = TAUCLD(:,:,:,1)
-         if (associated(TAUW)) TAUW = TAUCLD(:,:,:,2)
-         if (associated(TAUR)) TAUR = TAUCLD(:,:,:,3)
-         if (associated(TAUS)) TAUS = TAUCLD(:,:,:,4)
+         if (associated(TAUCI)) TAUCI = TAUCLD(:,:,:,1)
+         if (associated(TAUCW)) TAUCW = TAUCLD(:,:,:,2)
+         if (associated(TAUCR)) TAUCR = TAUCLD(:,:,:,3)
+         if (associated(TAUCS)) TAUCS = TAUCLD(:,:,:,4)
 
          ! use the total hydrometor optical thickness for the general opticl thicknesses below
          TAUCLD(:,:,:,1) = TAUCLD(:,:,:,1) + TAUCLD(:,:,:,2) + TAUCLD(:,:,:,3) + TAUCLD(:,:,:,4)
@@ -8222,12 +8295,29 @@ contains
          ! 'effective clouds' extended-out and diluted to the maximum cloud fraction in each
          ! pressure super-layers [LMH].
 
+         ! Polar Stratospheric Clouds
+         if (associated(TAUP)) then
+            TAUP = 0.
+            do l=LCLDPS,LCLDSC-1
+               TAUP = TAUP + TAUCLD(:,:,L,1)
+            end do
+         end if
+
+         ! Stratospheric Cirrus Clouds
+         if (associated(TAUS)) then
+            TAUS = 0.
+            do l=LCLDSC,LCLDHI-1
+               TAUS = TAUS + TAUCLD(:,:,L,1)
+            end do
+         end if
+
+         ! Tropospheric High Clouds
          if (associated(TAUH) .or. associated(COTH) .or. associated(COTNH) .or. &
              associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
             allocate(aTAUH(IM,JM),__STAT__)
             aTAUH = 0.
-            do l=1,LCLDMH-1
+            do l=LCLDHI,LCLDMH-1
                aTAUH = aTAUH + TAUCLD(:,:,L,1)
             end do
             if (associated(TAUH)) TAUH = aTAUH
@@ -8238,6 +8328,7 @@ contains
             if (associated(COTNH)) COTNH = aCLDH * aTAUH
          end if
 
+         ! Troposperic Middle Clouds
          if (associated(TAUM) .or. associated(COTM) .or. associated(COTNM) .or. &
              associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
@@ -8254,6 +8345,7 @@ contains
             if (associated(COTNM)) COTNM = aCLDM * aTAUM
          end if
 
+         ! Troposperic Low Clouds
          if (associated(TAUL) .or. associated(COTL) .or. associated(COTNL) .or. &
              associated(TAUT) .or. associated(TAUX) .or. associated(COTT) .or. associated(COTNT)) &
          then
