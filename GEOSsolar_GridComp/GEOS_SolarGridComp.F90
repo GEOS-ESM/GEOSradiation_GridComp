@@ -906,7 +906,7 @@ contains
          LoadBalance = .true.
       end if
 
-      ! Note: We set the default to 100 as that is the default in MAPL_LoadBalance which
+      ! Note: We set the default to 100 as that is the default in MAPL_LoadBalancer which
       ! would have been used if not passed in
       call MAPL_GridCompGetResource(gc, 'SOLAR_LB_MAX_PASSES', MaxPasses, default=100, _RC)
 
@@ -1668,7 +1668,7 @@ contains
          !  of the current VM. The original, unbalanced local work consists of (OrgLen)
          !  NumLit soundings, which may be zero. The local work after implementing the
          !  strategy consists of (BalLen) Num2do soundings, which is generally non-zero.
-         !  The data movement to implement this strategy will occur when MAPL_LoadBalanceRun
+         !  The data movement to implement this strategy will occur when MAPL_LoadBalancerRun
          !  is called to "distribute" excess work to less busy processors and later to
          !  "retrieve" that work to its home processor. Because the data balancing will be
          !  done "in place", the in-out buffer must be large enough to accomodate the data
@@ -1681,7 +1681,7 @@ contains
          call MAPL_GridCompTimerStart(gc, "--CREATE", _RC)
 
          if (LoadBalance) then
-            call MAPL_LoadBalanceCreate( &
+            call MAPL_LoadBalancerCreate( &
                  OrgLen=NumLit, COMM=COMM, MaxPasses=MaxPasses, Handle=SolarBalanceHandle, &
                  BalLen=Num2do, BufLen=NumMax, _RC)
          else
@@ -1948,8 +1948,8 @@ contains
 
          call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE", _RC)
          if (LoadBalance) then
-            call MAPL_LoadBalanceRun( &
-                 BufInp, NumMax, Direction=MAPL_LOADBALANCE_DISTRIBUTE, &
+            call MAPL_LoadBalancerRun( &
+                 BufInp, NumMax, Direction=MAPL_LOADBALANCER_DISTRIBUTE, &
                  Handle=SolarBalanceHandle, _RC)
          end if
          call MAPL_GridCompTimerStop(gc, "--DISTRIBUTE", _RC)
@@ -2511,8 +2511,8 @@ contains
          call MAPL_GridCompTimerStart(gc, "--DISTRIBUTE", _RC)
          if (size(BufInOut) > 0) then
             if (LoadBalance) then
-               call MAPL_LoadBalanceRun( &
-                    BufInOut, NumMax, Direction=MAPL_LOADBALANCE_DISTRIBUTE, &
+               call MAPL_LoadBalancerRun( &
+                    BufInOut, NumMax, Direction=MAPL_LOADBALANCER_DISTRIBUTE, &
                     Handle=SolarBalanceHandle, _RC)
                end if
          end if
@@ -3644,13 +3644,13 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          call MAPL_GridCompTimerStart(gc, "--RETRIEVE", _RC)
          if (LoadBalance) then
             if (size(BufOut) > 0) then
-               call MAPL_LoadBalanceRun( &
-                    BufOut, NumMax, Direction=MAPL_LOADBALANCE_RETRIEVE, &
+               call MAPL_LoadBalancerRun( &
+                    BufOut, NumMax, Direction=MAPL_LOADBALANCER_RETRIEVE, &
                     Handle=SolarBalanceHandle, _RC)
             end if
             if (size(BufInOut) > 0) then
-               call MAPL_LoadBalanceRun( &
-                    BufInOut, NumMax, Direction=MAPL_LOADBALANCE_RETRIEVE, &
+               call MAPL_LoadBalancerRun( &
+                    BufInOut, NumMax, Direction=MAPL_LOADBALANCER_RETRIEVE, &
                     Handle=SolarBalanceHandle, _RC)
             end if
          end if
@@ -3723,7 +3723,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(IntInOut, IntHasVert, ungrd_dim, _STAT)
          deallocate(BufInp, BufInOut, BufOut, _STAT)
          call MAPL_GridCompTimerStart(gc, "--DESTROY", _RC)
-         if (LoadBalance) call MAPL_LoadBalanceDestroy(Handle=SolarBalanceHandle, _RC)
+         if (LoadBalance) call MAPL_LoadBalancerDestroy(Handle=SolarBalanceHandle, _RC)
          call MAPL_GridCompTimerStop(gc, "--DESTROY", _RC)
 
          call MAPL_GridCompTimerStop(gc, "-BALANCE", _RC)
