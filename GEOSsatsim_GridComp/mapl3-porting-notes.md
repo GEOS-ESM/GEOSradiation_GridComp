@@ -416,7 +416,10 @@ spelled out below; everything else is "do what Solar did".
       - `mapl.yaml`, `cap_driver.yaml` (PT20M), `cap_gridcomp.yaml`,
         `cap_restart.yaml` (2000-04-14T22:00) copied from `solar-sa`; the
         baseline must be captured at the matching time.
-      - `root.yaml`: C12L181 geometry as in `solar-sa`; children
+      - `root.yaml`: C12L181 geometry, with the current vertical-grid
+        schema (`grid_type: model`, `fields: {pressure: PLE}`, as in
+        `GEOSphysics_GridComp/regression/radiation+gocart`; MAPL no
+        longer reads `solar-sa`'s `class: model`/`field_edge`); children
         `DataForSatsim` (configurable gridcomp) and `SATSIM`
         (`libGEOSradiation_GridComp.so`, `satsim_setservices_`); one
         connection per import from `DataForSatsim`'s internal state. In
