@@ -436,8 +436,10 @@ spelled out below; everything else is "do what Solar did".
         baseline must be captured at the matching time.
       - `root.yaml`: C12L181 geometry, with the current vertical-grid
         schema (`grid_type: model`, `fields: {pressure: PLE}`, as in
-        `GEOSphysics_GridComp/regression/radiation+gocart`; MAPL no
-        longer reads `solar-sa`'s `class: model`/`field_edge`); children
+        `GEOSphysics_GridComp/regression/radiation+gocart`. MAPL no
+        longer reads the old `class: model`/`field_edge` form; on
+        2026-10-22 `irrad-sa`, `solar-sa` and FV's `dyn-sa`/`adv-dyn`
+        were converted too, and all regression tests pass); children
         `DataForSatsim` (configurable gridcomp) and `SATSIM`
         (`libGEOSradiation_GridComp.so`, `satsim_setservices_`); one
         connection per import from `DataForSatsim`'s internal state. In
