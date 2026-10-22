@@ -4,7 +4,7 @@ set (alldirs
   GEOS_RadiationShared
   GEOSsolar_GridComp
   GEOSirrad_GridComp
-  # GEOSsatsim_GridComp NOT ported to MAPL3 yet
+  GEOSsatsim_GridComp
 )
 
 esma_add_library (${this}

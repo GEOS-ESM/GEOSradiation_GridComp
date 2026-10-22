@@ -16,7 +16,7 @@ module GEOS_SatsimGridCompMod
 
    use MOD_COSP_TYPES
    use MOD_COSP, only: COSP
-   !  use MOD_COSP_Modis_Simulator, only: cosp_modis
+   ! use MOD_COSP_Modis_Simulator, only: cosp_modis
    use MOD_COSP_Modis_Simulator
 
    implicit none
@@ -831,8 +831,8 @@ contains
 
          call MAPL_GridCompTimerStart(gc, "-COSP", _RC)
 
-         call COSP(isccp_overlap, ncolumns, cfg, vgrid, gbx, sgx, sgradar, sglidar, isccp, misr, modis, stradar, &
-              stlidar)
+         call COSP(isccp_overlap, ncolumns, cfg, vgrid, gbx, sgx, sgradar, &
+              sglidar, isccp, misr, modis, stradar, stlidar)
 
          call MAPL_GridCompTimerStop(gc, "-COSP", _RC)
 

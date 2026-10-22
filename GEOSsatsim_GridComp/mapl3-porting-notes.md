@@ -333,20 +333,61 @@ spelled out below; everything else is "do what Solar did".
    - The container's `use ... only: satsimSetServices => SetServices`
      alias still suffices (step 10).
 
-10. **Build wiring** - `GEOSsatsim_GridComp/CMakeLists.txt`: fix
-    `DEPENDENCIES` (needs `GEOS_RadiationShared` for `gettau`, `MAPL`,
-    `GEOS_Shared`), `TYPE SHARED` to match siblings. In the parent:
-    uncomment `GEOSsatsim_GridComp` in `alldirs` and the `use
-    GEOS_SatsimGridCompMod` line; `MAPL_GridCompAddChild(gc, "SATSIM",
-    satsimSetServices, "satsim.yaml", _RC)` guarded by `USE_SATSIM` as
-    in MAPL2; connect the imports (most already flow through Radiation
-    for IRRAD/SOLAR; `FROCEAN`, `TS`, `MCOSZ`, hydrometeor
-    `Q*`/`R*` need checking) and re-export the 224+ exports via
-    `MAPL_GridCompReexport` - loop over the ACG-generated list rather
-    than 224 hand lines; check whether MAPL3 has a "reexport all of
-    child" helper. Add `satsim.yaml` (`SATSIM_DT`, `USE_SATSIM_*`,
-    `SATSIM_NCOLUMNS`). `SATORB` and `Masked_Exports` are not needed while
-    the masked exports are disabled (step 4).
+10. **Build wiring** - IN PROGRESS 2026-10-22.
+    - `GEOSsatsim_GridComp/CMakeLists.txt`: no change. `DEPENDENCIES`
+      already lists `GEOS_Shared MAPL GEOS_RadiationShared`. The plan's
+      "`TYPE SHARED` to match siblings" was wrong: IRRAD and Solar don't
+      set it (only the parent does).
+    - DONE - parent `CMakeLists.txt`: `GEOSsatsim_GridComp` uncommented
+      in `alldirs`.
+    - DONE - `../GEOS_RadiationGridComp.F90`:
+      - `use GEOS_SatsimGridCompMod, only: satsimSetServices =>
+        SetServices` restored.
+      - `SetServices`: a single `USE_SATSIM` flag (default 0) from the
+        parent's own config gates `MAPL_GridCompAddChild(gc, "SATSIM",
+        satsimSetServices, "satsim.yaml", _RC)`. MAPL2 summed the six
+        `USE_SATSIM*` flags from the shared `AGCM.rc`; in MAPL3 each
+        component reads its own YAML, so the parent only decides whether
+        the child exists and `satsim.yaml` keeps the per-simulator flags,
+        `SATSIM_DT` and `SATSIM_NCOLUMNS`.
+      - `MAPL_GridCompAddConnection(gc, src_comp="SOLAR",
+        src_names="MCOSZ", dst_comp="SATSIM")`, MAPL2's only explicit
+        SATSIM connection (Solar exports `MCOSZ` with the same
+        standard name). The other 18 imports propagate up unconnected,
+        as IRRAD's and Solar's do.
+      - `Run`: SATSIM runs after SOLAR (MAPL2 order SOL, IRR, STM; it
+        needs this step's `MCOSZ`), behind the same `USE_SATSIM` check.
+      - Timers fixed in the parent's `Run` while there: the port had
+        turned MAPL2's "pause `TOTAL` around the children"
+        (`MAPL_TimerOff(TOTAL)`, `MAPL_GenericRunChildren`,
+        `MAPL_TimerOn(TOTAL)`) into per-child timers in inverted order
+        (`TimerStop("IRRAD")`, `RunChild`, `TimerStart("IRRAD")`), and
+        dropped the `TimerStart("TOTAL")` at the top, leaving only the
+        `TimerStop("TOTAL")` at the end. Restored MAPL2's pattern: start
+        `TOTAL` on entry, stop it around the three `RunChild` calls, stop
+        it at the end; no per-child timers.
+    - No re-exports: MAPL2 never promoted SatSim exports into RADIATION
+      (no `CHILD_ID=STM`); they live under `SATSIM`, which is how the
+      `HISTORY*.rc.tmpl` templates request them, and MAPL3 propagates
+      child exports under the child's name. The plan's "re-export the
+      224+ exports" was wrong.
+    - `satsim.yaml` (`SATSIM_DT`, `USE_SATSIM_*`, `SATSIM_NCOLUMNS`) only
+      exists where a run needs it; first one in step 12. `SATORB` and
+      `Masked_Exports` are not needed while masked exports are disabled
+      (step 4).
+    - Decided 2026-10-22: SatSim's import metadata is kept as in MAPL2,
+      NOT aligned with IRRAD/Solar. It differs for 15 shared imports
+      (13 standard names, 4 units), e.g. `PLE` `Edge_pressures` vs
+      `air_pressure`, `TS` `skin_temperature` vs
+      `surface_skin_temperature`, `QV`/`QL`/`QI` units `1` vs `kg kg-1`,
+      `RR` `rain_cloud_particle_effective_radius` vs
+      `effective_radius_of_rain_particles`. These imports are merged
+      under RADIATION and connected to one provider, so expect a
+      standard_name warning per mismatch in the default permissive mode
+      (the provider's value wins, and is what checkpoints record) and
+      errors in strict mode. Matters for step 12: the `satsim-sa`
+      import checkpoint will carry the fake provider's names.
+    - Not compiled (step 11).
 
 11. **Compile with ifx** and fix fallout. Only the GridComp should
     break; the fixed-form COSP `.f` sources are untouched.

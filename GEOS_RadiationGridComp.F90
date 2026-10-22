@@ -8,9 +8,10 @@ module GEOS_RadiationGridCompMod
    !DESCRIPTION: A composite MAPL/ESMF gridded component (GC) containing the
    !   longwave and shortwave radiation GCs. It is intended as a container
    !   for the ESMF/MAPL Solar and Irrad gridded components used in GEOS.
-   !   In SetServices, it creates its children (currently IRRAD and SOLAR;
-   !   SATSIM is not yet ported to MAPL3). Its Run method combines results
-   !   from the children to produce total radiative exports.
+   !   In SetServices, it creates its children: IRRAD, SOLAR and, when
+   !   USE_SATSIM is set, the SATSIM satellite simulators. Its Run method
+   !   combines results from IRRAD and SOLAR to produce total radiative
+   !   exports.
    !
    !   It follows the standard rules for composite ESMF/MAPL GCs. It passes
    !   the ESMF grid that appears in the gridded component to its children,
@@ -22,7 +23,7 @@ module GEOS_RadiationGridCompMod
 
    use GEOS_IrradGridCompMod, only: irrad_setservices => SetServices
    use GEOS_SolarGridCompMod, only: solarSetServices => SetServices
-   ! use GEOS_SatsimGridCompMod, only: satsimSetServices => SetServices  ! NOT ported to MAPL3 yet
+   use GEOS_SatsimGridCompMod, only: satsimSetServices => SetServices
 
    implicit none
    private
@@ -48,6 +49,7 @@ contains
 
       integer :: status
       integer :: DO_OBIO
+      integer :: USE_SATSIM
 
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
@@ -57,6 +59,19 @@ contains
 
       ! Create the SOLAR child and invoke its SetServices
       call MAPL_GridCompAddChild(gc, "SOLAR", solarSetServices, "solar.yaml", _RC)
+
+      ! Create the SATSIM child only when requested. The individual
+      ! simulators (USE_SATSIM_ISCCP, ...) are selected in satsim.yaml.
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM", USE_SATSIM, default=0, _RC)
+      if (USE_SATSIM /= 0) then
+         call MAPL_GridCompAddChild(gc, "SATSIM", satsimSetServices, "satsim.yaml", _RC)
+         ! SATSIM needs SOLAR's mean cosine of the solar zenith angle; its
+         ! other imports propagate up to this component's parent.
+         call MAPL_GridCompAddConnection(gc, &
+              src_comp="SOLAR", &
+              src_names="MCOSZ", &
+              dst_comp="SATSIM", _RC)
+      end if
 
       ! Pull IRRAD's longwave-flux exports into our own Import state so Run
       ! can combine them into the temperature-tendency exports below.
@@ -186,6 +201,7 @@ contains
       integer :: status
       type(ESMF_Grid) :: esmfgrid
       integer :: IM, JM, LM
+      integer :: USE_SATSIM
 
       ! Pointers to imports (PLEINST plus IRRAD's and SOLAR's exports,
       ! connected into our own Import state in SetServices)
@@ -215,17 +231,22 @@ contains
 
       real, allocatable, dimension(:, :, :) :: DMI
 
+      call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
+
       call MAPL_GridCompGet(gc, grid=esmfgrid, num_levels=LM, _RC)
       call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
 
-      ! Run the child components
-      call MAPL_GridCompTimerStop(gc, "IRRAD", _RC)
+      ! Run the child components. TOTAL is paused meanwhile so that it times
+      ! only this component's own work.
+      call MAPL_GridCompTimerStop(gc, "TOTAL", _RC)
       call MAPL_GridCompRunChild(gc, "IRRAD", _RC)
-      call MAPL_GridCompTimerStart(gc, "IRRAD", _RC)
-
-      call MAPL_GridCompTimerStop(gc, "SOLAR", _RC)
       call MAPL_GridCompRunChild(gc, "SOLAR", _RC)
-      call MAPL_GridCompTimerStart(gc, "SOLAR", _RC)
+      ! SATSIM runs after SOLAR, whose MCOSZ it imports
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM", USE_SATSIM, default=0, _RC)
+      if (USE_SATSIM /= 0) then
+         call MAPL_GridCompRunChild(gc, "SATSIM", _RC)
+      end if
+      call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
 
       ! Get pointers to imports
       call MAPL_StateGetPointer(import, PLE, 'PLEINST', _RC)
