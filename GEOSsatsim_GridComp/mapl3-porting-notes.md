@@ -1,9 +1,13 @@
 # GEOS_SatsimGridComp MAPL3 porting plan
 
-Status: not started (2026-09-30). `GEOSsatsim_GridComp` is commented
-out in the parent container's `alldirs` (`../CMakeLists.txt`) and its
-`use` line in `../GEOS_RadiationGridComp.F90` is commented out with
-"NOT ported to MAPL3 yet". Nothing in this directory has been touched.
+Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
+Steps 1, 2, 3, 5, 6, 7, 8, 9 and 13 are done. Open: step 4
+(masked exports, the last MAPL2 code: `SetServices` L79-167 and the
+masking pass at the end of `SIM_DRIVER`) and steps
+10-12 (wiring, compile, regression). `GEOSsatsim_GridComp` is still
+commented out in the parent's `alldirs` (`../CMakeLists.txt`) and its
+`use` line in `../GEOS_RadiationGridComp.F90`, so nothing has been
+compiled yet.
 
 This plan follows the IRRAD/Solar ports (see
 `../GEOSirrad_GridComp/mapl3-porting-notes.md` for the MAPL3 API
@@ -145,11 +149,14 @@ spelled out below; everything else is "do what Solar did".
      DST_NAME='SATORB', SRC_ID=ORB, DST_ID=PHYS)` in
      `GEOS_AgcmGridComp.F90`; `SATORB` reached SATSIM by MAPL2's
      automatic propagation of unsatisfied child imports up the tree
-     (SATSIM -> RADIATION -> PHYSICS). MAPL3 has no such propagation, so
-     step 10 must re-export `SATORB` explicitly at each level with
-     `MAPL_GridCompReexport`, or connect ORBIT -> SATSIM directly. Note
-     also that `GEOS_AgcmGridComp.F90` is itself still MAPL2, so there
-     may be no live ORBIT instance to connect to yet.
+     (SATSIM -> RADIATION -> PHYSICS). **CORRECTED 2026-10-22**: MAPL3
+     does propagate unconnected child imports up the tree
+     (`StateRegistry_Propagation_smod.F90`; relied on by SU/DU/SS's
+     `TRADV` imports, see the SU2G porting notes step 4), so no
+     per-level `MAPL_GridCompReexport` of `SATORB` should be needed; a
+     single connection from ORBIT at the level where both are visible
+     suffices. The blocker is that `GEOS_AgcmGridComp.F90` is still
+     MAPL2, so there is no live ORBIT instance to connect to yet.
    - Mask semantics, for reference when building the step 12 fake
      provider: ORBIT sets `field = 1.0` inside the satellite swath and
      `MAPL_UNDEF` everywhere else, which is what SatSim's
@@ -169,6 +176,27 @@ spelled out below; everything else is "do what Solar did".
    re-declare the copy's metadata from a small lookup of the handful of
    shapes SatSim has (2D, 2D+7, 3D). `MAPL_DoNotDeferExport` has no
    MAPL3 counterpart - check whether it is still needed.
+   - State (2026-10-22): still all MAPL2. `SetServices` reads
+     `SatSim.rc` via `ESMF_GridCompGet(CONFIG=)` + `ESMF_Config*`, then
+     `MAPL_GetObjectFromGC` -> `MAPL_VarSpecGet` -> `MAPL_AddExportSpec`
+     + `MAPL_DoNotDeferExport`; the masking pass (end of `SIM_DRIVER`)
+     uses `MAPL_VarSpecGet` and `MAPL_GetPointer`.
+   - Spec metadata cannot be introspected at `SetServices` time (no
+     `MAPL_VarSpec` in MAPL3; Solar step 12). At `Run` time the masking
+     pass can read it from the field instead: `MAPL_FieldGet(field,
+     ungridded_dims=, num_levels=)`, as Solar's `SolarFieldGetDims`
+     does (`ungridded_dims` excludes the vertical; use `num_levels > 0`
+     to tell `xyz` from `xy`+ungridded). Remaining
+     `MAPL_GetPointer` -> `MAPL_StateGetPointer`.
+   - Options, undecided: (1) `Masked_Exports` list in `satsim.yaml`, with
+     the clone's units/dims/ungridded from a small lookup in SatSim;
+     (2) the same, with that metadata carried in each YAML entry;
+     (3) drop the feature (no `SatSim.rc` exists anywhere, so it has
+     never run here) and leave masking to downstream tools.
+   - `MAPL_UNDEF` changed sign (MAPL2 `+huge`, MAPL3 `-huge`; Solar step
+     12, SU step 6). SatSim only tests `ptr_mask == MAPL_UNDEF` against
+     ORBIT's mask, and ORBIT is MAPL3, so no change is expected; there
+     are no `<`/`>` comparisons against it.
 
 5. **Private state** DONE 2026-10-01.
    - Kept the private state (the mask table is parsed once in
@@ -245,6 +273,24 @@ spelled out below; everything else is "do what Solar did".
    1-based but `SIM_DRIVER` indexes `PLE(:,:,0:LM)` and declares
    `PLE2D(IM*JM,0:LM)` locals. Apply the contiguous 0-based rank-remap
    trick from Solar step 11 / IRRAD notes, or shift the indexing.
+   - DONE 2026-10-22. `PLE` is remapped right after
+     `#include "Satsim_GetPointer___.h"` in `SIM_DRIVER`:
+     `p3d => PLE; PLE(1:IM, 1:JM, 0:LM) => p3d`, with a local
+     `real, pointer, contiguous, dimension(:, :, :) :: p3d` (a self-remap
+     does not compile, IRRAD notes). No `associated()` guard: `PLE` is a
+     mandatory import. Its 0-based uses are `PLO`/`DELP`
+     (`PLE(:, :, 0:LM - 1)`) and `PLECOSP` (`PLE(:, :, LM:0:-1)`).
+   - `ZLE` is remapped the same way, for consistency: it is only used as
+     `reshape(ZLE, ...)` into the 0-based local `ZLE2D`, which does not
+     depend on its bounds, but the remap keeps both edge imports 0-based
+     should anyone index `ZLE` directly. These are SatSim's only edge
+     fields (all 222 exports are `C` or `N`).
+   - The ACG does NOT declare its pointers `contiguous` (checked
+     `MAPL_GridCompSpecs_ACG.py` and the generated
+     `Irrad_DeclarePointer___.h`); Solar step 11's correction is right,
+     IRRAD's "fixed at the ACG root" note is out of date. The scratch
+     pointer is what makes the remap legal.
+   - Not compiled yet (step 11).
 
 9. **Entry-point signatures** DONE 2026-10-01.
    - `SetServices(GC, RC)` now takes a plain `type(ESMF_GridComp) :: GC`
@@ -298,6 +344,18 @@ spelled out below; everything else is "do what Solar did".
     `standard_name`s (Solar notes RR lesson). Generate a MAPL2 baseline
     (SatSim has never been run-tested in this repo, same as IRRAD was)
     and add the case to `regression/cases.txt` for ctest.
+    - The MAPL2 baseline must match the standalone's configuration or it
+      will never reproduce bit-for-bit (Solar step 18, SU step 0): record
+      every `USE_SATSIM*`, `SATSIM_NCOLUMNS`,
+      `SATSIM_POINTS_PER_ITERATION` and `SATSIM_DT` used, and request
+      the compared exports in `HISTORY.rc` (MAPL2 allocates exports only
+      on request).
+    - Exports a run never writes are NaN in MAPL3 where MAPL2 had zeros
+      or stale values (SU step 9); expect that for simulators that are
+      switched off.
+    - Compare with an undef-aware `cmpchk.py` (`+huge` vs `-huge`).
+    - Hand runs need `LD_LIBRARY_PATH` set to the install `lib`, and
+      `cap_restart.yaml` reset before each run (Solar step 18).
 
 13. **Style cleanup afterwards** (low priority, like Solar step 16).
     DONE 2026-10-01 (done out of order, before steps 3-12).

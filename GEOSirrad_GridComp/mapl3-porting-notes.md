@@ -763,6 +763,17 @@ pointer is fetched:
   matched variable name was already on the remap list (none missed).
 
 ### Follow-up: rank-remapping needs CONTIGUOUS - fixed at the ACG root, not per-callsite
+
+**CORRECTED 2026-10-22: the ACG change described below is not in MAPL.**
+`apps/MAPL_GridCompSpecs_ACG.py` has no `contiguous`, `git log -S
+contiguous` on it is empty (it was a local edit that was never
+committed), and the generated `Irrad_DeclarePointer___.h` in
+`build/ifx/Debug` declares plain `real(kind=ESMF_KIND_R4), pointer ::
+FLX_INT(:,:,:)`. Solar's notes (step 11) found the same. What actually
+makes the remaps legal is the distinct `contiguous` scratch pointer
+(`p3d => X; X(bounds) => p3d`) used in `Run`, `LW_Driver` and
+`Update_Flx`; that pattern does not need `X` itself to be contiguous.
+Read the ACG paragraphs below as history only.
 The self-remap pattern above (`X(new_bounds) => X`) failed to compile:
 `Error: Rank remapping target must be rank 1 or simply contiguous`.
 Fortran's rank-remapping rule requires the data-target to be rank-1 or

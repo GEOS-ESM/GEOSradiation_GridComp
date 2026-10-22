@@ -288,7 +288,9 @@ contains
          integer :: status
 
          ! Import pointers (T, PLE, ZLE, QV, FCLD, RDF*, Q*TOT, MCOSZ, FRLAND,
-         ! TS, FROCEAN) are host-associated from Run. PLE and ZLE are indexed 0:LM.
+         ! TS, FROCEAN) are host-associated from Run. PLE and ZLE are remapped
+         ! to 0:LM below.
+         real, pointer, contiguous, dimension(:, :, :) :: p3d
 
          ! These are the same, in logical 2 dimensions for icarus's sake
          real, dimension(IM * JM, 0:LM) :: ZLE2D
@@ -490,6 +492,11 @@ contains
 
          ! Pointers to imports and exports
 #include "Satsim_GetPointer___.h"
+
+         ! MAPL3 edge fields are 1:LM+1; the code below indexes them as 0:LM.
+         ! Remap through a distinct contiguous pointer (a self-remap is rejected).
+         p3d => PLE; PLE(1:IM, 1:JM, 0:LM) => p3d
+         p3d => ZLE; ZLE(1:IM, 1:JM, 0:LM) => p3d
 
          !  The follwing assignments are for variables needed for COSP and isccp/icarus
          isccp_top_height = 1 !  1 = adjust top height using both a computed
