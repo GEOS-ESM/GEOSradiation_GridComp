@@ -4,8 +4,10 @@ Status as of this session: `GEOS_RadiationGridComp.F90` (the composite
 container that used to own SOLAR + IRRAD + SATSIM children) has been ported
 to MAPL3, wired to **both IRRAD and SOLAR** (see "SOLAR wiring" section
 below, added once `GEOSsolar_GridComp`'s own MAPL3 port reached its step
-14/15). SATSIM remains commented out / unbuilt (`CMakeLists.txt`'s
-`alldirs` still has it commented as "NOT ported to MAPL3 yet").
+14/15). SATSIM is ported too and is a third child when `USE_SATSIM`
+is non-zero (`SetServices` ~L63-73, run after SOLAR in `Run` ~L244-247;
+`GEOSsatsim_GridComp` is back in `CMakeLists.txt`'s `alldirs`). See
+`GEOSsatsim_GridComp/mapl3-porting-notes.md` step 10.
 
 ## SOLAR wiring (added once GEOSsolar_GridComp's own port reached step 14/15)
 The "Scope decision: LW-only for now" section right below describes the
@@ -47,6 +49,21 @@ flux can't be correctly computed yet:
   (`DRPAR`, `FCLD`, `ALBEDO`, `TAUCLI`, etc.) are not in the new state spec
   at all yet - add them back via `MAPL_GridCompReexport(gc, src_comp="SOLAR",
   src_name="...", _RC)` once Solar exists as a child.
+  - Checked 2026-10-22 against the MAPL2 file (`git show
+    9c9a00f:GEOS_RadiationGridComp.F90`). MAPL2 promoted 21 SOLAR
+    exports (`CHILD_ID = SOL`) and 2 IRRAD exports (`CHILD_ID = IRR`:
+    `LWS`, `LWS0`); none from SATSIM.
+    - SOLAR: all 21 are re-exported (`GEOS_RadiationGridComp.F90`
+      ~L92-118; `DROBIO`/`DFOBIO` only when `USE_OCEANOBIOGEOCHEM` is
+      set, as in MAPL2).
+    - IRRAD: `LWS` and `LWS0` were missing; re-exported 2026-10-22
+      with `MAPL_GridCompReexport(gc, src_comp="IRRAD", ...)` right
+      after the IRRAD connection (same call SuperDyn uses for DYN's
+      exports, `GEOS_SuperdynGridComp.F90` ~L113-136). Both are
+      unconditional IRRAD exports (`Irrad_StateSpecs.rc`, empty
+      `COND`), as in MAPL2. The (still MAPL2)
+      `GEOS_PhysicsGridComp.F90` connects RADIATION's `LWS0` to
+      SURFACE's `LWDNSRF` (~L1656-1661).
 
 ## Key MAPL3 patterns/discoveries (verified against MAPL source, not guessed)
 

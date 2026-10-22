@@ -80,6 +80,11 @@ contains
            src_names="FLX, FLC, FLXA, FLA, DSFDTS0, SFCEM0, TSREFF", &
            dst_comp="<self>", _RC)
 
+      ! Re-export IRRAD's surface longwave exports directly under our own
+      ! names, as the old MAPL2 file's CHILD_ID=IRR-promoted exports used to do.
+      call MAPL_GridCompReexport(gc, src_comp="IRRAD", src_name="LWS", _RC)
+      call MAPL_GridCompReexport(gc, src_comp="IRRAD", src_name="LWS0", _RC)
+
       ! Pull SOLAR's shortwave-flux exports into our own Import state so Run
       ! can combine them into the temperature-tendency exports below.
       call MAPL_GridCompAddConnection(gc, &
