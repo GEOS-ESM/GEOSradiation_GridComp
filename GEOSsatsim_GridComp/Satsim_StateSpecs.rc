@@ -4,7 +4,8 @@ component: SATSIM
 # Ported from the MAPL2 MAPL_AddImportSpec/MAPL_AddExportSpec calls in
 # GEOS_SatsimGridComp.F90 (2026-10-01). The SATORB import is a FieldBundle
 # (MAPL2 DATATYPE=MAPL_BundleItem) and cannot be expressed here (ITEMTYPE
-# only supports F/V); it is added by hand in SetServices. The ALIAS column
+# only supports F/V); it is added by hand in SetServices, where it is
+# currently commented out with the masked exports it feeds. The ALIAS column
 # on the imports reproduces the historical local pointer names used in
 # SIM_DRIVER (RL -> RDFL, QL -> QLTOT, ...). ungrd_7 and
 # ungrd_parasol_nrefl are type(MAPL_UngriddedDim) locals set in

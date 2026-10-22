@@ -1,10 +1,8 @@
 # GEOS_SatsimGridComp MAPL3 porting plan
 
 Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
-Steps 1, 2, 3, 5, 6, 7, 8, 9 and 13 are done. Open: step 4
-(masked exports, the last MAPL2 code: `SetServices` L79-167 and the
-masking pass at the end of `SIM_DRIVER`) and steps
-10-12 (wiring, compile, regression). `GEOSsatsim_GridComp` is still
+Steps 1-9 and 13 are done (step 4 by disabling the masked exports). Open:
+steps 10-12 (wiring, compile, regression). `GEOSsatsim_GridComp` is still
 commented out in the parent's `alldirs` (`../CMakeLists.txt`) and its
 `use` line in `../GEOS_RadiationGridComp.F90`, so nothing has been
 compiled yet.
@@ -122,7 +120,8 @@ spelled out below; everything else is "do what Solar did".
      dynamic masked-export `MAPL_GetPointer` calls remain (step 4).
      File is now 2112 lines (from 4513).
 
-3. **`SATORB` import bundle** DONE 2026-10-01.
+3. **`SATORB` import bundle** DONE 2026-10-01. Commented out since
+   2026-10-22 with the masked exports, its only consumer (step 4).
    - `MAPL_AddImportSpec(..., DATATYPE=MAPL_BundleItem)` ->
      `MAPL_GridCompAddSpec(gc, state_intent=ESMF_STATEINTENT_IMPORT,
      short_name='SATORB', standard_name='Satellite_orbits', dims="xy",
@@ -188,11 +187,25 @@ spelled out below; everything else is "do what Solar did".
      does (`ungridded_dims` excludes the vertical; use `num_levels > 0`
      to tell `xyz` from `xy`+ungridded). Remaining
      `MAPL_GetPointer` -> `MAPL_StateGetPointer`.
-   - Options, undecided: (1) `Masked_Exports` list in `satsim.yaml`, with
+   - Options considered: (1) `Masked_Exports` list in `satsim.yaml`, with
      the clone's units/dims/ungridded from a small lookup in SatSim;
      (2) the same, with that metadata carried in each YAML entry;
      (3) drop the feature (no `SatSim.rc` exists anywhere, so it has
      never run here) and leave masking to downstream tools.
+   - **DONE 2026-10-22 - disabled, not ported.** The masked-export code
+     is commented out (not deleted) with a note to port it to MAPL3 before
+     re-enabling: the `SatSim.rc` parsing and spec cloning in
+     `SetServices`, the masking pass at the end of `SIM_DRIVER`
+     (including its `_GET_NAMED_PRIVATE_STATE`), and the locals only they
+     use. The `ESMF_GridCompGet(gc, CONFIG=CF)` call was deleted: `CF`
+     was recreated by `ESMF_ConfigCreate` before any use. No MAPL2 calls
+     remain outside comments. The `SATORB` bundle import (step 3) is
+     commented out too, under the same note: its only consumer was the
+     masking pass, and keeping it would mean wiring ORBIT (step 10) and
+     faking a bundle in `satsim-sa` (step 12) for nothing. Re-enable it
+     with the masked exports. Still present but unused: the
+     `SatSim_State` private state (only the mask table,
+     `nmask_vars = 0`). Options (1)/(2) above remain the way to port it.
    - `MAPL_UNDEF` changed sign (MAPL2 `+huge`, MAPL3 `-huge`; Solar step
      12, SU step 6). SatSim only tests `ptr_mask == MAPL_UNDEF` against
      ORBIT's mask, and ORBIT is MAPL3, so no change is expected; there
@@ -327,20 +340,21 @@ spelled out below; everything else is "do what Solar did".
     GEOS_SatsimGridCompMod` line; `MAPL_GridCompAddChild(gc, "SATSIM",
     satsimSetServices, "satsim.yaml", _RC)` guarded by `USE_SATSIM` as
     in MAPL2; connect the imports (most already flow through Radiation
-    for IRRAD/SOLAR; `SATORB`, `FROCEAN`, `TS`, `MCOSZ`, hydrometeor
+    for IRRAD/SOLAR; `FROCEAN`, `TS`, `MCOSZ`, hydrometeor
     `Q*`/`R*` need checking) and re-export the 224+ exports via
     `MAPL_GridCompReexport` - loop over the ACG-generated list rather
     than 224 hand lines; check whether MAPL3 has a "reexport all of
     child" helper. Add `satsim.yaml` (`SATSIM_DT`, `USE_SATSIM_*`,
-    `SATSIM_NCOLUMNS`, optional `Masked_Exports`).
+    `SATSIM_NCOLUMNS`). `SATORB` and `Masked_Exports` are not needed while
+    the masked exports are disabled (step 4).
 
 11. **Compile with ifx** and fix fallout. Only the GridComp should
     break; the fixed-form COSP `.f` sources are untouched.
 
 12. **Standalone regression `regression/satsim-sa`** - clone
     `irrad-sa` (`cap_*.yaml`, `mapl.yaml`, `root.yaml`, `data-*.yaml`
-    provider, `cmpchk.py`). The fake provider must supply all 20 imports
-    plus a `SATORB` bundle with the mask fields, using dictionary
+    provider, `cmpchk.py`). The fake provider must supply all 19 field
+    imports (no `SATORB` bundle while masked exports are disabled, step 4), using dictionary
     `standard_name`s (Solar notes RR lesson). Generate a MAPL2 baseline
     (SatSim has never been run-tested in this repo, same as IRRAD was)
     and add the case to `regression/cases.txt` for ctest.
