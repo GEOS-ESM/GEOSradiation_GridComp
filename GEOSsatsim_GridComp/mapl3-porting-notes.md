@@ -3,7 +3,8 @@
 Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
 Steps 1-11 and 13 are done (step 4 by disabling the masked exports).
 SatSim is built as a RADIATION child (behind `USE_SATSIM`) and compiles;
-it has not been run. Open: step 12 (the `satsim-sa` regression).
+it has not been run. Open: step 12 (the `satsim-sa` regression) and
+step 14 (SatSim writes into its radius imports).
 
 This plan follows the IRRAD/Solar ports (see
 `../GEOSirrad_GridComp/mapl3-porting-notes.md` for the MAPL3 API
@@ -204,10 +205,25 @@ spelled out below; everything else is "do what Solar did".
      with the masked exports. Still present but unused: the
      `SatSim_State` private state (only the mask table,
      `nmask_vars = 0`). Options (1)/(2) above remain the way to port it.
-   - `MAPL_UNDEF` changed sign (MAPL2 `+huge`, MAPL3 `-huge`; Solar step
-     12, SU step 6). SatSim only tests `ptr_mask == MAPL_UNDEF` against
-     ORBIT's mask, and ORBIT is MAPL3, so no change is expected; there
-     are no `<`/`>` comparisons against it.
+   - `MAPL_UNDEF` changed value: MAPL2 `1.0e15`
+     (`base/Base/Base_Base.F90:78`), MAPL3 `-huge(1.)`
+     (`utils/Constants/InternalConstants.F90:18-19`). (MAPL2's `+huge`
+     was `MAPL_UNDEFINED_REAL`, a different constant.) The masking test
+     `ptr_mask == MAPL_UNDEF` is commented out with the masked exports.
+     The radius defaults in `SIM_DRIVER` (~L540-557, `where (RDFL ==
+     ...) RDFL = 14.e-6` and the same for `RDFI`, `RDFR`, `RDFS`,
+     `RDFG`) key on the undef value of the radius imports, which come
+     from MAPL2-era data holding `1e15` (Solar step 18). With
+     `MAPL_UNDEF` they never matched. DONE 2026-10-22: they now test
+     against a module parameter `MAPL2_UNDEF = 1.0e15`, as IRRAD does
+     (`GEOS_IrradGridComp.F90:159`, ~L1021-1025). Every other live
+     `MAPL_UNDEF` (the `#ifdef USE_MAPL_UNDEF` blocks that turn COSP's
+     `R_UNDEF` and out-of-range values into undef, ~L882-983, and the
+     radar mean, ~L1419-1430) is now `MAPL2_UNDEF` too, so SatSim's
+     exports carry `1e15` as in MAPL2, like IRRAD's. The radar test at
+     ~L1419 depends on ~L970 writing the same constant; both changed
+     together. The commented-out masked-export code still says
+     `MAPL_UNDEF` (ORBIT's mask would be MAPL3).
 
 5. **Private state** DONE 2026-10-01.
    - Kept the private state (the mask table is parsed once in
@@ -227,8 +243,9 @@ spelled out below; everything else is "do what Solar did".
      self)`.
    - Gave `nmask_vars` a `= 0` default: the macro-allocated state is
      no longer zeroed by the old `else self%nmask_vars = 0` path only.
-   - The macros come from `MAPL_private_state.h`, already pulled in via
-     `MAPL_Generic.h` -> `MAPL.h`; no new include needed.
+   - The macros come from `MAPL_private_state.h`, which `MAPL.h`
+     includes; no new include needed. (The file now includes `MAPL.h`
+     directly; `MAPL_Generic.h` is just `#include "MAPL.h"`, step 13.)
 
 6. **Resources** DONE 2026-10-01.
    - All 9 `MAPL_GetResource(MAPL, x, LABEL="X:")` ->
@@ -408,7 +425,8 @@ spelled out below; everything else is "do what Solar did".
     - Exports a run never writes are NaN in MAPL3 where MAPL2 had zeros
       or stale values (SU step 9); expect that for simulators that are
       switched off.
-    - Compare with an undef-aware `cmpchk.py` (`+huge` vs `-huge`).
+    - SatSim's exports use `MAPL2_UNDEF = 1e15`, as in MAPL2 (step 4);
+      `cmpchk.py` should still treat undef cells as equal.
     - Hand runs need `LD_LIBRARY_PATH` set to the install `lib`, and
       `cap_restart.yaml` reset before each run (Solar step 18).
     - DONE 2026-10-22 - case files in `../regression/satsim-sa/`, after
@@ -476,7 +494,55 @@ spelled out below; everything else is "do what Solar did".
     - Left alone deliberately: `DEBUG_GC` and the live `write(*,*)`
       debug prints (step 7 removes those) and the `! deallocate stuff`
       section comment.
-    - Not recompiled (step 11); the file does not build yet.
+    - Not recompiled at the time (step 11 was still open then).
+    - 2026-10-22 follow-up (after the audit). Builds, and all
+      regression tests pass. SatSim itself has not been run
+      (`satsim-sa` is not a regression case yet, step 12):
+      - `#include "MAPL_Generic.h"` -> `"MAPL.h"`, as IRRAD/RADIATION.
+        `MAPL_Generic.h` is only `#include "MAPL.h"`
+        (`@MAPL/include/MAPL_Generic.h:1`), so no behavior change.
+      - Removed unused locals, each confirmed by a per-routine use
+        count over the source plus the expanded ACG headers, and a
+        separate line-by-line search: `DIMS` (`SetServices`); `name`,
+        `frac_ls`, `l`, `scops_debug`, `idebug`, `idebugcol`,
+        `TAUDIAG`, `TAUSWICE`, `TAUSWLIQ`, `EMISS2D` (`SIM_DRIVER`).
+        The `SatSim_State` components were left alone (private state
+        kept on purpose, step 5).
+      - `_RC` on the one call that takes `rc` and lacked it:
+        `alarm_ringing = ESMF_AlarmIsRinging(satsim_alarm, _RC)` before
+        the early return in `Run`, as IRRAD does
+        (`GEOS_IrradGridComp.F90:680`). `_RC` expands to
+        `rc=status);_VERIFY(status` (`MAPL_ErrLog.h:114`), so it
+        cannot sit inside an `if (...)` condition; hence the local.
+        `MAPL_UngriddedDim` (pure) takes no `rc`.
+      - `Initialize` stays registered without `phase_name`: MAPL runs
+        the user Initialize by the default name `GENERIC::INIT_USER`
+        (`initialize_user.F90:21`), and `run_custom` skips a phase it
+        can't find without error (`_RETURN_UNLESS(found)`), so a custom
+        name would silently disable it. All other ports do the same.
+
+14. **SatSim writes into its radius imports** - OPEN (found in the
+    2026-10-22 audit; needs a closer look).
+    - `SIM_DRIVER` (~L543-557) assigns to the import pointers
+      themselves: `where (RDFI == MAPL2_UNDEF) RDFI = 36.e-6`, and the
+      same for `RDFL`, `RDFR`, `RDFS`, `RDFG` (imports `RI`, `RL`,
+      `RR`, `RS`, `RG`). Unchanged from MAPL2.
+    - Until the `MAPL2_UNDEF` fix (step 4) these tests never matched,
+      so the writes were inert in MAPL3. They now fire wherever the
+      inputs hold `1e15`.
+    - Under RADIATION, IRRAD and Solar import the same fields. SatSim
+      runs after both, so the current step is not affected.
+    - Unverified, to check:
+      - whether a MAPL3 connected import shares memory with the
+        provider's export (MOIST's `RI`... in the full model), in
+        which case the replaced values reach every other consumer,
+        HISTORY, and the next step's IRRAD/Solar;
+      - whether MAPL2 shared that memory too (if so, MAPL2 had the
+        same side effect and the baseline includes it);
+      - whether anything downstream depends on `1e15` marking
+        cloud-free radii.
+    - Likely fix: copy the radii into locals before replacing the
+      undef values, as Solar does (`RR3`/`REFF` are locals).
 
 Effort concentrates in steps 2 (mechanical but ~2300 lines), 4 (needs a
 MAPL3 design decision for dynamic export cloning) and 12 (test data and

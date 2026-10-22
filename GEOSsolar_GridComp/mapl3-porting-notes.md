@@ -510,20 +510,30 @@ port - referenced throughout below instead of repeated).
           one-line comment at both sites saying so). Rejected
           alternative: `FILL=0.0` on all 155 rows - noisy, and still
           wouldn't make the value queryable.
-        - **`MAPL_UNDEF` changed sign**: MAPL2 `MAPL_UNDEFINED_REAL =
-          huge(1.)` (`shared/Constants/InternalConstants.F90:20`);
-          MAPL3 `= -huge(1.)` (`utils/Constants/InternalConstants.F90:18`).
+        - **`MAPL_UNDEF` changed value**: MAPL2 `MAPL_UNDEF = 1.0e15`
+          (`base/Base/Base_Base.F90:78`; MAPL2's `MAPL_UNDEFINED_REAL
+          = huge(1.)` is a separate constant that Solar does not use);
+          MAPL3 `MAPL_UNDEF = MAPL_UNDEFINED_REAL = -huge(1.)`
+          (`utils/Constants/InternalConstants.F90:18-19`).
           Solar has zero hard-coded undef literals (`grep huge|1e15`
           empty) and ACG passes `fill_value=MAPL_UNDEF` textually, so a
           MAPL3 build is self-consistent (`where (RI == MAPL_UNDEF)`,
           `BufOut = MAPL_UNDEF`, `def`, exports all agree). Exposure is
-          only data crossing the build boundary: (i) MAPL2-written
-          Solar internal restarts / ExtData carrying `+huge` must be
-          regenerated from a MAPL3 run (or converted `+huge -> -huge`
+          data crossing the build boundary: (i) MAPL2-written Solar
+          internal restarts / ExtData carrying `1e15` must be
+          regenerated from a MAPL3 run (or converted `1e15 -> -huge`
           once); (ii) baseline validation against MAPL2 output needs an
-          undef-aware comparison (treat `+huge` and `-huge` as equal);
-          (iii) never introduce a literal - always the symbolic
-          constant.
+          undef-aware comparison (treat `1e15` and `-huge` as equal);
+          (iii) the radius imports come from MAPL2-era data holding
+          `1e15` for cloud-free cells (step 18), so the radius
+          defaults (`where (RI == ...) RR3(:, :, 1) = 36.` etc.,
+          ~L2577-2581 and ~L4356-4359) never matched `MAPL_UNDEF`.
+          DONE 2026-10-22: they now test against a module parameter
+          `MAPL2_UNDEF = 1.0e15`, as IRRAD does; `solar-sa` still
+          passes with it. The `ALB /=
+          MAPL_UNDEF` tests (~L4592-4634) stay: `ALB` is a local
+          Solar sets to `MAPL_UNDEF` itself; (iv) never introduce a
+          literal - always the symbolic constant.
         - **What `def` actually does** (`INT_VARS_3` unpack loop at
           ~L3746-3800, `UnPackIt` at ~L6860): the load balancer only
           computes **daytime** columns (`daytime`/`MSK` true). When
@@ -873,6 +883,45 @@ port - referenced throughout below instead of repeated).
     correctness - step 1 already covers the bulk of macro/indentation
     style): `ESMF_Attribute*`->`ESMF_Info*` (Solar doesn't appear to use
     Attribute get/set based on what's visible, but verify).
+    - DONE 2026-10-22. Builds, and all regression tests pass
+      (`solar-sa` included):
+      - `#include "MAPL_Generic.h"` -> `"MAPL.h"`, as IRRAD/RADIATION.
+        `MAPL_Generic.h` is only `#include "MAPL.h"`
+        (`@MAPL/include/MAPL_Generic.h:1`), so no behavior change.
+      - Removed unused locals, each confirmed by a per-routine use
+        count (contained routines included) and a separate
+        line-by-line search:
+        - `SORADCORE`: `LAYOUT`, `ARRAY`, `BUNDLE`; RRTMGP leftovers
+          from before `PROCESS_RRTMGP_BLOCK` was split out
+          (`gas_concs_block`, `fluxes_clrsky`/`_allsky`, `aer_props`,
+          `cloud_props_bnd_*`, `cloud_props_gpt_*`, `optical_props`,
+          `colS`, `colE`, `ncols_block`, `icol`, `isub`, `ilay`,
+          `igpt`, `cld_frac`, `sigma_qcw`, `wgt`, the `stau*`/
+          `sltau*`/`sitau*` sums and the `#ifdef SOLAR_RADVAL` block,
+          the `radice*`/`radfac`/`rfint`/`fdelta`/`radidx` set);
+          `tmin`, `tmax`, `ptop_increase_OK_fraction`,
+          `tmin_increase_OK_Kelvin`, `L`, `xx`.
+        - `UPDATE_EXPORT`: `CLD`, `BUNDLE`, `FIELD`, `NAME`, `NA`,
+          `idx`, `GetAeroIndex`, `iseg`, `ibbeg`, `ibend`.
+        - `error_msg` in `compute_sprlyr_diags_predelta`/`_postdelta`;
+          `status` in `compute_rte_sw`.
+        - The comments on the removed RRTMGP declarations (PMN's
+          liq/ice note, band-space, g-point/mcICA) moved verbatim to
+          the live declarations in `PROCESS_RRTMGP_BLOCK`.
+        - Gotcha: `TEST_(A)` expands to `error_msg = A; ...` (e.g.
+          L2600), so `error_msg` is used wherever `TEST_` is, though
+          the name never appears in the source. It stays in
+          `compute_aer_optics`, `compute_delta_scale`,
+          `compute_rte_sw` and `PROCESS_RRTMGP_BLOCK`. Likewise `_RC`
+          uses `status`/`rc` implicitly; `_FAIL` only `rc`.
+        - `ty_RRTMGP_state%initialized` is unused but is a component
+          of the private state; left alone.
+      - `_RC`: none added. The four `if (MAPL_AM_I_ROOT()) then`
+        checks stay without `rc`, like the other ports (GWD, SU, DU).
+        (Adding it was tried and reverted: `_RC` expands to
+        `rc=status);_VERIFY(status` (`MAPL_ErrLog.h:114`), so it
+        cannot go inside an `if (...)` condition and needs a local.)
+        `MAPL_UngriddedDim` (pure) and `MAPL_EQsat` take no `rc`.
 
 17. **TODO - Slim `SORADCORE` down to a ~100-line driver by hoisting
     everything else to module scope.** Analysed 2026-09-25, not started.

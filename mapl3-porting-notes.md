@@ -97,9 +97,13 @@ flux can't be correctly computed yet:
   field simply comes back unassociated if not COMPLETE - but a declared
   connection forces allocation, so this is safe for connected fields).
 - **Running a single child in Run**: `MAPL_GridCompRunChild(gc, "IRRAD",
-  _RC)` - `phase_name` is optional here and defaults to `'GENERIC::RUN_USER'`
-  (the phase a child gets when its own `SetServices` registers `Run`
-  without an explicit `phase_name=`, as IRRAD does). The plural
+  _RC)` - `phase_name` is optional here; without it the child's first
+  run phase (index 1) runs, whatever its name. A child whose
+  `SetServices` registers `Run` without `phase_name=` gets the phase name
+  `'GENERIC::RUN_USER'` (`MethodPhasesMap.F90:155`). A configurable Root
+  (the `*-sa` regression cases) asks for `'run'` by name
+  (`ConfigurableGridComp.F90:196-201`), so RADIATION, IRRAD, Solar and
+  SatSim all register `phase_name="run"`. The plural
   `MAPL_GridCompRunChildren(gc, phase_name=..., _RC)` requires an explicit
   `phase_name` in its public wrapper even though the underlying method
   allows it to be optional - prefer the singular call per child unless you

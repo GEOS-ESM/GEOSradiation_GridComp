@@ -52,7 +52,7 @@ contains
       integer :: USE_SATSIM
 
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
-      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, phase_name="run", _RC)
 
       ! Create the IRRAD child and invoke its SetServices
       call MAPL_GridCompAddChild(gc, "IRRAD", irrad_setservices, "irrad.yaml", _RC)
