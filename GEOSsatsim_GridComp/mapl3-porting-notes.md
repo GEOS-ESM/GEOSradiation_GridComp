@@ -1,11 +1,9 @@
 # GEOS_SatsimGridComp MAPL3 porting plan
 
 Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
-Steps 1-9 and 13 are done (step 4 by disabling the masked exports). Open:
-steps 10-12 (wiring, compile, regression). `GEOSsatsim_GridComp` is still
-commented out in the parent's `alldirs` (`../CMakeLists.txt`) and its
-`use` line in `../GEOS_RadiationGridComp.F90`, so nothing has been
-compiled yet.
+Steps 1-11 and 13 are done (step 4 by disabling the masked exports).
+SatSim is built as a RADIATION child (behind `USE_SATSIM`) and compiles;
+it has not been run. Open: step 12 (the `satsim-sa` regression).
 
 This plan follows the IRRAD/Solar ports (see
 `../GEOSirrad_GridComp/mapl3-porting-notes.md` for the MAPL3 API
@@ -333,7 +331,7 @@ spelled out below; everything else is "do what Solar did".
    - The container's `use ... only: satsimSetServices => SetServices`
      alias still suffices (step 10).
 
-10. **Build wiring** - IN PROGRESS 2026-10-22.
+10. **Build wiring** - DONE 2026-10-22.
     - `GEOSsatsim_GridComp/CMakeLists.txt`: no change. `DEPENDENCIES`
       already lists `GEOS_Shared MAPL GEOS_RadiationShared`. The plan's
       "`TYPE SHARED` to match siblings" was wrong: IRRAD and Solar don't
@@ -387,10 +385,12 @@ spelled out below; everything else is "do what Solar did".
       (the provider's value wins, and is what checkpoints record) and
       errors in strict mode. Matters for step 12: the `satsim-sa`
       import checkpoint will carry the fake provider's names.
-    - Not compiled (step 11).
 
 11. **Compile with ifx** and fix fallout. Only the GridComp should
     break; the fixed-form COSP `.f` sources are untouched.
+    - DONE 2026-10-22: the build with SatSim wired in (step 10) succeeded
+      with no code changes needed (built by the user). Not run yet
+      (step 12).
 
 12. **Standalone regression `regression/satsim-sa`** - clone
     `irrad-sa` (`cap_*.yaml`, `mapl.yaml`, `root.yaml`, `data-*.yaml`
@@ -411,6 +411,37 @@ spelled out below; everything else is "do what Solar did".
     - Compare with an undef-aware `cmpchk.py` (`+huge` vs `-huge`).
     - Hand runs need `LD_LIBRARY_PATH` set to the install `lib`, and
       `cap_restart.yaml` reset before each run (Solar step 18).
+    - DONE 2026-10-22 - case files in `../regression/satsim-sa/`, after
+      `solar-sa` (not run yet, no baseline yet, not in `cases.txt`):
+      - `mapl.yaml`, `cap_driver.yaml` (PT20M), `cap_gridcomp.yaml`,
+        `cap_restart.yaml` (2000-04-14T22:00) copied from `solar-sa`; the
+        baseline must be captured at the matching time.
+      - `root.yaml`: C12L181 geometry as in `solar-sa`; children
+        `DataForSatsim` (configurable gridcomp) and `SATSIM`
+        (`libGEOSradiation_GridComp.so`, `satsim_setservices_`); one
+        connection per import from `DataForSatsim`'s internal state. In
+        the full model `MCOSZ` comes from SOLAR; here the provider has
+        it too.
+      - `data-for-satsim.yaml`: the 19 imports as restarted internals,
+        with SatSim's own units and standard names (step 10 decision),
+        so they match the MAPL2 baseline's import metadata. Its restart
+        (`checkpoints/2000-04-14T22:00:00/DataForSatsim_internal.nc`)
+        comes from the MAPL2 SATSIM import state before the run.
+      - `satsim.yaml`: `SATSIM_DT: 1200`, `USE_SATSIM: 1` (all
+        simulators), per-simulator flags 0, `SATSIM_NCOLUMNS` and
+        `SATSIM_POINTS_PER_ITERATION` left at their defaults (30 at C12,
+        -999); `activate_all_exports: true`, import and export
+        checkpoints (SatSim has no internal state). The MAPL2 capture
+        must use the same values and request all SATSIM exports in
+        `HISTORY.rc`.
+      - `cmpchk.py`: Solar's, for the `import` and `export` states of
+        `SATSIM`, against `~/input/satsim/C12L181/after/new-style`.
+    - DONE 2026-10-22 - added the external `Satsim_SetServices(gc, rc)`
+      wrapper after `end module`, as Solar step 13, so the standalone can
+      load SatSim by symbol (`satsim_setservices_`). Not compiled yet.
+    - No ExtData needed: `gettau` only uses constants, and the COSP file
+      reads (`icarus.f` debug output, `geos5_read.f90`) are not on the
+      driver's path.
 
 13. **Style cleanup afterwards** (low priority, like Solar step 16).
     DONE 2026-10-01 (done out of order, before steps 3-12).

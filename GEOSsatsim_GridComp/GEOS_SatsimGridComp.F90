@@ -2054,3 +2054,11 @@ contains
    end subroutine Run
 
 end module GEOS_SatsimGridCompMod
+
+subroutine Satsim_SetServices(gc, rc)
+   use ESMF
+   use GEOS_SatsimGridCompMod, only: mySetServices => SetServices
+   type(ESMF_GridComp) :: gc
+   integer, intent(out) :: rc
+   call mySetServices(gc, rc=rc)
+end subroutine Satsim_SetServices
