@@ -1,0 +1,27 @@
+# Resources for the standalone SATSIM case. They must match the MAPL2
+# SATSIM capture this case is compared against.
+
+# run every 20 minutes (the cap's clock step)
+SATSIM_DT: 1200
+
+# ISCCP simulator only
+USE_SATSIM: 0
+USE_SATSIM_ISCCP: 1
+USE_SATSIM_MODIS: 0
+USE_SATSIM_MISR: 0
+USE_SATSIM_LIDAR: 0
+USE_SATSIM_RADAR: 0
+
+# SATSIM_NCOLUMNS defaults from the grid (30 at C12);
+# SATSIM_POINTS_PER_ITERATION defaults to -999 (all points at once)
+
+mapl:
+  setServices:
+    sharedObj: libGEOSradiation_GridComp
+    userRoutine: satsim_setservices_
+
+  # exports are requested by history.yaml, as in the MAPL2 capture
+  misc:
+    checkpoint:
+      export: true
+      import: true

@@ -1,0 +1,185 @@
+---
+mapl:
+
+  setServices:
+    sharedObj: libconfigurable_gridcomp
+    userRoutine: setservices_
+
+  geometry:
+    esmf_geom:
+      class: CubedSphere
+      im_world: 12
+    vertical_grid:
+      grid_type: model
+      fields: {pressure: PLE}
+      num_levels: 181
+
+  children:
+    DataForRadiation:
+      dso: libconfigurable_gridcomp.so
+      setservices: setservices_
+      config_file: data-for-radiation.yaml
+
+    FakeGOCART:
+      dso: libFakeGOCART_GridComp.so
+      setservices: fakegocart_setservices_
+      config_file: fake-gocart.yaml
+
+    RADIATION:
+      dso: libGEOSradiation_GridComp.so
+      setservices: radiation_setservices_
+      config_file: radiation.yaml
+
+  # IRRAD's and SOLAR's imports propagate up to RADIATION, so each name is
+  # connected once and feeds every child that imports it.
+  connections:
+    - src_name: PLEINST
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: PLEINST
+      dst_comp: RADIATION
+    - src_name: PLE
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: PLE
+      dst_comp: RADIATION
+    - src_name: T
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: T
+      dst_comp: RADIATION
+    - src_name: QV
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QV
+      dst_comp: RADIATION
+    - src_name: QL
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QL
+      dst_comp: RADIATION
+    - src_name: QI
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QI
+      dst_comp: RADIATION
+    - src_name: QR
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QR
+      dst_comp: RADIATION
+    - src_name: QS
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QS
+      dst_comp: RADIATION
+    - src_name: QG
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: QG
+      dst_comp: RADIATION
+    - src_name: RL
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: RL
+      dst_comp: RADIATION
+    - src_name: RI
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: RI
+      dst_comp: RADIATION
+    - src_name: RR
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: RR
+      dst_comp: RADIATION
+    - src_name: RS
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: RS
+      dst_comp: RADIATION
+    - src_name: RG
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: RG
+      dst_comp: RADIATION
+    - src_name: O3
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: O3
+      dst_comp: RADIATION
+    - src_name: CH4
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: CH4
+      dst_comp: RADIATION
+    - src_name: N2O
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: N2O
+      dst_comp: RADIATION
+    - src_name: CFC11
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: CFC11
+      dst_comp: RADIATION
+    - src_name: CFC12
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: CFC12
+      dst_comp: RADIATION
+    - src_name: HCFC22
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: HCFC22
+      dst_comp: RADIATION
+    - src_name: FCLD
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: FCLD
+      dst_comp: RADIATION
+    - src_name: TS
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: TS
+      dst_comp: RADIATION
+    - src_name: EMIS
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: EMIS
+      dst_comp: RADIATION
+    - src_name: PREF
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: PREF
+      dst_comp: RADIATION
+    - src_name: TSINST
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: TSINST
+      dst_comp: RADIATION
+    - src_name: ALBVR
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: ALBVR
+      dst_comp: RADIATION
+    - src_name: ALBVF
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: ALBVF
+      dst_comp: RADIATION
+    - src_name: ALBNR
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: ALBNR
+      dst_comp: RADIATION
+    - src_name: ALBNF
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: ALBNF
+      dst_comp: RADIATION
+    - src_name: AERO
+      src_comp: FakeGOCART
+      src_intent: export
+      dst_name: AERO
+      dst_comp: RADIATION

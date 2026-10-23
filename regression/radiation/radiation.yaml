@@ -1,0 +1,23 @@
+# RADIATION container. It creates IRRAD (irrad.yaml) and SOLAR (solar.yaml),
+# and SATSIM (satsim.yaml) when any of the USE_SATSIM* flags is set.
+USE_SATSIM: 0
+USE_SATSIM_ISCCP: 0
+USE_SATSIM_MODIS: 0
+USE_SATSIM_RADAR: 0
+USE_SATSIM_LIDAR: 0
+USE_SATSIM_MISR: 0
+USE_OCEANOBIOGEOCHEM: 0
+
+# cloud condensate inhomogeneity, read in RADIATION's Initialize
+RAD_CONDENSATE_INHOMOGENEITY: 1
+
+mapl:
+  setServices:
+    sharedObj: libGEOSradiation_GridComp
+    userRoutine: radiation_setservices_
+
+  misc:
+    activate_all_exports: true
+    checkpoint:
+      export: true
+      import: true
