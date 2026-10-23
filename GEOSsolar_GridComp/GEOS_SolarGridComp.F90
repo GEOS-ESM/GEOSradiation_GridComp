@@ -3795,6 +3795,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          type(ty_gas_concs) :: gas_concs
 
          logical :: rrtmgp_state_set = .false.
+         ! TODO: pchakrab - never set to .true. (GEOSradiation_GridComp#110):
+         ! this flag is implicitly SAVEd but SOLAR_bands_wavenum is an automatic
+         ! array, so on later calls the cached band limits were uninitialized.
+         ! The band limits are now reloaded on every call. Revisit once develop
+         ! has its fix.
          logical :: have_rrtmgp_wavenums = .false.
 
          ! OBIO bands (start,finish) in [nm]
@@ -4708,7 +4713,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 #undef TEST_
                            ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1],
                            SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
-                           have_rrtmgp_wavenums = .true.
                         end if
 
                         ! get brightness temperature
@@ -4770,7 +4774,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 #undef TEST_
                      ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
                      SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
-                     have_rrtmgp_wavenums = .true.
                   end if
 
                   ! RRTMGP bands are already ordered in increasing wavenumber
