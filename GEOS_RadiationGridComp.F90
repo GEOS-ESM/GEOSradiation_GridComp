@@ -9,7 +9,7 @@ module GEOS_RadiationGridCompMod
    !   longwave and shortwave radiation GCs. It is intended as a container
    !   for the ESMF/MAPL Solar and Irrad gridded components used in GEOS.
    !   In SetServices, it creates its children: IRRAD, SOLAR and, when
-   !   USE_SATSIM is set, the SATSIM satellite simulators. Its Run method
+   !   any USE_SATSIM* flag is set, the SATSIM satellite simulators. Its Run method
    !   combines results from IRRAD and SOLAR to produce total radiative
    !   exports.
    !
@@ -60,10 +60,10 @@ contains
       ! Create the SOLAR child and invoke its SetServices
       call MAPL_GridCompAddChild(gc, "SOLAR", solarSetServices, "solar.yaml", _RC)
 
-      ! Create the SATSIM child only when requested. The individual
-      ! simulators (USE_SATSIM_ISCCP, ...) are selected in satsim.yaml.
-      call MAPL_GridCompGetResource(gc, "USE_SATSIM", USE_SATSIM, default=0, _RC)
-      if (USE_SATSIM /= 0) then
+      ! Create the SATSIM child only when requested, i.e., when any of the
+      ! USE_SATSIM* flags is set
+      call get_use_satsim(gc, USE_SATSIM, _RC)
+      if (USE_SATSIM > 0) then
          call MAPL_GridCompAddChild(gc, "SATSIM", satsimSetServices, "satsim.yaml", _RC)
          ! SATSIM needs SOLAR's mean cosine of the solar zenith angle; its
          ! other imports propagate up to this component's parent.
@@ -247,8 +247,8 @@ contains
       call MAPL_GridCompRunChild(gc, "IRRAD", _RC)
       call MAPL_GridCompRunChild(gc, "SOLAR", _RC)
       ! SATSIM runs after SOLAR, whose MCOSZ it imports
-      call MAPL_GridCompGetResource(gc, "USE_SATSIM", USE_SATSIM, default=0, _RC)
-      if (USE_SATSIM /= 0) then
+      call get_use_satsim(gc, USE_SATSIM, _RC)
+      if (USE_SATSIM > 0) then
          call MAPL_GridCompRunChild(gc, "SATSIM", _RC)
       end if
       call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
@@ -326,6 +326,29 @@ contains
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(clock)
    end subroutine Run
+
+   ! USE_SATSIM is the sum of all USE_SATSIM* flags, so SATSIM is enabled if
+   ! any one of them is set (as in MAPL2)
+   subroutine get_use_satsim(gc, use_satsim, rc)
+      type(ESMF_GridComp), intent(inout) :: gc
+      integer, intent(out) :: use_satsim
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      integer :: use_satsim_isccp, use_satsim_modis, use_satsim_radar
+      integer :: use_satsim_lidar, use_satsim_misr
+
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM", use_satsim, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_ISCCP", use_satsim_isccp, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_MODIS", use_satsim_modis, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_RADAR", use_satsim_radar, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_LIDAR", use_satsim_lidar, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_MISR", use_satsim_misr, default=0, _RC)
+      use_satsim = use_satsim + use_satsim_isccp + use_satsim_modis + &
+           use_satsim_radar + use_satsim_lidar + use_satsim_misr
+
+      _RETURN(_SUCCESS)
+   end subroutine get_use_satsim
 
 end module GEOS_RadiationGridCompMod
 

@@ -358,20 +358,28 @@ spelled out below; everything else is "do what Solar did".
     - DONE - `../GEOS_RadiationGridComp.F90`:
       - `use GEOS_SatsimGridCompMod, only: satsimSetServices =>
         SetServices` restored.
-      - `SetServices`: a single `USE_SATSIM` flag (default 0) from the
-        parent's own config gates `MAPL_GridCompAddChild(gc, "SATSIM",
-        satsimSetServices, "satsim.yaml", _RC)`. MAPL2 summed the six
-        `USE_SATSIM*` flags from the shared `AGCM.rc`; in MAPL3 each
-        component reads its own YAML, so the parent only decides whether
-        the child exists and `satsim.yaml` keeps the per-simulator flags,
-        `SATSIM_DT` and `SATSIM_NCOLUMNS`.
+      - `SetServices`: as in MAPL2, `USE_SATSIM` is the sum of the six
+        `USE_SATSIM*` flags (each default 0, read by `get_use_satsim`),
+        and `USE_SATSIM > 0` gates `MAPL_GridCompAddChild(gc, "SATSIM",
+        satsimSetServices, "satsim.yaml", _RC)`. The flags only need to
+        be set once, in the parent's config: MAPL3 merges the parent's
+        non-`mapl:` keys into the child's config, with the child's value
+        winning if both define a key (`add_child_by_spec.F90:38`,
+        `merge_hconfig` in `HConfigUtilities.F90:24-59`), so SATSIM sees
+        the same `USE_SATSIM*` values.
+      - One thing to watch: when parent and child both define a key, the
+        child's value wins (`HConfigUtilities.F90:51-52`). A `satsim.yaml`
+        used under RADIATION should therefore not set the `USE_SATSIM*`
+        flags. If it did, SATSIM would use its own values, which could
+        differ from the ones RADIATION used to decide whether to create
+        SATSIM.
       - `MAPL_GridCompAddConnection(gc, src_comp="SOLAR",
         src_names="MCOSZ", dst_comp="SATSIM")`, MAPL2's only explicit
         SATSIM connection (Solar exports `MCOSZ` with the same
         standard name). The other 18 imports propagate up unconnected,
         as IRRAD's and Solar's do.
       - `Run`: SATSIM runs after SOLAR (MAPL2 order SOL, IRR, STM; it
-        needs this step's `MCOSZ`), behind the same `USE_SATSIM` check.
+        needs this step's `MCOSZ`), behind the same `USE_SATSIM > 0` check.
       - Timers fixed in the parent's `Run` while there: the port had
         turned MAPL2's "pause `TOTAL` around the children"
         (`MAPL_TimerOff(TOTAL)`, `MAPL_GenericRunChildren`,
@@ -450,13 +458,44 @@ spelled out below; everything else is "do what Solar did".
         so they match the MAPL2 baseline's import metadata. Its restart
         (`checkpoints/2000-04-14T22:00:00/DataForSatsim_internal.nc`)
         comes from the MAPL2 SATSIM import state before the run.
-      - `satsim.yaml`: `SATSIM_DT: 1200`, `USE_SATSIM: 1` (all
-        simulators), per-simulator flags 0, `SATSIM_NCOLUMNS` and
-        `SATSIM_POINTS_PER_ITERATION` left at their defaults (30 at C12,
-        -999); `activate_all_exports: true`, import and export
-        checkpoints (SatSim has no internal state). The MAPL2 capture
-        must use the same values and request all SATSIM exports in
-        `HISTORY.rc`.
+      - `satsim.yaml`: `SATSIM_DT: 1200`, `USE_SATSIM: 0`,
+        `USE_SATSIM_ISCCP: 1` (ISCCP only; the MAPL2 capture run cannot
+        use `USE_SATSIM: 1`), other per-simulator flags 0,
+        `SATSIM_NCOLUMNS` and `SATSIM_POINTS_PER_ITERATION` left at their
+        defaults (30 at C12, -999); `activate_all_exports: true`, import
+        and export checkpoints (SatSim has no internal state). The MAPL2
+        capture must use the same values.
+      - MAPL2 `HISTORY.rc` may request only the exports MAPL2 fills with
+        ISCCP alone: the 69 ISCCP exports and `SGFCLD` (70 of 222). Each
+        simulator's local arrays are copied out of COSP only inside that
+        simulator's `USE_SATSIM + USE_SATSIM_<SIM> > 0` block
+        (MAPL2 `GEOS_SatsimGridComp.F90` L3738-3790), but the
+        `if (associated(X))` export assignments after them are ungated.
+        So requesting e.g. `LIDARPTOT` reads the never-written
+        `lidar_beta_tot`, which a Debug build (`-init=snan,arrays
+        -fpe0`) traps as "floating invalid" at L4330. `SGFCLD` is safe:
+        `sgx` is built unconditionally (L3647). Export collections:
+        `geosgcm_satsim` (56 fields) and `geosgcm_satsim_ungrd` (the 14
+        size-7 `CLISCCP1-7`, `ISCCP1-7`). A MAPL2 HISTORY collection with
+        no vertical regridding requires every rank-3 field to have the
+        same 3rd-dim size, ungridded dims included (MAPL
+        `base/MAPL_VerticalMethods.F90:666-669,713-724,752`, "have mixed
+        level/edge"), so ungridded fields go in their own collection.
+      - OPEN - the MAPL3 port has the same ungated export assignments,
+        and `activate_all_exports: true` allocates every export, so with
+        ISCCP alone 107 exports are computed from never-initialized work
+        arrays: `LIDARPTOT`/`LIDARTAUTOT` (`lidar_beta_tot`,
+        `lidar_tau_tot`), the 34 MISR and the 71 MODIS exports. The
+        "zero out exports" block (`GEOS_SatsimGridComp.F90:717-734`)
+        covers only the ISCCP, `frac_out`, radar and other lidar arrays.
+        A Debug build (`-init=snan,arrays -fpe0`,
+        `@cmake/compiler/flags/IntelLLVM_Fortran.cmake:187`) traps at
+        `LIDARPTOT` (L1399) as MAPL2 did; a Release build writes
+        garbage, which breaks `run_case`'s whole-file
+        `nccmp -dmfgsB --nans-are-equal`
+        (`@cmake/esma_support/esma_regression_run_helpers.cmake:92-121`).
+        `cmpchk.py` itself is unaffected: it compares only variables
+        present in both files.
       - `cmpchk.py`: Solar's, for the `import` and `export` states of
         `SATSIM`, against `~/input/satsim/C12L181/after/new-style`.
     - DONE 2026-10-22 - added the external `Satsim_SetServices(gc, rc)`

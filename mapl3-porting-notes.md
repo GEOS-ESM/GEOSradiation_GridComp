@@ -194,3 +194,21 @@ fine when invoked directly - looked like a `DYLD_LIBRARY_PATH`/try-run
 environment quirk specific to the non-interactive shell, not a defect in
 the ported code. **The port has not been build-verified end-to-end** -
 build it in a normal interactive terminal before trusting it compiles.
+
+## MAPL2 baselines for the standalone tests: `AERO_PROVIDER: none`
+The MAPL2 run that generates the baselines for the standalone regression
+tests must set `AERO_PROVIDER: none` in `AGCM.rc` (default `GOCART2G`;
+options `GOCART2G, MAM, none`). `GEOS_ChemGridComp` then creates an empty
+`AERO` state with `implements_aerosol_optics_method = .false.` (MAPL2
+`GEOS_ChemGridComp.F90:1135-1140`), so IRRAD and Solar skip aerosol
+optics. With `GOCART2G`, GOCART2G sets the attribute to `.true.`
+unconditionally (`GOCART2G_GridCompMod.F90:423`) and radiation includes
+aerosols.
+
+The MAPL3 standalone tests (`regression/irrad-sa`, `solar-sa`,
+`radiation`) mimic this with `FakeGOCART`
+(`regression/FakeGOCART_GridComp`), which provides the `AERO` state with
+`implements_aerosol_optics_method = .false.` (`FakeGOCART_GridComp.F90:58`).
+A baseline captured with `GOCART2G` does not match: Solar's
+`FSWN/FSCN/FSWUN/FSCUN/DR*/DF*/FSWBANDN` differed O(1e-5 - 7e-3) on day
+cells (`GEOSsolar_GridComp/mapl3-porting-notes.md`, step 18).
