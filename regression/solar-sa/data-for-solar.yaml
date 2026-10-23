@@ -62,10 +62,10 @@ mapl:
         units: m
         vertical_dim_spec: "c"
         standard_name: "effective_radius_of_graupel_particles"
-      OX:
-        units: mol mol-1
+      O3:
+        units: kg kg-1
         vertical_dim_spec: "c"
-        standard_name: "odd-oxygen_volume_mixing_ratio"
+        standard_name: "ozone_mass_mixing_ratio"
       CH4:
         units: pppv
         vertical_dim_spec: "c"

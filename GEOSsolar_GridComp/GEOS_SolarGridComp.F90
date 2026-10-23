@@ -1334,7 +1334,7 @@ contains
          ! Daytime ONLY copy of variables
 
          ! inputs
-         real, pointer, dimension(:, :) :: PLE, CH4, N2O, T, Q, OX, CL, &
+         real, pointer, dimension(:, :) :: PLE, CH4, N2O, T, Q, O3, CL, &
               QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
          real, pointer, dimension(:) :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
               Ig1D, Jg1D, ALAT, SLR1D, ZT
@@ -1543,7 +1543,7 @@ contains
          integer, pointer :: pi1, piN
          integer, target :: i1Out, iNOut, i1InOut, iNInOut
          real, pointer :: QQ3(:, :, :), RR3(:, :, :), ptr3(:, :, :), ptr4(:, :, :, :)
-         real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), O3(:, :), PLhPa(:, :)
+         real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), PLhPa(:, :)
          integer :: NumLit, Num2do, num_aero_vars
          logical :: has_horz_dims, has_vert_dim
          character(len=ESMF_MAXSTR) :: SHORT_NAME
@@ -1855,8 +1855,8 @@ contains
                   T => ptr2(1:Num2do, :)
                case ('QV')
                   Q => ptr2(1:Num2do, :)
-               case ('OX')
-                  OX => ptr2(1:Num2do, :)
+               case ('O3')
+                  O3 => ptr2(1:Num2do, :)
                case ('FCLD')
                   CL => ptr2(1:Num2do, :)
                case ('QL')
@@ -2536,20 +2536,6 @@ contains
          where (RR == MAPL2_UNDEF) RR3(:, :, 3) = 50.
          where (RS == MAPL2_UNDEF) RR3(:, :, 4) = 50.
          where (RG == MAPL2_UNDEF) RR3(:, :, 5) = 50.
-
-         ! Convert odd oxygen, which is the model prognostic, to ozone
-
-         allocate(O3(NCOL, LM), _STAT)
-
-         O3 = OX
-         where (PL < 100.)
-            O3 = O3 * EXP(-1.5 * (LOG10(PL) - 2.)**2)
-         end where
-
-         ! SORAD expects non-negative ozone fraction by MASS
-
-         O3 = O3 * (MAPL_O3MW / MAPL_AIRMW)
-         O3 = MAX(O3, 0.00)
 
          ! ------------------
          ! Begin aerosol code
@@ -3593,7 +3579,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(PL, RH, PLhPa)
          deallocate(QQ3, RR3)
          deallocate(ILWT)
-         deallocate(O3)
          deallocate(taua, ssaa, asya)
 
          ! Complete load balancing by retrieving work done remotely
