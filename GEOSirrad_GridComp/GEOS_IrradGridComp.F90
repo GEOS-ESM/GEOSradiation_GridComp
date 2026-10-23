@@ -2320,6 +2320,7 @@ contains
          ! see the fuller explanation in Run's own scratch-pointer block)
          real, pointer, contiguous, dimension(:, :, :) :: p3d
          real, pointer, contiguous, dimension(:, :, :, :) :: p4d
+         real, pointer, contiguous, dimension(:) :: p1d
          real :: PRS_LOW_MID ! pressure separating low and middle clouds
          real :: PRS_MID_HIGH ! pressure separating low and high   clouds
 
@@ -2411,6 +2412,9 @@ contains
 
          call MAPL_StateGetPointer(import, FCLD, 'FCLD', _RC)
          call MAPL_StateGetPointer(import, PREF, 'PREF', _RC)
+         ! Edge import: remap to 0:LM, as in Run, so the level searches
+         ! below pick the same K as MAPL2
+         p1d => PREF; PREF(0:LM) => p1d
 
          allocate(DUMTT(IM, JM), _STAT)
 
