@@ -8,11 +8,14 @@ mapl:
     restart:
       internal: true
 
-  # RADIATION's external imports: its own PLEINST plus the union of IRRAD's
-  # and SOLAR's imports (same entries as data-for-irrad.yaml and
-  # data-for-solar.yaml). They only differ on FCLD's standard name; Solar's
-  # cloud_area_fraction is used, so IRRAD's FCLD import gets a
-  # standard_name warning.
+  # RADIATION's external imports: its own PLEINST plus the union of IRRAD's,
+  # SOLAR's and SATSIM's imports (same entries as data-for-irrad.yaml,
+  # data-for-solar.yaml and data-for-satsim.yaml, minus SATSIM's MCOSZ,
+  # which RADIATION connects from SOLAR). IRRAD and SOLAR only differ on
+  # FCLD's standard name; Solar's cloud_area_fraction is used, so IRRAD's
+  # FCLD import gets a standard_name warning. SATSIM declares its own
+  # standard names (and units 1 for QV, QL, QI), so its shared imports get
+  # standard_name warnings and a kg kg-1 -> 1 units conversion.
   states:
     internal:
       PLEINST:
@@ -132,4 +135,17 @@ mapl:
         units: 1
         vertical_dim_spec: "n"
         standard_name: "surface_albedo_for_near_infrared_diffuse"
+      # SATSIM-only imports, with SatSim's own units and standard names
+      ZLE:
+        units: m
+        vertical_dim_spec: "e"
+        standard_name: "Edge_heights"
+      FRLAND:
+        units: 1
+        vertical_dim_spec: "n"
+        standard_name: "fraction_of_land"
+      FROCEAN:
+        units: 1
+        vertical_dim_spec: "n"
+        standard_name: "fraction_of_ocean"
       # AERO comes from FakeGOCART (see root.yaml connections)

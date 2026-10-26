@@ -178,6 +178,21 @@ mapl:
       src_intent: internal
       dst_name: ALBNF
       dst_comp: RADIATION
+    - src_name: ZLE
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: ZLE
+      dst_comp: RADIATION
+    - src_name: FRLAND
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: FRLAND
+      dst_comp: RADIATION
+    - src_name: FROCEAN
+      src_comp: DataForRadiation
+      src_intent: internal
+      dst_name: FROCEAN
+      dst_comp: RADIATION
     - src_name: AERO
       src_comp: FakeGOCART
       src_intent: export

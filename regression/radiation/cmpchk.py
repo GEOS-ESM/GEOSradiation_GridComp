@@ -4,15 +4,16 @@ import numpy as np
 import netCDF4 as nc4
 
 baseline_dir = "/home/pchakrab/input/radiation/C12L181/after/new-style"
-# RADIATION and its IRRAD and SOLAR children, with the states each checkpoints.
-# MAPL2's RADIATION import holds every child import propagated up; MAPL3's
-# holds only RADIATION's own (PLEINST and the IRRAD/SOLAR exports it imports),
-# so the children's imports are compared through IRRAD's and SOLAR's import
-# states. FRLAND, FROCEAN and ZLE are SatSim's (off here); satsim-sa covers them.
+# RADIATION and its IRRAD, SOLAR and SATSIM children, with the states each
+# checkpoints. MAPL2's RADIATION import holds every child import propagated
+# up; MAPL3's holds only RADIATION's own (PLEINST and the IRRAD/SOLAR exports
+# it imports), so the children's imports are compared through IRRAD's,
+# SOLAR's and SATSIM's import states.
 comps = {
     "RADIATION": ["import", "export"],
     "IRRAD": ["import", "internal", "export"],
     "SOLAR": ["import", "internal", "export"],
+    "SATSIM": ["import", "export"],
 }
 
 HUGE = np.finfo(np.float32).max

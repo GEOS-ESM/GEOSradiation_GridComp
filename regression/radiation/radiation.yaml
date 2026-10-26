@@ -1,7 +1,8 @@
 # RADIATION container. It creates IRRAD (irrad.yaml) and SOLAR (solar.yaml),
 # and SATSIM (satsim.yaml) when any of the USE_SATSIM* flags is set.
+# ISCCP simulator only, as in satsim-sa
 USE_SATSIM: 0
-USE_SATSIM_ISCCP: 0
+USE_SATSIM_ISCCP: 1
 USE_SATSIM_MODIS: 0
 USE_SATSIM_RADAR: 0
 USE_SATSIM_LIDAR: 0

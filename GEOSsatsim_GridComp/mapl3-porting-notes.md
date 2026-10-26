@@ -410,6 +410,19 @@ spelled out below; everything else is "do what Solar did".
       (the provider's value wins, and is what checkpoints record) and
       errors in strict mode. Matters for step 12: the `satsim-sa`
       import checkpoint will carry the fake provider's names.
+    - 2026-10-26, `regression/radiation` runs SatSim (ISCCP only, as
+      `satsim-sa`). Its `DataForRadiation` declares the shared imports
+      with IRRAD/Solar metadata, plus SatSim-only `ZLE`, `FRLAND` and
+      `FROCEAN` with SatSim's, each connected to RADIATION. `MCOSZ`
+      comes from Solar. As expected above, SatSim's shared imports log
+      standard-name warnings (`StandardNameAspect.F90:150-163`,
+      permissive is the default, `FieldDictionaryConfig.F90:92`), and
+      `QV`/`QL`/`QI` get a `kg kg-1` -> `1` units conversion
+      (`UnitsAspect.F90:89-91`) that leaves the values unchanged: all
+      18 provider-fed imports in SatSim's checkpoint equal the input.
+      `satsim-sa` now nests SATSIM under a stand-in RADIATION
+      (configurable gridcomp) that declares the `USE_SATSIM*` flags, and
+      `satsim.yaml` no longer sets them (see the "thing to watch" above).
 
 11. **Compile with ifx** and fix fallout. Only the GridComp should
     break; the fixed-form COSP `.f` sources are untouched.
