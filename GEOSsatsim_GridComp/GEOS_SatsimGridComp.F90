@@ -310,6 +310,10 @@ contains
 
          ! Local variables needed for all simulators
          real, dimension(IM, JM, LM) :: PLO, RH, QST
+
+         ! Local copies of the effective-radius imports, with UNDEF replaced
+         ! by defaults; the imports themselves are left untouched (#111)
+         real, dimension(IM, JM, LM) :: RDFI_LOCAL, RDFL_LOCAL, RDFR_LOCAL, RDFS_LOCAL, RDFG_LOCAL
          real, dimension(IM * JM, LM) :: RHCOSP
          integer :: Npoints
          real, dimension(:, :, :), target, allocatable :: frac_out
@@ -531,28 +535,33 @@ contains
 
          ! delp in Pascals, reff in microns
 
+         RDFI_LOCAL = RDFI
+         RDFL_LOCAL = RDFL
+         RDFR_LOCAL = RDFR
+         RDFS_LOCAL = RDFS
+         RDFG_LOCAL = RDFG
 #ifdef USE_MAPL_UNDEF
-         where (RDFI == MAPL2_UNDEF)
-            RDFI = 36.e-6
+         where (RDFI_LOCAL == MAPL2_UNDEF)
+            RDFI_LOCAL = 36.e-6
          end where
-         where (RDFL == MAPL2_UNDEF)
-            RDFL = 14.e-6
+         where (RDFL_LOCAL == MAPL2_UNDEF)
+            RDFL_LOCAL = 14.e-6
          end where
-         where (RDFR == MAPL2_UNDEF)
-            RDFR = 50.e-6
+         where (RDFR_LOCAL == MAPL2_UNDEF)
+            RDFR_LOCAL = 50.e-6
          end where
-         where (RDFS == MAPL2_UNDEF)
-            RDFS = 50.e-6
+         where (RDFS_LOCAL == MAPL2_UNDEF)
+            RDFS_LOCAL = 50.e-6
          end where
-         where (RDFG == MAPL2_UNDEF)
-            RDFG = 50.e-6
+         where (RDFG_LOCAL == MAPL2_UNDEF)
+            RDFG_LOCAL = 50.e-6
          end where
 #endif
 
-         REFF(:, :, :, 1) = RDFI * 1.e6
-         REFF(:, :, :, 2) = RDFL * 1.e6
-         REFF(:, :, :, 3) = RDFR * 1.e6
-         REFF(:, :, :, 4) = RDFS * 1.e6
+         REFF(:, :, :, 1) = RDFI_LOCAL * 1.e6
+         REFF(:, :, :, 2) = RDFL_LOCAL * 1.e6
+         REFF(:, :, :, 3) = RDFR_LOCAL * 1.e6
+         REFF(:, :, :, 4) = RDFS_LOCAL * 1.e6
 
          DELP = PLE(:, :, 1:LM) - PLE(:, :, 0:LM - 1)
 
@@ -687,11 +696,11 @@ contains
          TCOSP = reshape(T(:, :, LM:1:-1), (/ IM * JM, LM /))
          EMISSCOSP = reshape(EMISS(:, :, LM:1:-1), (/ IM * JM, LM /))
          FCLDCOSP = reshape(FCLD(:, :, LM:1:-1), (/ IM * JM, LM /))
-         RDFLCOSP = reshape(RDFL(:, :, LM:1:-1), (/ IM * JM, LM /))
-         RDFICOSP = reshape(RDFI(:, :, LM:1:-1), (/ IM * JM, LM /))
-         RDFRCOSP = reshape(RDFR(:, :, LM:1:-1), (/ IM * JM, LM /))
-         RDFSCOSP = reshape(RDFS(:, :, LM:1:-1), (/ IM * JM, LM /))
-         RDFGCOSP = reshape(RDFG(:, :, LM:1:-1), (/ IM * JM, LM /))
+         RDFLCOSP = reshape(RDFL_LOCAL(:, :, LM:1:-1), (/ IM * JM, LM /))
+         RDFICOSP = reshape(RDFI_LOCAL(:, :, LM:1:-1), (/ IM * JM, LM /))
+         RDFRCOSP = reshape(RDFR_LOCAL(:, :, LM:1:-1), (/ IM * JM, LM /))
+         RDFSCOSP = reshape(RDFS_LOCAL(:, :, LM:1:-1), (/ IM * JM, LM /))
+         RDFGCOSP = reshape(RDFG_LOCAL(:, :, LM:1:-1), (/ IM * JM, LM /))
          QLTOTCOSP = reshape(QLTOT(:, :, LM:1:-1), (/ IM * JM, LM /))
          QITOTCOSP = reshape(QITOT(:, :, LM:1:-1), (/ IM * JM, LM /))
          QRTOTCOSP = reshape(QRTOT(:, :, LM:1:-1), (/ IM * JM, LM /))

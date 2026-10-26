@@ -3,8 +3,8 @@
 Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
 Steps 1-11 and 13 are done (step 4 by disabling the masked exports).
 SatSim is built as a RADIATION child (behind `USE_SATSIM`) and compiles;
-it has not been run. Open: step 12 (the `satsim-sa` regression) and
-step 14 (SatSim writes into its radius imports).
+it has not been run. Open: step 12 (the `satsim-sa` regression).
+Step 14 (SatSim writes into its radius imports) DONE 2026-10-26.
 
 This plan follows the IRRAD/Solar ports (see
 `../GEOSirrad_GridComp/mapl3-porting-notes.md` for the MAPL3 API
@@ -562,8 +562,9 @@ spelled out below; everything else is "do what Solar did".
         can't find without error (`_RETURN_UNLESS(found)`), so a custom
         name would silently disable it. All other ports do the same.
 
-14. **SatSim writes into its radius imports** - OPEN (found in the
-    2026-10-22 audit; needs a closer look).
+14. **SatSim writes into its radius imports** - DONE 2026-10-26 (found
+    in the 2026-10-22 audit; the original notes follow, then the
+    resolution).
     - `SIM_DRIVER` (~L543-557) assigns to the import pointers
       themselves: `where (RDFI == MAPL2_UNDEF) RDFI = 36.e-6`, and the
       same for `RDFL`, `RDFR`, `RDFS`, `RDFG` (imports `RI`, `RL`,
@@ -584,6 +585,46 @@ spelled out below; everything else is "do what Solar did".
         cloud-free radii.
     - Likely fix: copy the radii into locals before replacing the
       undef values, as Solar does (`RR3`/`REFF` are locals).
+    - Resolved 2026-10-26:
+      - Confirmed by the `radiation` regression case once SATSIM was
+        enabled in it (ISCCP only): the end-of-step `IRRAD_import.nc`
+        checkpoint had SatSim's defaults in place of `1e15`, at all
+        121,436 `RI` cells (36e-6) and 132,799 `RL` cells (14e-6).
+        So IRRAD's, Solar's and SatSim's imports share one field under
+        RADIATION (no units conversion on the radii, all `m`), and
+        SatSim's writes reach every other reader after it runs.
+        IRRAD/Solar exports were unaffected, since they run first.
+        `RR`/`RS`/`RG` hold no `1e15` in that input, so did not change.
+      - Only these five imports are written. Nothing else in SatSim
+        assigns to an import, and the only imports passed to
+        subroutines, `MCOSZ` and `FCLD` (`getvistau`/`getirtau`), are
+        `intent(IN)` (`../GEOS_RadiationShared/gettau.F90:45,47,187`).
+      - MAPL2 writes into the import pointers too (`origin/develop`
+        `GEOS_SatsimGridComp.F90:3080-3084`, `:3394-3410`). Whether
+        MAPL2 also shares that memory with IRRAD/Solar is still
+        unverified. The MAPL2 capture cannot tell: each component's
+        "after" state was saved right after it ran, before SatSim, so
+        IRRAD's and Solar's `RI`/`RL` hold `1e15` while SatSim's import
+        holds the defaults. Reported for MAPL2 as
+        [#111](https://github.com/GEOS-ESM/GEOSradiation_GridComp/issues/111).
+      - Fix: `SIM_DRIVER` copies the five imports into locals
+        `RDFI_LOCAL` ... `RDFG_LOCAL` (declared ~L314-316) and applies
+        the defaults to those (~L538-558). `REFF` (~L561-564) and the
+        `RDF*COSP` arrays (~L699-703) read the locals. The imports are
+        now only read.
+      - Effect: exports unchanged (bit-for-bit in `satsim-sa`). The
+        SatSim import checkpoint now keeps `1e15` in the radii, so it
+        no longer matches the MAPL2 capture's SatSim import in
+        `RI`/`RL`, and `cmpchk.py` reports ~1e15 differences there
+        (it treats only NaN, `+-huge` and `_FillValue` as undef).
+      - Regression data (`~/regression-data`, 2026-10-26; `/ford1` not
+        updated yet): `satsim-sa/checkpoints/last/SATSIM_import.nc`
+        replaced (the old one differed only in `RI`/`RL`).
+        `radiation/checkpoints/last` gained `SATSIM_import.nc` and
+        `SATSIM_export.nc`, from a hand run that matched all eight
+        existing files. The `radiation` SatSim export and import are
+        identical to `satsim-sa`'s, including `MCOSZ`, which comes from
+        Solar there.
 
 Effort concentrates in steps 2 (mechanical but ~2300 lines), 4 (needs a
 MAPL3 design decision for dynamic export cloning) and 12 (test data and
