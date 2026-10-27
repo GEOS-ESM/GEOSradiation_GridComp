@@ -1,7 +1,7 @@
 # GEOS_SatsimGridComp MAPL3 porting plan
 
 Status (2026-10-22): in progress on `feature/pchakrab/port-satsim-to-mapl3`.
-Steps 1-11 and 13 are done (step 4 by disabling the masked exports).
+Steps 1-11 and 13 are done (step 4 by removing the masked exports).
 SatSim is built as a RADIATION child (behind `USE_SATSIM`) and compiles;
 it has not been run. Open: step 12 (the `satsim-sa` regression).
 Step 14 (SatSim writes into its radius imports) DONE 2026-10-26.
@@ -120,7 +120,8 @@ spelled out below; everything else is "do what Solar did".
      File is now 2112 lines (from 4513).
 
 3. **`SATORB` import bundle** DONE 2026-10-01. Commented out since
-   2026-10-22 with the masked exports, its only consumer (step 4).
+   2026-10-22, and removed 2026-10-26, with the masked exports, its only
+   consumer (step 4).
    - `MAPL_AddImportSpec(..., DATATYPE=MAPL_BundleItem)` ->
      `MAPL_GridCompAddSpec(gc, state_intent=ESMF_STATEINTENT_IMPORT,
      short_name='SATORB', standard_name='Satellite_orbits', dims="xy",
@@ -205,6 +206,14 @@ spelled out below; everything else is "do what Solar did".
      with the masked exports. Still present but unused: the
      `SatSim_State` private state (only the mask table,
      `nmask_vars = 0`). Options (1)/(2) above remain the way to port it.
+   - **REMOVED 2026-10-26.** The commented-out masked-export code (the
+     `SATORB` spec, `SatSim.rc` parsing and spec cloning in `SetServices`,
+     the masking pass in `SIM_DRIVER`, and their commented locals) is
+     deleted, along with the `SatSim_State` private state (type,
+     `PRIVATE_STATE`, `_SET/_GET_NAMED_PRIVATE_STATE` in `SetServices`),
+     which held only the mask table. A note in `SetServices` points to
+     commit `0a0936c` (last version with the code, commented out) and to
+     `release/MAPL-v3` at `7862c74` (the live MAPL2 version).
    - `MAPL_UNDEF` changed value: MAPL2 `1.0e15`
      (`base/Base/Base_Base.F90:78`), MAPL3 `-huge(1.)`
      (`utils/Constants/InternalConstants.F90:18-19`). (MAPL2's `+huge`

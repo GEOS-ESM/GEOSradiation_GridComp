@@ -110,7 +110,7 @@ Assumptions (`radiation.yaml`, `satsim.yaml`, `data-for-satsim.yaml`,
   `Satsim_StateSpecs.rc`), so they match the baseline's import metadata.
 - In the full model `MCOSZ` comes from SOLAR and the rest come down from
   RADIATION; here `DataForSatsim` supplies all of them.
-- No `SATORB` input: the orbit-masked exports are disabled in the MAPL3 port.
+- No `SATORB` input: the orbit-masked exports are removed in the MAPL3 port.
 - Exports are activated through a History collection (`geosgcm_satsim`,
   56 fields) whose start time is after the cap's stop time, so it never
   writes a file. It requests only exports that MAPL2 fills with ISCCP

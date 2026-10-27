@@ -24,18 +24,6 @@ module GEOS_SatsimGridCompMod
 
    public SetServices
 
-   character(*), parameter :: PRIVATE_STATE = "SatSim_state"
-
-   ! Private State
-   type SatSim_State
-      private
-      integer :: nmask_vars = 0 ! number of masked variables
-      character(len=ESMF_MAXSTR), pointer :: export_name(:) => null()
-      character(len=ESMF_MAXSTR), pointer :: mask_name(:) => null()
-      character(len=ESMF_MAXSTR), pointer :: newvar_name(:) => null()
-      logical, pointer :: newvar(:) => null()
-   end type SatSim_State
-
    real, parameter :: MAPL2_UNDEF = 1.0e15
 
 contains
@@ -46,31 +34,7 @@ contains
 
       integer :: status
 
-      ! Local derived type aliases
-
-      ! Used only by the disabled masked-export code below.
-      ! type(MAPL_MetaComp), pointer :: STATE
-      ! type(ESMF_Config) :: CF
-
-      ! Local derived type aliases
-      type(SatSim_State), pointer :: self => null() ! internal, that is
-
-      ! Used only by the disabled masked-export code below.
-      ! integer :: nLines, nCols, m, vindex
-      ! character(len=ESMF_MAXSTR) :: tmpname
-      ! character(len=ESMF_MAXSTR) :: long_name
-      ! character(len=ESMF_MAXSTR) :: units
-      ! integer :: mapl_dims, vlocation
-      ! integer, pointer :: ungridded_dims(:) => null()
-      ! character(len=ESMF_MAXSTR) :: exportName(1)
-      ! type(MAPL_VarSpec), pointer :: ExportSpec(:) => null()
-      ! logical :: found
-
       type(MAPL_UngriddedDim) :: ungrd_7, ungrd_parasol_nrefl
-
-      ! Attach the internal state to the GC as a named private state
-      _SET_NAMED_PRIVATE_STATE(gc, SatSim_State, PRIVATE_STATE)
-      _GET_NAMED_PRIVATE_STATE(gc, SatSim_State, PRIVATE_STATE, self)
 
       ! Set entry points (Finalize uses the MAPL generic default)
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
@@ -86,89 +50,12 @@ contains
 #include "Satsim_Import___.h"
 #include "Satsim_Export___.h"
 
-      ! Masked exports (the Masked_Exports:: table in SatSim.rc) are disabled:
-      ! this is MAPL2 code (ESMF_Config, MAPL_VarSpec, MAPL_AddExportSpec,
-      ! MAPL_DoNotDeferExport) and has never been used here. Port it to MAPL3
-      ! before re-enabling (see mapl3-porting-notes.md, step 4). The SATORB
-      ! import below is already MAPL3; its only consumer is the masking pass.
-      ! ! SATORB is a FieldBundle import; the ACG only supports fields, so it is
-      ! ! added by hand. Must mirror the ORBIT component's export spec in
-      ! ! MAPL_OrbGridCompMod.F90.
-      ! call MAPL_GridCompAddSpec(gc, &
-      !      state_intent=ESMF_STATEINTENT_IMPORT, &
-      !      short_name='SATORB', &
-      !      standard_name='Satellite_orbits', &
-      !      dims="xy", &
-      !      vertical_stagger=MAPL_VERTICAL_STAGGER_NONE, &
-      !      units='days', &
-      !      itemtype=MAPL_STATEITEM_FIELDBUNDLE, _RC)
-      !
-      ! ! parse resource file for masks
-      ! CF = ESMF_ConfigCreate(_RC)
-      ! inquire(file='SatSim.rc', exist=found)
-      ! if (found) then
-      !    call ESMF_ConfigLoadFile(CF, 'SatSim.rc', _RC)
-      !    call ESMF_ConfigGetDim(CF, nLines, nCols, LABEL='Masked_Exports::', rc=status)
-      !    if (status == ESMF_SUCCESS) then
-      !       self%nmask_vars = nLines
-      !       allocate(self%export_name(nLines), self%mask_name(nLines), self%newvar_name(nLines), self%newvar(nLines), &
-      !            _STAT)
-      !       call ESMF_ConfigFindLabel(CF, 'Masked_Exports::', _RC)
-      !       do m = 1, nLines
-      !          call ESMF_ConfigNextLine(CF, _RC)
-      !          call ESMF_ConfigGetAttribute(CF, self%export_name(m), _RC)
-      !          call ESMF_ConfigGetAttribute(CF, self%mask_name(m), _RC)
-      !          call ESMF_ConfigGetAttribute(CF, tmpname, rc=status)
-      !          if (status == ESMF_SUCCESS) then
-      !             self%newvar_name(m) = tmpname
-      !             self%newvar(m) = .true.
-      !          else
-      !             self%newvar_name(m) = self%export_name(m)
-      !             self%newvar(m) = .false.
-      !          end if
-      !       end do
-      !    end if
-      ! else
-      !    self%nmask_vars = 0
-      ! end if
-      ! if (MAPL_AM_I_Root()) then
-      !    write(*, *)'Parsing of satsim.rc'
-      !    do m = 1, self%nmask_vars
-      !       write(*, *)m, self%newvar(m)
-      !       write(*, *)trim(self%export_name(m)), ' ', trim(self%mask_name(m)), ' ', trim(self%newvar_name(m))
-      !    end do
-      ! end if
-
-      ! call MAPL_GetObjectFromGC(gc, STATE, _RC)
-
-      ! do m = 1, self%nmask_vars
-      !    if (self%newvar(m)) then
-      !       call MAPL_Get(STATE, ExportSpec=ExportSpec, _RC)
-      !       vindex = MAPL_VarSpecGetIndex(ExportSpec, self%export_name(m), _RC)
-      !       call MAPL_VarSpecGet(ExportSpec(vindex), long_name=long_name, &
-      !            units=units, DIMS=mapl_dims, vlocation=vlocation, ungridded_dims=ungridded_dims, _RC)
-      !       if (associated(ungridded_dims)) then
-      !          call MAPL_AddExportSpec(gc, &
-      !               SHORT_NAME=self%newvar_name(m), &
-      !               long_name=long_name, &
-      !               units=units, &
-      !               ungridded_dims=ungridded_dims, &
-      !               DIMS=mapl_dims, &
-      !               vlocation=vlocation, _RC)
-      !          nullify(ungridded_dims)
-      !       else
-      !          call MAPL_AddExportSpec(gc, &
-      !               SHORT_NAME=self%newvar_name(m), &
-      !               long_name=long_name, &
-      !               units=units, &
-      !               DIMS=mapl_dims, &
-      !               vlocation=vlocation, _RC)
-      !       end if
-      !       exportName(1) = self%newvar_name(m)
-      !       call MAPL_DoNotDeferExport(gc, exportName, _RC)
-      !    end if
-      !    call MAPL_DoNotDeferExport(gc, self%export_name, _RC)
-      ! end do
+      ! Masked exports (the optional Masked_Exports:: table in SatSim.rc, the
+      ! SATORB bundle import, and the masking pass at the end of SIM_DRIVER)
+      ! were MAPL2-only and never used here, so they have been removed. The
+      ! code, commented out, was last available at commit 0a0936c; the live
+      ! MAPL2 version is on release/MAPL-v3 at 7862c74. See
+      ! mapl3-porting-notes.md, step 4.
 
       _RETURN(_SUCCESS)
 
@@ -444,17 +331,6 @@ contains
          real, dimension(IM * JM, 7, 7) :: MODIS_Optical_Thickness_vs_Cloud_Top_Pressure
 
          integer :: BEGSEG, ENDSEG
-
-         ! Used only by the disabled masked-export pass below.
-         ! type(SatSim_State), pointer :: self => null()
-         ! type(MAPL_MetaComp), pointer :: STATE
-         ! integer :: mapl_dims, vindex
-         ! integer, pointer :: ungridded_dims(:)
-         ! type(MAPL_VarSpec), pointer :: ExportSpec(:)
-         ! real, pointer, dimension(:, :) :: ptr2d, ptr2d_new
-         ! real, pointer, dimension(:, :) :: ptr_mask
-         ! real, pointer, dimension(:, :, :) :: ptr3d, ptr3d_new
-         ! type(ESMF_FieldBundle) :: bundle
 
          integer :: use_satsim, use_satsim_isccp, use_satsim_modis, use_satsim_lidar, use_satsim_radar, use_satsim_misr
          integer :: ncolumns
@@ -1927,109 +1803,6 @@ contains
          if (associated(MISRFQ18000)) then
             MISRFQ18000 = reshape(fq_MISR(:, :, 16), (/IM, JM, 7 /))
          end if
-
-         ! Masked exports (the Masked_Exports:: table in SatSim.rc) are disabled:
-         ! this is MAPL2 code (ESMF_Config, MAPL_VarSpec, MAPL_AddExportSpec,
-         ! MAPL_DoNotDeferExport) and has never been used here. Port it to MAPL3
-         ! before re-enabling (see mapl3-porting-notes.md, step 4).
-         ! _GET_NAMED_PRIVATE_STATE(gc, SatSim_State, PRIVATE_STATE, self)
-
-         ! if (self%nmask_vars > 0) then
-         !    ! get orb bundle
-         !    call ESMF_StateGet(import, 'SATORB', bundle, _RC)
-         !    ! TODO (step 4): the masked-export machinery still goes through the
-         !    ! MAPL2 generic state to introspect the registered export specs.
-         !    call MAPL_GetObjectFromGC(gc, STATE, _RC)
-         !    call MAPL_Get(STATE, ExportSpec=ExportSpec, _RC)
-         !    do i = 1, self%nmask_vars
-         !       vindex = MAPL_VarSpecGetIndex(ExportSpec, self%export_name(i), _RC)
-         !       call MAPL_VarSpecGet(ExportSpec(vindex), DIMS=mapl_dims, ungridded_dims=ungridded_dims, _RC)
-         !       ! mask from bundle
-         !       call MAPL_FieldBundleGetPointer(bundle, trim(self%mask_name(i)), ptr_mask, _RC)
-         !       if (self%newvar(i)) then
-
-         !          ! determine what dimension pointer we need
-         !          if (mapl_dims == MAPL_DimsHorzOnly .and. (.not. associated(ungridded_dims))) then
-         !             call MAPL_GetPointer(export, ptr2d_new, self%newvar_name(i), _RC)
-         !             if (associated(ptr2d_new)) then
-         !                call MAPL_GetPointer(export, ptr2d, self%export_name(i), _RC)
-         !                ptr2d_new = ptr2d
-         !                where (ptr_mask == MAPL_UNDEF)
-         !                   ptr2d_new = MAPL_UNDEF
-         !                end where
-         !                nullify(ptr2d_new)
-         !                nullify(ptr2d)
-         !             end if
-         !          end if
-         !          if (mapl_dims == MAPL_DimsHorzOnly .and. associated(ungridded_dims)) then
-         !             call MAPL_GetPointer(export, ptr3d_new, self%newvar_name(i), _RC)
-         !             if (associated(ptr3d_new)) then
-         !                call MAPL_GetPointer(export, ptr3d, self%export_name(i), _RC)
-         !                ptr3d_new = ptr3d
-         !                do j = 1, ungridded_dims(1)
-         !                   where (ptr_mask == MAPL_UNDEF)
-         !                      ptr3d_new(:, :, j) = MAPL_UNDEF
-         !                   end where
-         !                end do
-         !                nullify(ptr3d_new)
-         !                nullify(ptr3d)
-         !             end if
-         !          end if
-         !          if (mapl_dims == MAPL_DimsHorzVert) then
-         !             call MAPL_GetPointer(export, ptr3d_new, self%newvar_name(i), _RC)
-         !             if (associated(ptr3d_new)) then
-         !                call MAPL_GetPointer(export, ptr3d, self%export_name(i), _RC)
-         !                ptr3d_new = ptr3d
-         !                do j = 1, LM
-         !                   where (ptr_mask == MAPL_UNDEF)
-         !                      ptr3d_new(:, :, j) = MAPL_UNDEF
-         !                   end where
-         !                end do
-         !                nullify(ptr3d_new)
-         !                nullify(ptr3d)
-         !             end if
-         !          end if
-
-         !       else
-         !          ! determine what dimension pointer we need
-         !          if (mapl_dims == MAPL_DimsHorzOnly .and. (.not. associated(ungridded_dims))) then
-         !             call MAPL_GetPointer(export, ptr2d, self%newvar_name(i), _RC)
-         !             if (associated(ptr2d)) then
-         !                where (ptr_mask == MAPL_UNDEF)
-         !                   ptr2d = MAPL_UNDEF
-         !                end where
-         !                nullify(ptr2d)
-         !             end if
-         !          end if
-         !          if (mapl_dims == MAPL_DimsHorzOnly .and. associated(ungridded_dims)) then
-         !             call MAPL_GetPointer(export, ptr3d, self%newvar_name(i), _RC)
-         !             if (associated(ptr3d)) then
-         !                do j = 1, ungridded_dims(1)
-         !                   where (ptr_mask == MAPL_UNDEF)
-         !                      ptr3d(:, :, j) = MAPL_UNDEF
-         !                   end where
-         !                end do
-         !                nullify(ptr3d)
-         !             end if
-         !          end if
-         !          if (mapl_dims == MAPL_DimsHorzVert) then
-         !             call MAPL_GetPointer(export, ptr3d, self%newvar_name(i), _RC)
-         !             if (associated(ptr3d)) then
-         !                do j = 1, LM
-         !                   where (ptr_mask == MAPL_UNDEF)
-         !                      ptr3d(:, :, j) = MAPL_UNDEF
-         !                   end where
-         !                end do
-         !                nullify(ptr3d)
-         !             end if
-         !          end if
-
-         !       end if
-
-         !       nullify(ptr_mask)
-
-         !    end do
-         ! end if
 
          ! deallocate stuff
          deallocate(frac_out, _STAT)
