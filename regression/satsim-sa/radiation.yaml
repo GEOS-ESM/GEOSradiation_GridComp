@@ -1,0 +1,23 @@
+# Stand-in for the RADIATION container: a configurable gridcomp whose only
+# child is SATSIM. As in the full model, the USE_SATSIM* flags are declared
+# here and SATSIM inherits them (MAPL merges a parent's non-mapl resources
+# into each child's config).
+
+# ISCCP simulator only
+USE_SATSIM: 0
+USE_SATSIM_ISCCP: 1
+USE_SATSIM_MODIS: 0
+USE_SATSIM_MISR: 0
+USE_SATSIM_LIDAR: 0
+USE_SATSIM_RADAR: 0
+
+mapl:
+  setServices:
+    sharedObj: libconfigurable_gridcomp
+    userRoutine: setservices_
+
+  children:
+    SATSIM:
+      dso: libGEOSradiation_GridComp.so
+      setservices: satsim_setservices_
+      config_file: satsim.yaml

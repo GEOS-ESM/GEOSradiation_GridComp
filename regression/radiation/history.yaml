@@ -1,0 +1,87 @@
+# Requests the SATSIM exports of the MAPL2 capture's HISTORY.rc collection
+# geosgcm_satsim: exports MAPL2 fills with ISCCP alone. Only requested
+# exports are allocated, so the lidar/MISR/MODIS exports, whose work
+# arrays are never written with ISCCP alone, are not computed.
+# No geom/vertical_grid: native grid.
+#
+# TODO: pchakrab - the capture's geosgcm_satsim_ungrd collection
+# (CLISCCP1-7, ISCCP1-7, ungridded dim of size 7) is left out: MAPL3
+# History declares its imports without ungridded dims, so they cannot
+# connect to these exports (MAPL HistoryCollectionGridComp_private.F90
+# add_var_specs). Add it back once MAPL History supports ungridded dims.
+mapl:
+  setServices:
+    sharedObj: libMAPL.history
+
+active_collections:
+  - geosgcm_satsim
+
+time_specs:
+  # History is used only to request (activate) SATSIM's exports: start is
+  # after the cap's stop time, so the collection never writes a file
+  never: &never
+    frequency: PT20M
+    start: "3000-01-01T00:00:00"
+
+collections:
+  # without ungridded dims (56)
+  geosgcm_satsim:
+    template: "%c.%y4%m2%d2_%h2%n2z.nc4"
+    time_spec: *never
+    var_list:
+      ISCCP_CU_UA: {source: SATSIM.ISCCP_CU_UA}
+      ISCCP_CU_UB: {source: SATSIM.ISCCP_CU_UB}
+      ISCCP_CU_OA: {source: SATSIM.ISCCP_CU_OA}
+      ISCCP_CU_OB: {source: SATSIM.ISCCP_CU_OB}
+      ISCCP_STCU_UA: {source: SATSIM.ISCCP_STCU_UA}
+      ISCCP_STCU_UB: {source: SATSIM.ISCCP_STCU_UB}
+      ISCCP_STCU_OA: {source: SATSIM.ISCCP_STCU_OA}
+      ISCCP_STCU_OB: {source: SATSIM.ISCCP_STCU_OB}
+      ISCCP_ST_UA: {source: SATSIM.ISCCP_ST_UA}
+      ISCCP_ST_UB: {source: SATSIM.ISCCP_ST_UB}
+      ISCCP_ST_OA: {source: SATSIM.ISCCP_ST_OA}
+      ISCCP_ST_OB: {source: SATSIM.ISCCP_ST_OB}
+      ISCCP_ACU_UA: {source: SATSIM.ISCCP_ACU_UA}
+      ISCCP_ACU_UB: {source: SATSIM.ISCCP_ACU_UB}
+      ISCCP_ACU_OA: {source: SATSIM.ISCCP_ACU_OA}
+      ISCCP_ACU_OB: {source: SATSIM.ISCCP_ACU_OB}
+      ISCCP_AST_UA: {source: SATSIM.ISCCP_AST_UA}
+      ISCCP_AST_UB: {source: SATSIM.ISCCP_AST_UB}
+      ISCCP_AST_OA: {source: SATSIM.ISCCP_AST_OA}
+      ISCCP_AST_OB: {source: SATSIM.ISCCP_AST_OB}
+      ISCCP_NST_UA: {source: SATSIM.ISCCP_NST_UA}
+      ISCCP_NST_UB: {source: SATSIM.ISCCP_NST_UB}
+      ISCCP_NST_OA: {source: SATSIM.ISCCP_NST_OA}
+      ISCCP_NST_OB: {source: SATSIM.ISCCP_NST_OB}
+      ISCCP_CI_UA: {source: SATSIM.ISCCP_CI_UA}
+      ISCCP_CI_UB: {source: SATSIM.ISCCP_CI_UB}
+      ISCCP_CI_MA: {source: SATSIM.ISCCP_CI_MA}
+      ISCCP_CI_MB: {source: SATSIM.ISCCP_CI_MB}
+      ISCCP_CI_OA: {source: SATSIM.ISCCP_CI_OA}
+      ISCCP_CI_OB: {source: SATSIM.ISCCP_CI_OB}
+      ISCCP_CIST_UA: {source: SATSIM.ISCCP_CIST_UA}
+      ISCCP_CIST_UB: {source: SATSIM.ISCCP_CIST_UB}
+      ISCCP_CIST_MA: {source: SATSIM.ISCCP_CIST_MA}
+      ISCCP_CIST_MB: {source: SATSIM.ISCCP_CIST_MB}
+      ISCCP_CIST_OA: {source: SATSIM.ISCCP_CIST_OA}
+      ISCCP_CIST_OB: {source: SATSIM.ISCCP_CIST_OB}
+      ISCCP_CB_UA: {source: SATSIM.ISCCP_CB_UA}
+      ISCCP_CB_UB: {source: SATSIM.ISCCP_CB_UB}
+      ISCCP_CB_MA: {source: SATSIM.ISCCP_CB_MA}
+      ISCCP_CB_MB: {source: SATSIM.ISCCP_CB_MB}
+      ISCCP_CB_OA: {source: SATSIM.ISCCP_CB_OA}
+      ISCCP_CB_OB: {source: SATSIM.ISCCP_CB_OB}
+      ISCCP_SUBV1: {source: SATSIM.ISCCP_SUBV1}
+      ISCCP_SUBV2: {source: SATSIM.ISCCP_SUBV2}
+      ISCCP_SUBV3: {source: SATSIM.ISCCP_SUBV3}
+      ISCCP_SUBV4: {source: SATSIM.ISCCP_SUBV4}
+      ISCCP_SUBV5: {source: SATSIM.ISCCP_SUBV5}
+      ISCCP_SUBV6: {source: SATSIM.ISCCP_SUBV6}
+      ISCCP_SUBV7: {source: SATSIM.ISCCP_SUBV7}
+      CLTISCCP: {source: SATSIM.CLTISCCP}
+      TCLISCCP: {source: SATSIM.TCLISCCP}
+      PCTISCCP: {source: SATSIM.PCTISCCP}
+      CTPISCCP: {source: SATSIM.CTPISCCP}
+      ALBISCCP: {source: SATSIM.ALBISCCP}
+      TBISCCP: {source: SATSIM.TBISCCP}
+      SGFCLD: {source: SATSIM.SGFCLD}

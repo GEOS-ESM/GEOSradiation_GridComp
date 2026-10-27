@@ -1,0 +1,127 @@
+---
+mapl:
+
+  setServices:
+    sharedObj: libconfigurable_gridcomp
+    userRoutine: setservices_
+
+  geometry:
+    esmf_geom:
+      class: CubedSphere
+      im_world: 12
+    vertical_grid:
+      grid_type: model
+      fields: {pressure: PLE}
+      num_levels: 181
+
+  children:
+    DataForSatsim:
+      dso: libconfigurable_gridcomp.so
+      setservices: setservices_
+      config_file: data-for-satsim.yaml
+
+    RADIATION:
+      dso: libconfigurable_gridcomp.so
+      setservices: setservices_
+      config_file: radiation.yaml
+
+  # SATSIM (RADIATION's child) imports propagate up to RADIATION, so each
+  # is connected to RADIATION. In the full model MCOSZ comes from SOLAR and
+  # the rest propagate up from RADIATION; here DataForSatsim provides all
+  # of them.
+  connections:
+    - src_name: T
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: T
+      dst_comp: RADIATION
+    - src_name: QV
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QV
+      dst_comp: RADIATION
+    - src_name: FCLD
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: FCLD
+      dst_comp: RADIATION
+    - src_name: RL
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: RL
+      dst_comp: RADIATION
+    - src_name: RI
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: RI
+      dst_comp: RADIATION
+    - src_name: RG
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: RG
+      dst_comp: RADIATION
+    - src_name: RS
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: RS
+      dst_comp: RADIATION
+    - src_name: RR
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: RR
+      dst_comp: RADIATION
+    - src_name: PLE
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: PLE
+      dst_comp: RADIATION
+    - src_name: ZLE
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: ZLE
+      dst_comp: RADIATION
+    - src_name: QL
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QL
+      dst_comp: RADIATION
+    - src_name: QI
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QI
+      dst_comp: RADIATION
+    - src_name: QR
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QR
+      dst_comp: RADIATION
+    - src_name: QS
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QS
+      dst_comp: RADIATION
+    - src_name: QG
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: QG
+      dst_comp: RADIATION
+    - src_name: TS
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: TS
+      dst_comp: RADIATION
+    - src_name: MCOSZ
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: MCOSZ
+      dst_comp: RADIATION
+    - src_name: FRLAND
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: FRLAND
+      dst_comp: RADIATION
+    - src_name: FROCEAN
+      src_comp: DataForSatsim
+      src_intent: internal
+      dst_name: FROCEAN
+      dst_comp: RADIATION

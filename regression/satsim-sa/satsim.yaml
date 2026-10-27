@@ -1,0 +1,22 @@
+# SATSIM resources, shared by the satsim-sa and radiation cases. They must
+# match the MAPL2 SATSIM capture these cases are compared against.
+
+# run every 20 minutes (the cap's clock step)
+SATSIM_DT: 1200
+
+# The USE_SATSIM* flags (ISCCP only) are inherited from the RADIATION
+# parent (radiation.yaml), as in the full model
+
+# SATSIM_NCOLUMNS defaults from the grid (30 at C12);
+# SATSIM_POINTS_PER_ITERATION defaults to -999 (all points at once)
+
+mapl:
+  setServices:
+    sharedObj: libGEOSradiation_GridComp
+    userRoutine: satsim_setservices_
+
+  # exports are requested by history.yaml, as in the MAPL2 capture
+  misc:
+    checkpoint:
+      export: true
+      import: true

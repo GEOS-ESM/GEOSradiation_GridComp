@@ -4,8 +4,10 @@ Status as of this session: `GEOS_RadiationGridComp.F90` (the composite
 container that used to own SOLAR + IRRAD + SATSIM children) has been ported
 to MAPL3, wired to **both IRRAD and SOLAR** (see "SOLAR wiring" section
 below, added once `GEOSsolar_GridComp`'s own MAPL3 port reached its step
-14/15). SATSIM remains commented out / unbuilt (`CMakeLists.txt`'s
-`alldirs` still has it commented as "NOT ported to MAPL3 yet").
+14/15). SATSIM is ported too and is a third child when `USE_SATSIM`
+is non-zero (`SetServices` ~L63-73, run after SOLAR in `Run` ~L244-247;
+`GEOSsatsim_GridComp` is back in `CMakeLists.txt`'s `alldirs`). See
+`GEOSsatsim_GridComp/mapl3-porting-notes.md` step 10.
 
 ## SOLAR wiring (added once GEOSsolar_GridComp's own port reached step 14/15)
 The "Scope decision: LW-only for now" section right below describes the
@@ -47,6 +49,21 @@ flux can't be correctly computed yet:
   (`DRPAR`, `FCLD`, `ALBEDO`, `TAUCLI`, etc.) are not in the new state spec
   at all yet - add them back via `MAPL_GridCompReexport(gc, src_comp="SOLAR",
   src_name="...", _RC)` once Solar exists as a child.
+  - Checked 2026-10-22 against the MAPL2 file (`git show
+    9c9a00f:GEOS_RadiationGridComp.F90`). MAPL2 promoted 21 SOLAR
+    exports (`CHILD_ID = SOL`) and 2 IRRAD exports (`CHILD_ID = IRR`:
+    `LWS`, `LWS0`); none from SATSIM.
+    - SOLAR: all 21 are re-exported (`GEOS_RadiationGridComp.F90`
+      ~L92-118; `DROBIO`/`DFOBIO` only when `USE_OCEANOBIOGEOCHEM` is
+      set, as in MAPL2).
+    - IRRAD: `LWS` and `LWS0` were missing; re-exported 2026-10-22
+      with `MAPL_GridCompReexport(gc, src_comp="IRRAD", ...)` right
+      after the IRRAD connection (same call SuperDyn uses for DYN's
+      exports, `GEOS_SuperdynGridComp.F90` ~L113-136). Both are
+      unconditional IRRAD exports (`Irrad_StateSpecs.rc`, empty
+      `COND`), as in MAPL2. The (still MAPL2)
+      `GEOS_PhysicsGridComp.F90` connects RADIATION's `LWS0` to
+      SURFACE's `LWDNSRF` (~L1656-1661).
 
 ## Key MAPL3 patterns/discoveries (verified against MAPL source, not guessed)
 
@@ -97,9 +114,13 @@ flux can't be correctly computed yet:
   field simply comes back unassociated if not COMPLETE - but a declared
   connection forces allocation, so this is safe for connected fields).
 - **Running a single child in Run**: `MAPL_GridCompRunChild(gc, "IRRAD",
-  _RC)` - `phase_name` is optional here and defaults to `'GENERIC::RUN_USER'`
-  (the phase a child gets when its own `SetServices` registers `Run`
-  without an explicit `phase_name=`, as IRRAD does). The plural
+  _RC)` - `phase_name` is optional here; without it the child's first
+  run phase (index 1) runs, whatever its name. A child whose
+  `SetServices` registers `Run` without `phase_name=` gets the phase name
+  `'GENERIC::RUN_USER'` (`MethodPhasesMap.F90:155`). A configurable Root
+  (the `*-sa` regression cases) asks for `'run'` by name
+  (`ConfigurableGridComp.F90:196-201`), so RADIATION, IRRAD, Solar and
+  SatSim all register `phase_name="run"`. The plural
   `MAPL_GridCompRunChildren(gc, phase_name=..., _RC)` requires an explicit
   `phase_name` in its public wrapper even though the underlying method
   allows it to be optional - prefer the singular call per child unless you
@@ -173,3 +194,21 @@ fine when invoked directly - looked like a `DYLD_LIBRARY_PATH`/try-run
 environment quirk specific to the non-interactive shell, not a defect in
 the ported code. **The port has not been build-verified end-to-end** -
 build it in a normal interactive terminal before trusting it compiles.
+
+## MAPL2 baselines for the standalone tests: `AERO_PROVIDER: none`
+The MAPL2 run that generates the baselines for the standalone regression
+tests must set `AERO_PROVIDER: none` in `AGCM.rc` (default `GOCART2G`;
+options `GOCART2G, MAM, none`). `GEOS_ChemGridComp` then creates an empty
+`AERO` state with `implements_aerosol_optics_method = .false.` (MAPL2
+`GEOS_ChemGridComp.F90:1135-1140`), so IRRAD and Solar skip aerosol
+optics. With `GOCART2G`, GOCART2G sets the attribute to `.true.`
+unconditionally (`GOCART2G_GridCompMod.F90:423`) and radiation includes
+aerosols.
+
+The MAPL3 standalone tests (`regression/irrad-sa`, `solar-sa`,
+`radiation`) mimic this with `FakeGOCART`
+(`regression/FakeGOCART_GridComp`), which provides the `AERO` state with
+`implements_aerosol_optics_method = .false.` (`FakeGOCART_GridComp.F90:58`).
+A baseline captured with `GOCART2G` does not match: Solar's
+`FSWN/FSCN/FSWUN/FSCUN/DR*/DF*/FSWBANDN` differed O(1e-5 - 7e-3) on day
+cells (`GEOSsolar_GridComp/mapl3-porting-notes.md`, step 18).

@@ -8,9 +8,10 @@ module GEOS_RadiationGridCompMod
    !DESCRIPTION: A composite MAPL/ESMF gridded component (GC) containing the
    !   longwave and shortwave radiation GCs. It is intended as a container
    !   for the ESMF/MAPL Solar and Irrad gridded components used in GEOS.
-   !   In SetServices, it creates its children (currently IRRAD and SOLAR;
-   !   SATSIM is not yet ported to MAPL3). Its Run method combines results
-   !   from the children to produce total radiative exports.
+   !   In SetServices, it creates its children: IRRAD, SOLAR and, when
+   !   any USE_SATSIM* flag is set, the SATSIM satellite simulators. Its Run method
+   !   combines results from IRRAD and SOLAR to produce total radiative
+   !   exports.
    !
    !   It follows the standard rules for composite ESMF/MAPL GCs. It passes
    !   the ESMF grid that appears in the gridded component to its children,
@@ -22,7 +23,7 @@ module GEOS_RadiationGridCompMod
 
    use GEOS_IrradGridCompMod, only: irrad_setservices => SetServices
    use GEOS_SolarGridCompMod, only: solarSetServices => SetServices
-   ! use GEOS_SatsimGridCompMod, only: satsimSetServices => SetServices  ! NOT ported to MAPL3 yet
+   use GEOS_SatsimGridCompMod, only: satsimSetServices => SetServices
 
    implicit none
    private
@@ -48,9 +49,10 @@ contains
 
       integer :: status
       integer :: DO_OBIO
+      integer :: USE_SATSIM
 
       call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_INITIALIZE, Initialize, _RC)
-      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, _RC)
+      call MAPL_GridCompSetEntryPoint(gc, ESMF_METHOD_RUN, Run, phase_name="run", _RC)
 
       ! Create the IRRAD child and invoke its SetServices
       call MAPL_GridCompAddChild(gc, "IRRAD", irrad_setservices, "irrad.yaml", _RC)
@@ -58,12 +60,30 @@ contains
       ! Create the SOLAR child and invoke its SetServices
       call MAPL_GridCompAddChild(gc, "SOLAR", solarSetServices, "solar.yaml", _RC)
 
+      ! Create the SATSIM child only when requested, i.e., when any of the
+      ! USE_SATSIM* flags is set
+      call get_use_satsim(gc, USE_SATSIM, _RC)
+      if (USE_SATSIM > 0) then
+         call MAPL_GridCompAddChild(gc, "SATSIM", satsimSetServices, "satsim.yaml", _RC)
+         ! SATSIM needs SOLAR's mean cosine of the solar zenith angle; its
+         ! other imports propagate up to this component's parent.
+         call MAPL_GridCompAddConnection(gc, &
+              src_comp="SOLAR", &
+              src_names="MCOSZ", &
+              dst_comp="SATSIM", _RC)
+      end if
+
       ! Pull IRRAD's longwave-flux exports into our own Import state so Run
       ! can combine them into the temperature-tendency exports below.
       call MAPL_GridCompAddConnection(gc, &
            src_comp="IRRAD", &
            src_names="FLX, FLC, FLXA, FLA, DSFDTS0, SFCEM0, TSREFF", &
            dst_comp="<self>", _RC)
+
+      ! Re-export IRRAD's surface longwave exports directly under our own
+      ! names, as the old MAPL2 file's CHILD_ID=IRR-promoted exports used to do.
+      call MAPL_GridCompReexport(gc, src_comp="IRRAD", src_name="LWS", _RC)
+      call MAPL_GridCompReexport(gc, src_comp="IRRAD", src_name="LWS0", _RC)
 
       ! Pull SOLAR's shortwave-flux exports into our own Import state so Run
       ! can combine them into the temperature-tendency exports below.
@@ -186,6 +206,7 @@ contains
       integer :: status
       type(ESMF_Grid) :: esmfgrid
       integer :: IM, JM, LM
+      integer :: USE_SATSIM
 
       ! Pointers to imports (PLEINST plus IRRAD's and SOLAR's exports,
       ! connected into our own Import state in SetServices)
@@ -215,17 +236,22 @@ contains
 
       real, allocatable, dimension(:, :, :) :: DMI
 
+      call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
+
       call MAPL_GridCompGet(gc, grid=esmfgrid, num_levels=LM, _RC)
       call MAPL_GridGet(esmfgrid, IM=IM, JM=JM, _RC)
 
-      ! Run the child components
-      call MAPL_GridCompTimerStop(gc, "IRRAD", _RC)
+      ! Run the child components. TOTAL is paused meanwhile so that it times
+      ! only this component's own work.
+      call MAPL_GridCompTimerStop(gc, "TOTAL", _RC)
       call MAPL_GridCompRunChild(gc, "IRRAD", _RC)
-      call MAPL_GridCompTimerStart(gc, "IRRAD", _RC)
-
-      call MAPL_GridCompTimerStop(gc, "SOLAR", _RC)
       call MAPL_GridCompRunChild(gc, "SOLAR", _RC)
-      call MAPL_GridCompTimerStart(gc, "SOLAR", _RC)
+      ! SATSIM runs after SOLAR, whose MCOSZ it imports
+      call get_use_satsim(gc, USE_SATSIM, _RC)
+      if (USE_SATSIM > 0) then
+         call MAPL_GridCompRunChild(gc, "SATSIM", _RC)
+      end if
+      call MAPL_GridCompTimerStart(gc, "TOTAL", _RC)
 
       ! Get pointers to imports
       call MAPL_StateGetPointer(import, PLE, 'PLEINST', _RC)
@@ -300,6 +326,29 @@ contains
       _RETURN(_SUCCESS)
       _UNUSED_DUMMY(clock)
    end subroutine Run
+
+   ! USE_SATSIM is the sum of all USE_SATSIM* flags, so SATSIM is enabled if
+   ! any one of them is set (as in MAPL2)
+   subroutine get_use_satsim(gc, use_satsim, rc)
+      type(ESMF_GridComp), intent(inout) :: gc
+      integer, intent(out) :: use_satsim
+      integer, optional, intent(out) :: rc
+
+      integer :: status
+      integer :: use_satsim_isccp, use_satsim_modis, use_satsim_radar
+      integer :: use_satsim_lidar, use_satsim_misr
+
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM", use_satsim, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_ISCCP", use_satsim_isccp, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_MODIS", use_satsim_modis, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_RADAR", use_satsim_radar, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_LIDAR", use_satsim_lidar, default=0, _RC)
+      call MAPL_GridCompGetResource(gc, "USE_SATSIM_MISR", use_satsim_misr, default=0, _RC)
+      use_satsim = use_satsim + use_satsim_isccp + use_satsim_modis + &
+           use_satsim_radar + use_satsim_lidar + use_satsim_misr
+
+      _RETURN(_SUCCESS)
+   end subroutine get_use_satsim
 
 end module GEOS_RadiationGridCompMod
 

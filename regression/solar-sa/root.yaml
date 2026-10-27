@@ -10,12 +10,9 @@ mapl:
       class: CubedSphere
       im_world: 12
     vertical_grid:
-      class: model
-      standard_name: air_pressure
-      units: hPa
+      grid_type: model
+      fields: {pressure: PLE}
       num_levels: 181
-      field_edge: PLE
-      field_center: PE
 
   children:
     DataForSolar:
@@ -99,10 +96,10 @@ mapl:
       src_intent: internal
       dst_name: RG
       dst_comp: SOLAR
-    - src_name: OX
+    - src_name: O3
       src_comp: DataForSolar
       src_intent: internal
-      dst_name: OX
+      dst_name: O3
       dst_comp: SOLAR
     - src_name: CH4
       src_comp: DataForSolar

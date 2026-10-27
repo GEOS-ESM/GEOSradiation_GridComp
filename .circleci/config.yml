@@ -8,7 +8,7 @@ orbs:
   ci: geos-esm/circleci-tools@5
 
 workflows:
-  build-test:
+  build-and-test:
     jobs:
       # Build GEOSgcm
       - ci/build:
@@ -17,13 +17,17 @@ workflows:
             - docker-hub-creds
           matrix:
             parameters:
-              compiler: [gfortran, ifort]
+              compiler: [gfortran, ifx]
           #baselibs_version: *baselibs_version
           repo: GEOSgcm
           checkout_fixture: true
           fixture_branch: release/MAPL-v3
           mepodevelop: false
+          run_regression_tests: true
+          ctest_options: "-L REGRESSION"
           persist_workspace: false # Needs to be true to run fv3/gcm experiment, costs extra
+          # The regression tests need a larger machine to run in a reasonable time
+          resource_class: xlarge
 
       # # Run AMIP GCM (1 hour, no ExtData)
       # - ci/run_gcm:

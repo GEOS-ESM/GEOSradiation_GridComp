@@ -1,4 +1,4 @@
-#include "MAPL_Generic.h"
+#include "MAPL.h"
 #define LIN2_ARG1(VAR, I, J, FINT) (VAR(I,J) + FINT * (VAR(I+1,J)-VAR(I,J)))
 
 ! ==============================================================================
@@ -208,6 +208,8 @@ module GEOS_SolarGridCompMod
    integer, parameter :: NB_RRTMGP = 14
    integer, parameter :: NB_OBIO = 33
    integer :: DO_OBIO
+
+   real, parameter :: MAPL2_UNDEF = 1.0e15
 
    !EOP
 
@@ -1321,9 +1323,6 @@ contains
          integer :: status
 
          type(ESMF_TimeInterval) :: TINT
-         type(ESMF_DELayout) :: LAYOUT
-         type(ESMF_Array) :: ARRAY
-         type(ESMF_FieldBundle) :: BUNDLE
          type(ESMF_Field) :: FIELD
 
          type(ESMF_VM) :: VM
@@ -1335,7 +1334,7 @@ contains
          ! Daytime ONLY copy of variables
 
          ! inputs
-         real, pointer, dimension(:, :) :: PLE, CH4, N2O, T, Q, OX, CL, &
+         real, pointer, dimension(:, :) :: PLE, CH4, N2O, T, Q, O3, CL, &
               QL, QI, QR, QS, QG, RL, RI, RR, RS, RG
          real, pointer, dimension(:) :: TS, ALBNR, ALBNF, ALBVR, ALBVF, &
               Ig1D, Jg1D, ALAT, SLR1D, ZT
@@ -1467,58 +1466,21 @@ contains
          ! (cloud_optics generates cloud_props_bnd from loaded
          ! coefficients and cloud physical properties)
          type(ty_gas_optics_rrtmgp), pointer :: k_dist
-         type(ty_gas_concs) :: gas_concs, gas_concs_block
+         type(ty_gas_concs) :: gas_concs
          type(ty_cloud_optics_rrtmgp) :: cloud_optics
-         type(ty_fluxes_byband) :: fluxes_clrsky, fluxes_allsky
-
-         ! PMN: my earlier RRTMGP implementations used cloud_props for liq and ice combined,
-         ! but now, to allow separate delta-scaling for the two phases, we keep separate liq and
-         ! ice properties, and combine them later. There may be some speedup possible here, but
-         ! to allow for future more independent phases (e.g., separate condensate inhomogeneity
-         ! for the phases), we keep the phase optical properties separate as long as possible.
-
-         ! The band-space (ncol,nlay,nbnd) aerosol and in-cloud optical properties
-         ! Polymorphic with dynamic type (#streams) defined later
-         class(ty_optical_props_arry), allocatable :: aer_props
-         class(ty_optical_props_arry), allocatable :: cloud_props_bnd_liq, cloud_props_bnd_ice
-
-         ! The g-point cloud optical properties used for mcICA
-         class(ty_optical_props_arry), allocatable :: cloud_props_gpt_liq, cloud_props_gpt_ice
-
-         ! The g-point optical properties used in RT calculations
-         ! Polymorphic with dynamic type (#streams) defined later
-         class(ty_optical_props_arry), allocatable :: optical_props
 
          ! RRTMGP locals
          logical :: top_at_1, need_aer_optical_props
          logical :: gen_mro, cond_inhomo
          logical :: rrtmgp_delta_scale, rrtmgp_use_rrtmg_iceflg3_like_forwice
          integer :: nbnd, ngpt, nmom, icergh
-         integer :: ib, b, nBlocks, colS, colE, ncols_block, &
-              icol, isub, ilay, igpt
+         integer :: ib, b, nBlocks
          real(kind=wp), allocatable :: t_lev(:) ! (ncol)
          character(len=:), allocatable :: k_dist_file, cloud_optics_file
          character(len=ESMF_MAXSTR) :: error_msg
          character(len=:), allocatable :: cloud_optics_type, cloud_overlap_type
          type(ESMF_Time) :: ReferenceTime
          type(ESMF_TimeInterval) :: RefreshInterval
-         real :: cld_frac, sigma_qcw, wgt
-         real :: stautp, stauhp, staump, staulp
-         real :: sltautp, sltauhp, sltaump, sltaulp
-         real :: sitautp, sitauhp, sitaump, sitaulp
-#ifdef SOLAR_RADVAL
-         real :: sltaussatp, sltaussahp, sltaussamp, sltaussalp
-         real :: sitaussatp, sitaussahp, sitaussamp, sitaussalp
-         real :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
-         real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
-         real :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
-         real :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
-#endif
-
-         ! radice interpolation for forwice
-         integer :: radidx
-         real(kind=wp) :: radice_lwr, radice_upr, radice
-         real(kind=wp) :: radfac, rfint, fdelta
 
          ! for global gcolumn index seeding of PRNGs
          integer :: iBeg, iEnd, jBeg, jEnd
@@ -1563,10 +1525,8 @@ contains
 
          ! TEMP ... see below
          real(kind=wp) :: press_ref_min, ptop
-         real(kind=wp) :: temp_ref_min, tmin
-         real(kind=wp) :: temp_ref_max, tmax
-         real(kind=wp), parameter :: ptop_increase_OK_fraction = 0.01_wp
-         real(kind=wp) :: tmin_increase_OK_Kelvin
+         real(kind=wp) :: temp_ref_min
+         real(kind=wp) :: temp_ref_max
 
          ! block size for efficient column processing (set from resource file)
          integer :: rrtmgp_blockSize
@@ -1579,11 +1539,11 @@ contains
          real, allocatable, dimension(:, :, :) :: BUF_AEROSOL
 
          ! LoadBalance and general
-         integer :: I, J, K, L, LV, i1, iN
+         integer :: I, J, K, LV, i1, iN
          integer, pointer :: pi1, piN
          integer, target :: i1Out, iNOut, i1InOut, iNInOut
          real, pointer :: QQ3(:, :, :), RR3(:, :, :), ptr3(:, :, :), ptr4(:, :, :, :)
-         real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), O3(:, :), PLhPa(:, :)
+         real, pointer :: ptr2(:, :), RH(:, :), PL(:, :), PLhPa(:, :)
          integer :: NumLit, Num2do, num_aero_vars
          logical :: has_horz_dims, has_vert_dim
          character(len=ESMF_MAXSTR) :: SHORT_NAME
@@ -1600,7 +1560,6 @@ contains
          integer :: ibinary
          real :: def
 
-         real :: xx
          real, allocatable, dimension(:) :: ILWT
 
          IAm = trim(comp_name) // "Soradcore"
@@ -1896,8 +1855,8 @@ contains
                   T => ptr2(1:Num2do, :)
                case ('QV')
                   Q => ptr2(1:Num2do, :)
-               case ('OX')
-                  OX => ptr2(1:Num2do, :)
+               case ('O3')
+                  O3 => ptr2(1:Num2do, :)
                case ('FCLD')
                   CL => ptr2(1:Num2do, :)
                case ('QL')
@@ -2572,25 +2531,11 @@ contains
          RR3(:, :, 3) = RR * 1.e6
          RR3(:, :, 4) = RS * 1.e6
          RR3(:, :, 5) = RG * 1.e6
-         where (RI == MAPL_UNDEF) RR3(:, :, 1) = 36.
-         where (RL == MAPL_UNDEF) RR3(:, :, 2) = 14.
-         where (RR == MAPL_UNDEF) RR3(:, :, 3) = 50.
-         where (RS == MAPL_UNDEF) RR3(:, :, 4) = 50.
-         where (RG == MAPL_UNDEF) RR3(:, :, 5) = 50.
-
-         ! Convert odd oxygen, which is the model prognostic, to ozone
-
-         allocate(O3(NCOL, LM), _STAT)
-
-         O3 = OX
-         where (PL < 100.)
-            O3 = O3 * EXP(-1.5 * (LOG10(PL) - 2.)**2)
-         end where
-
-         ! SORAD expects non-negative ozone fraction by MASS
-
-         O3 = O3 * (MAPL_O3MW / MAPL_AIRMW)
-         O3 = MAX(O3, 0.00)
+         where (RI == MAPL2_UNDEF) RR3(:, :, 1) = 36.
+         where (RL == MAPL2_UNDEF) RR3(:, :, 2) = 14.
+         where (RR == MAPL2_UNDEF) RR3(:, :, 3) = 50.
+         where (RS == MAPL2_UNDEF) RR3(:, :, 4) = 50.
+         where (RG == MAPL2_UNDEF) RR3(:, :, 5) = 50.
 
          ! ------------------
          ! Begin aerosol code
@@ -3634,7 +3579,6 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          deallocate(PL, RH, PLhPa)
          deallocate(QQ3, RR3)
          deallocate(ILWT)
-         deallocate(O3)
          deallocate(taua, ssaa, asya)
 
          ! Complete load balancing by retrieving work done remotely
@@ -3747,7 +3691,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          character(len=ESMF_MAXSTR) :: IAm
          integer :: status
 
-         real, dimension(IM, JM) :: ZTH, SLR, ALB, CLD, SLN, ZTHN
+         real, dimension(IM, JM) :: ZTH, SLR, ALB, SLN, ZTHN
 
          ! scratch pointer to satisfy Fortran's rank-remapping rule for the
          ! Edge-array remaps below (self-remap alone isn't enough - gfortran
@@ -3839,16 +3783,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          integer, allocatable, dimension(:, :) :: CLEARCOUNTS
 #endif
 
-         type(ESMF_FieldBundle) :: BUNDLE
-         type(ESMF_Field) :: FIELD
          type(ESMF_TimeInterval) :: DELT
-         character(len=ESMF_MAXSTR) :: NAME
 
-         integer :: L, I, J, N, NA, ib
+         integer :: L, I, J, N, ib
          real :: TAUCRIT
          real :: FAC
-         integer :: idx
-         integer, external :: GetAeroIndex
 
          type(ty_RRTMGP_state), pointer :: rrtmgp_state => null()
          character(len=:), allocatable :: k_dist_file
@@ -3856,6 +3795,11 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          type(ty_gas_concs) :: gas_concs
 
          logical :: rrtmgp_state_set = .false.
+         ! TODO: pchakrab - never set to .true. (GEOSradiation_GridComp#110):
+         ! this flag is implicitly SAVEd but SOLAR_bands_wavenum is an automatic
+         ! array, so on later calls the cached band limits were uninitialized.
+         ! The band limits are now reloaded on every call. Revisit once develop
+         ! has its fix.
          logical :: have_rrtmgp_wavenums = .false.
 
          ! OBIO bands (start,finish) in [nm]
@@ -3923,7 +3867,7 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
          integer :: SOLAR_band_number_in_wvn_order(NUM_BANDS_SOLAR)
 
          real :: swvn1, swvn2, owvn1, owvn2, sfrac
-         integer :: iseg, ibbeg, ibend, jb, kb, kb_start, kb_used_last
+         integer :: jb, kb, kb_start, kb_used_last
          logical :: sfirst, ofirst
 
          ! band wavenumber bounds (m-1)
@@ -4351,10 +4295,10 @@ TEST_(cloud_optics%set_ice_roughness(icergh))
             REFF(:, :, :, 2) = RRL * 1.e6
             REFF(:, :, :, 3) = RRR * 1.e6
             REFF(:, :, :, 4) = RRS * 1.e6
-            where (RRI == MAPL_UNDEF) REFF(:, :, :, 1) = 36.
-            where (RRL == MAPL_UNDEF) REFF(:, :, :, 2) = 14.
-            where (RRR == MAPL_UNDEF) REFF(:, :, :, 3) = 50.
-            where (RRS == MAPL_UNDEF) REFF(:, :, :, 4) = 50.
+            where (RRI == MAPL2_UNDEF) REFF(:, :, :, 1) = 36.
+            where (RRL == MAPL2_UNDEF) REFF(:, :, :, 2) = 14.
+            where (RRR == MAPL2_UNDEF) REFF(:, :, :, 3) = 50.
+            where (RRS == MAPL2_UNDEF) REFF(:, :, :, 4) = 50.
 
             HYDROMETS(:, :, :, 1) = RQI
             HYDROMETS(:, :, :, 2) = RQL
@@ -4769,7 +4713,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 #undef TEST_
                            ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1],
                            SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
-                           have_rrtmgp_wavenums = .true.
                         end if
 
                         ! get brightness temperature
@@ -4831,7 +4774,6 @@ TEST_('RRTMGP-SW: does not seem to be SW')
 #undef TEST_
                      ! load RRTMGP bands (2,NB_RRTMGP) [cm^-1]
                      SOLAR_bands_wavenum = rrtmgp_state%k_dist%get_band_lims_wavenumber()
-                     have_rrtmgp_wavenums = .true.
                   end if
 
                   ! RRTMGP bands are already ordered in increasing wavenumber
@@ -5524,7 +5466,6 @@ TEST_(draw_samples(cld_mask, cloud_props_bnd_ice, cloud_props_gpt_ice))
       real :: sltaussagtp, sltaussaghp, sltaussagmp, sltaussaglp
       real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
 #endif
-      character(len=ESMF_MAXSTR) :: error_msg
       integer :: status
 
       ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
@@ -6050,7 +5991,6 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
       real :: sitaussagtp, sitaussaghp, sitaussagmp, sitaussaglp
       real :: sltaussaftp, sltaussafhp, sltaussafmp, sltaussaflp
       real :: sitaussaftp, sitaussafhp, sitaussafmp, sitaussaflp
-      character(len=ESMF_MAXSTR) :: error_msg
       integer :: status
 
       ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
@@ -6420,7 +6360,6 @@ TEST_(cloud_props_gpt_ice%delta_scale(forwice))
       integer, optional, intent(out) :: rc
 
       character(len=512) :: error_msg
-      integer :: status
 
       ! MAPL_TimerOn disabled inside OMP parallel region (not thread-safe)
       ! call MAPL_TimerOn(MAPL,"--RRTMGP_RT",_RC)
@@ -6601,8 +6540,19 @@ TEST_(error_msg)
       logical, allocatable :: cld_mask(:, :, :)
       real(kind=wp), allocatable :: toa_flux(:, :)
       real(kind=wp), allocatable :: forwliq(:, :, :), forwice(:, :, :)
+      ! PMN: my earlier RRTMGP implementations used cloud_props for liq and ice combined,
+      ! but now, to allow separate delta-scaling for the two phases, we keep separate liq and
+      ! ice properties, and combine them later. There may be some speedup possible here, but
+      ! to allow for future more independent phases (e.g., separate condensate inhomogeneity
+      ! for the phases), we keep the phase optical properties separate as long as possible.
+
+      ! The g-point optical properties used in RT calculations
+      ! Polymorphic with dynamic type (#streams) defined later
       class(ty_optical_props_arry), allocatable :: optical_props
+      ! The band-space (ncol,nlay,nbnd) aerosol and in-cloud optical properties
+      ! Polymorphic with dynamic type (#streams) defined later
       class(ty_optical_props_arry), allocatable :: cloud_props_bnd_liq, cloud_props_bnd_ice
+      ! The g-point cloud optical properties used for mcICA
       class(ty_optical_props_arry), allocatable :: cloud_props_gpt_liq, cloud_props_gpt_ice
       class(ty_optical_props_arry), allocatable :: aer_props
       type(ty_fluxes_byband) :: fluxes_clrsky, fluxes_allsky
