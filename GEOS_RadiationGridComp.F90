@@ -1032,8 +1032,32 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                 WGEOS_LW = WGEOS_LW * WGEOS_LW * (3.0 - 2.0 * WGEOS_LW)
 
                 ! Blended GEOS-MLT SW/LW heating rates.
-                RADSW_BLEND = WGEOS_SW * RADSW_GEOS + (1.0 - WGEOS_SW) * MLRADSW
-                RADLW_BLEND = WGEOS_LW * RADLW_GEOS + (1.0 - WGEOS_LW) * MLRADLW
+                ! Avoid 0*NaN at blend endpoints and use ML for invalid
+                ! native heating within the transition region.
+                RADSW_BLEND = 0.0
+                RADLW_BLEND = 0.0
+
+                where (WGEOS_SW <= 0.0)
+                   RADSW_BLEND = MLRADSW
+                elsewhere (WGEOS_SW >= 1.0)
+                   RADSW_BLEND = RADSW_GEOS
+                elsewhere (ieee_is_finite(RADSW_GEOS))
+                   RADSW_BLEND = WGEOS_SW * RADSW_GEOS + &
+                                 (1.0 - WGEOS_SW) * MLRADSW
+                elsewhere
+                   RADSW_BLEND = MLRADSW
+                end where
+
+                where (WGEOS_LW <= 0.0)
+                   RADLW_BLEND = MLRADLW
+                elsewhere (WGEOS_LW >= 1.0)
+                   RADLW_BLEND = RADLW_GEOS
+                elsewhere (ieee_is_finite(RADLW_GEOS))
+                   RADLW_BLEND = WGEOS_LW * RADLW_GEOS + &
+                                 (1.0 - WGEOS_LW) * MLRADLW
+                elsewhere
+                   RADLW_BLEND = MLRADLW
+                end where
 
                 ! Wherever ML radiation is available, replace a non-finite or
                 ! unphysically large native GEOS tendency with the corresponding
@@ -1052,6 +1076,11 @@ subroutine RUN ( GC, IMPORT, EXPORT, CLOCK, RC )
                         abs(RADLW_GEOS) > 1.0))
                    RADLW_BLEND = MLRADLW
                 end where
+
+                if (.not. all(ieee_is_finite(RADSW_BLEND)) .or. &
+                    .not. all(ieee_is_finite(RADLW_BLEND))) then
+                   error stop 'GEOS-MLT: nonfinite blended radiation'
+                endif
 
                 ! Export blended diagnostics separately.
                 if( associated(RADSWMLT) ) RADSWMLT = RADSW_BLEND
