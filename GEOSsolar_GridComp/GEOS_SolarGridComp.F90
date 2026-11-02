@@ -184,6 +184,10 @@ module GEOS_SolarGridCompMod
 
   use mo_rte_kind, only: wp
 
+  ! +++ awlee
+  use MAPL_PythonBridge, only: MAPL_pybridge_gcinit, MAPL_pybridge_gcrun, MAPL_pybridge_gcrun_with_internal
+  ! --- awlee
+
   implicit none
   private
 
@@ -690,6 +694,50 @@ contains
 !  gets its value from that space.
 
 !  !INTERNAL STATE:
+
+    ! +++awlee
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_latitude',                                  &
+       UNITS      ='radians',                                                &
+       SHORT_NAME ='MLRAD_LATS',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_longitude',                                 &
+       UNITS      ='radians',                                                &
+       SHORT_NAME ='MLRAD_LONS',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_year',                                      &
+       UNITS      ='1',                                                      &
+       SHORT_NAME ='MLRAD_YY',                                               &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_day_of_year',                               &
+       UNITS      ='1',                                                      &
+       SHORT_NAME ='MLRAD_DOY',                                              &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_hour_utc',                                  &
+       UNITS      ='hour',                                                   &
+       SHORT_NAME ='MLRAD_HH',                                               &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+
+    call MAPL_AddInternalSpec(GC,                                            &
+       LONG_NAME  ='mlrad_helper_bottom_pressure',                           &
+       UNITS      ='hPa',                                                    &
+       SHORT_NAME ='MLRAD_PBOT',                                             &
+       DIMS       = MAPL_DimsHorzOnly,                                       &
+       VLOCATION  = MAPL_VLocationNone,                                __RC__)
+    ! --- awlee
 
     call MAPL_AddInternalSpec(GC,                                            &
        LONG_NAME  ='normalized_net_downward_shortwave_flux_in_air',          &
@@ -2036,6 +2084,29 @@ contains
 
 !  !EXPORT STATE:
 
+    ! +++ awlee
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'ml_shortwave_heating_rate',                             &
+       UNITS      = 'K s-1',                                                 &
+       SHORT_NAME = 'MLRADSW',                                               &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                              __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'ml_longwave_cooling_rate',                              &
+       UNITS      = 'K s-1',                                                 &
+       SHORT_NAME = 'MLRADLW',                                               &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                              __RC__)
+
+    call MAPL_AddExportSpec(GC,                                              &
+       LONG_NAME  = 'ml_joule_heating_rate',                                 &
+       UNITS      = 'K s-1',                                                 &
+       SHORT_NAME = 'MLRADJH',                                               &
+       DIMS       = MAPL_DimsHorzVert,                                       &
+       VLOCATION  = MAPL_VLocationCenter,                              __RC__)
+    ! --- awlee
+
     call MAPL_AddExportSpec(GC,                                              &
        LONG_NAME  ='net_downward_shortwave_flux_in_air',                     &
        UNITS      ='W m-2',                                                  &
@@ -2765,6 +2836,16 @@ contains
     real, pointer, dimension(:,:) :: LONS
     real, pointer, dimension(:,:) :: LATS
 
+    ! +++ awlee
+    real, pointer, dimension(:,:,:) :: T, PLE
+    real, pointer, dimension(:,:)   :: MLRAD_LATS_2D
+    real, pointer, dimension(:,:)   :: MLRAD_LONS_2D
+    real, pointer, dimension(:,:)   :: MLRAD_YY_2D
+    real, pointer, dimension(:,:)   :: MLRAD_DOY_2D
+    real, pointer, dimension(:,:)   :: MLRAD_HH_2D
+    real, pointer, dimension(:,:)   :: MLRAD_PBOT_2D
+    ! --- awlee
+
     real, pointer, dimension(:,:,:) :: ptr3d
     real, pointer, dimension(:,:  ) :: ptr2d
 
@@ -2803,8 +2884,9 @@ contains
 
     integer :: CalledLast
     integer :: LCLDMH, LCLDLM
-    integer :: YY, DOY
+    integer :: YY, DOY, HH, MM 
     integer :: K
+    real    :: MLRAD_P_BOTTOM_HPA 
     real    :: CO2
     real    :: PRS_LOW_MID
     real    :: PRS_MID_HIGH
@@ -2814,6 +2896,8 @@ contains
 
     logical :: REFRESH_FLUXES
     logical :: UPDATE_FIRST
+    logical :: GEOS_MLT 
+    logical :: RUN_MLRAD 
 
     real, external                  :: getco2
     character(len=ESMF_MAXSTR)      :: MSGSTRING
@@ -2836,6 +2920,10 @@ contains
     type(StringVector) :: string_vec
     type(StringVectorIterator) :: string_vec_iter
     character(len=:), pointer :: string_pointer
+
+    logical, save :: pybridge_initialized = .false.
+    logical, save :: FIRST_MLRAD_CALL = .true.
+    logical, save :: FIRST_GEOS_MLT_SOLAR_CALL = .true.
 
 !=============================================================================
 
@@ -2864,12 +2952,19 @@ contains
          EXPORTspec          = ExportSpec,             &
          INTERNAL_ESMF_STATE = INTERNAL,         __RC__)
 
+    ! Run ML radiation only for extended-lid GEOS-MLT configurations.
+    call MAPL_GetResource( MAPL, GEOS_MLT, 'GEOS_MLT:', &
+                           DEFAULT=.FALSE., __RC__ )
+
     ! Get parameters from configuration
     call MAPL_GetResource (MAPL, PRS_LOW_MID,  'PRS_LOW_MID_CLOUDS:' , DEFAULT=70000., __RC__)
     call MAPL_GetResource (MAPL, PRS_MID_HIGH, 'PRS_MID_HIGH_CLOUDS:', DEFAULT=40000., __RC__)
     call MAPL_GetResource (MAPL, CO2,          'CO2:',                                 __RC__)
     call MAPL_GetResource (MAPL, SC,           'SOLAR_CONSTANT:',                      __RC__)
     call MAPL_GetResource (MAPL, SUNFLAG,      'SUN_FLAG:',            DEFAULT=0,      __RC__)
+    if (GEOS_MLT) then
+       call MAPL_GetResource (MAPL, MLRAD_P_BOTTOM_HPA, 'MLRAD_P_BOTTOM_HPA:', DEFAULT=1.0, __RC__)
+    end if
 
     ! Should we load balance solar radiation?
     ! For the single-column model, we always use the DATMO DYCORE.
@@ -2889,7 +2984,7 @@ contains
 
     ! Use time-varying co2
     call ESMF_ClockGet(CLOCK, currTIME=CURRENTTIME,       __RC__)
-    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, __RC__)
+    call ESMF_TimeGet (CURRENTTIME, YY=YY, DayOfYear=DOY, H=HH, M=MM, __RC__) ! +++ awlee add H=HH
     if(CO2<0.0) then
        CO2 = GETCO2(YY,DOY)
        write(MSGSTRING,'(A,I4,A,I3,A,e12.5)') &
@@ -3076,6 +3171,12 @@ contains
     call MAPL_GetResource (MAPL, CalledLast, 'CALLED_LAST:', default=1, __RC__)
     UPDATE_FIRST = CalledLast /= 0
 
+    ! For GEOS-MLT, do not export the solar internal restart state before
+    ! performing a fresh solar calculation on the first call after restart.
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       UPDATE_FIRST = .false.
+    endif
+
     call MAPL_TimerOff(MAPL,"PRELIMS",__RC__)
 
     ! Update the Sun position and weight the export variables
@@ -3089,6 +3190,54 @@ contains
     ! Periodically, refresh the internal state with a full solar calc
     ! ---------------------------------------------------------------
     REFRESH_FLUXES = ESMF_AlarmIsRinging (ALARM, __RC__)
+ 
+    ! Always refresh native solar fluxes on the first GEOS-MLT call after
+    ! initialization or restart.
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       REFRESH_FLUXES = .true.
+    endif
+
+    ! Run ML radiation on the normal radiation refresh cadence,
+    ! or once immediately after initialization/restart. This prevents
+    ! MLRADSW, MLRADLW, and MLRADJH from remaining zero until the first
+    ! hourly radiation alarm after restart.
+    RUN_MLRAD = GEOS_MLT .and. (REFRESH_FLUXES .or. FIRST_MLRAD_CALL)
+    
+    if (RUN_MLRAD) then
+    
+       call MAPL_TimerOn(MAPL,"MLRAD",__RC__)
+    
+       call MAPL_GetPointer(IMPORT, T,   'T',   __RC__)
+       call MAPL_GetPointer(IMPORT, PLE, 'PLE', __RC__)
+    
+       call MAPL_GetPointer(INTERNAL, MLRAD_LATS_2D, 'MLRAD_LATS', __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_LONS_2D, 'MLRAD_LONS', __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_YY_2D,   'MLRAD_YY',   __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_DOY_2D,  'MLRAD_DOY',  __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_HH_2D,   'MLRAD_HH',   __RC__)
+       call MAPL_GetPointer(INTERNAL, MLRAD_PBOT_2D, 'MLRAD_PBOT', __RC__)
+    
+       MLRAD_LATS_2D(:,:) = LATS(:,:)
+       MLRAD_LONS_2D(:,:) = LONS(:,:)
+       MLRAD_YY_2D(:,:)   = real(YY)
+       MLRAD_DOY_2D(:,:)  = real(DOY)
+       !MLRAD_HH_2D(:,:)   = real(HH) + real(MM)/60
+       MLRAD_HH_2D(:,:)   = real(int(HH))
+       MLRAD_PBOT_2D(:,:) = MLRAD_P_BOTTOM_HPA
+    
+       if (.not. pybridge_initialized) then
+          call MAPL_pybridge_gcinit("geos_mlrad_driver", MAPL, IMPORT, EXPORT)
+          pybridge_initialized = .true.
+       end if
+    
+       call MAPL_pybridge_gcrun_with_internal("geos_mlrad_driver", MAPL, IMPORT, EXPORT, INTERNAL)
+    
+       FIRST_MLRAD_CALL = .false.
+    
+       call MAPL_TimerOff(MAPL,"MLRAD",__RC__)
+    
+    end if
+    ! --- awlee
 
     REFRESH: if (REFRESH_FLUXES) then
        call MAPL_TimerOn (MAPL,"REFRESH",__RC__)
@@ -3305,6 +3454,10 @@ contains
        call MAPL_TimerOff (MAPL,"UPDATE",__RC__)
     end if
 
+    if (GEOS_MLT .and. FIRST_GEOS_MLT_SOLAR_CALL) then
+       FIRST_GEOS_MLT_SOLAR_CALL = .false.
+    endif
+
     call MAPL_TimerOff (MAPL,"TOTAL",__RC__)
     RETURN_(ESMF_SUCCESS)
 
@@ -3313,6 +3466,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,MaxPasses,LoadBalance,RC)
+      use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
@@ -3463,6 +3617,8 @@ contains
       real    :: ADJES, DIST
       integer :: DYOFYR
       integer :: NCOL
+      integer :: LM_RAD, K_RAD
+      real :: RRTMG_SW_TOP_PRESSURE_HPA
       integer :: RPART, IAER, NORMFLX
 
       integer                   :: ISOLVAR
@@ -3683,8 +3839,8 @@ contains
 
       if (adjustl(DYCORE)=="DATMO") ZTH = max(.0001,ZTH)
 
-      daytime = ZTH > 0.
-      NumLit  = count(daytime)
+      daytime = ZTH > 0.0
+      NumLit = count(daytime)
 
 !  Create a balancing strategy. This is a collective call on the communicator
 !  of the current VM. The original, unbalanced local work consists of (OrgLen)
@@ -6175,6 +6331,41 @@ contains
       ! flip in vertical ...
 
       PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
+
+
+      ! ==================
+      ! GEOSMLT_RRTMG_SW_CUTOFF_DIAG
+      ! ==================
+
+      ! Preserve the original full-column behavior outside GEOS-MLT.
+      LM_RAD = LM
+
+      if (GEOS_MLT) then
+
+         ! Zero explicitly disables the pressure cutoff.
+         call MAPL_GetResource(MAPL, RRTMG_SW_TOP_PRESSURE_HPA, &
+              'RRTMG_SW_TOP_PRESSURE_HPA:', &
+              DEFAULT=0.01, __RC__)
+
+         if (RRTMG_SW_TOP_PRESSURE_HPA > 0.0 .and. NCOL > 0) then
+
+            LM_RAD = 0
+
+            ! Select the highest common native pressure interface
+            ! that remains at or above the requested cutoff.
+            do K_RAD = 1, LM
+               if (minval(PLE_R(:,K_RAD+1)) < &
+                   RRTMG_SW_TOP_PRESSURE_HPA) exit
+               LM_RAD = K_RAD
+            enddo
+
+            if (LM_RAD < 1) then
+               error stop 'RRTMG SW: no valid layers below cutoff'
+            endif
+
+         endif
+      endif
+
       TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
 
       PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
@@ -6328,6 +6519,106 @@ contains
       ! call RRTMG SW
       ! -------------
 
+      ! ==================
+      ! GEOSMLT_RRTMG_SW_REDUCED_COLUMN
+      ! ==================
+
+      if (GEOS_MLT .and. LM_RAD < LM) then
+
+         ! Cloud super-layer indices remain referenced from the surface.
+         if (LM_RAD < max(LM-LCLDLM+1, LM-LCLDMH+1)) then
+            error stop 'RRTMG SW: cutoff excludes cloud-layer boundary'
+         endif
+
+         ! Calculate RRTMG SW only below the selected pressure interface.
+         call RRTMG_SW (MAPL, &
+            RPART, NCOL, LM_RAD, &
+            SC, ADJES, ZT, ISOLVAR, &
+            PL_R(:,1:LM_RAD), PLE_R(:,1:LM_RAD+1), T_R(:,1:LM_RAD), &
+            Q_R(:,1:LM_RAD), O3_R(:,1:LM_RAD), CO2_R(:,1:LM_RAD), &
+            CH4_R(:,1:LM_RAD), O2_R(:,1:LM_RAD), &
+            ICEFLGSW, LIQFLGSW, &
+            FCLD_R(:,1:LM_RAD), CICEWP(:,1:LM_RAD), &
+            CLIQWP(:,1:LM_RAD), REICE(:,1:LM_RAD), RELIQ(:,1:LM_RAD), &
+            DYOFYR, ZL_R(:,1:LM_RAD), ALAT, &
+            IAER, TAUAER(:,1:LM_RAD,:), SSAAER(:,1:LM_RAD,:), &
+            ASMAER(:,1:LM_RAD,:), &
+            ALBVR, ALBVF, ALBNR, ALBNF, &
+            LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
+            CLEARCOUNTS, &
+            SWUFLX(:,1:LM_RAD+1), SWDFLX(:,1:LM_RAD+1), &
+            SWUFLXC(:,1:LM_RAD+1), SWDFLXC(:,1:LM_RAD+1), &
+            NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
+
+            COTDTP, COTDHP, COTDMP, COTDLP, &
+            COTNTP, COTNHP, COTNMP, COTNLP, &
+
+#ifdef SOLAR_RADVAL
+            CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+            CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+
+            COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+            COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+            CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+            CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+            COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+            COTINTP, COTINHP, COTINMP, COTINLP, &
+            CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+            CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+
+            SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+            SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+            SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+            SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+            SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+            SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+            SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+            SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+
+            ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+            ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+            ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+            ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+            ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+            ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+            ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+            ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+
+            FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+            FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+            FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+            FORINTP, FORINHP, FORINMP, FORINLP, &
+#endif
+
+            SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
+            BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+            __RC__)
+
+
+         ! Assume no RRTMG-band absorption in the excluded upper layers.
+         ! Extend normalized boundary fluxes without modifying their values.
+         do K_RAD = LM_RAD + 2, LM + 1
+            SWUFLX (:,K_RAD) = SWUFLX (:,LM_RAD+1)
+            SWDFLX (:,K_RAD) = SWDFLX (:,LM_RAD+1)
+            SWUFLXC(:,K_RAD) = SWUFLXC(:,LM_RAD+1)
+            SWDFLXC(:,K_RAD) = SWDFLXC(:,LM_RAD+1)
+         enddo
+
+         ! Fail visibly rather than silently replacing invalid fluxes.
+         if (.not. all(ieee_is_finite(SWUFLX))  .or. &
+             .not. all(ieee_is_finite(SWDFLX))  .or. &
+             .not. all(ieee_is_finite(SWUFLXC)) .or. &
+             .not. all(ieee_is_finite(SWDFLXC))) then
+
+            print *, '[RRTMG_SW_CUTOFF] Nonfinite SW flux after reconstruction'
+            print *, '[RRTMG_SW_CUTOFF] LM, LM_RAD=', LM, LM_RAD
+
+            error stop 'RRTMG SW: nonfinite reduced-column flux'
+         endif
+
+      else
+
+         ! Standard GEOS or disabled cutoff: original RRTMG SW call.
       call RRTMG_SW (MAPL, &
          RPART, NCOL, LM, &
          SC, ADJES, ZT, ISOLVAR, &
@@ -6385,6 +6676,8 @@ contains
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
+
+      endif
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
@@ -7855,3 +8148,4 @@ contains
   end subroutine choose_irrad_scheme
 
 end module GEOS_SolarGridCompMod
+
