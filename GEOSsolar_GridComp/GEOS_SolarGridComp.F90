@@ -3619,7 +3619,6 @@ contains
       integer :: NCOL
       integer :: LM_RAD, K_RAD
       real :: RRTMG_SW_TOP_PRESSURE_HPA
-      logical, save :: RRTMG_SW_CUTOFF_PRINTED = .false.
       integer :: RPART, IAER, NORMFLX
 
       integer                   :: ISOLVAR
@@ -6362,18 +6361,6 @@ contains
 
             if (LM_RAD < 1) then
                error stop 'RRTMG SW: no valid layers below cutoff'
-            endif
-
-            if (.not. RRTMG_SW_CUTOFF_PRINTED) then
-               print *, '[RRTMG_SW_CUTOFF] LM, LM_RAD=', LM, LM_RAD
-               print *, '[RRTMG_SW_CUTOFF] Excluded layers=', LM-LM_RAD
-               print *, '[RRTMG_SW_CUTOFF] Requested pressure hPa=', &
-                        RRTMG_SW_TOP_PRESSURE_HPA
-               print *, '[RRTMG_SW_CUTOFF] Actual top pressure min/max=', &
-                        minval(PLE_R(:,LM_RAD+1)), &
-                        maxval(PLE_R(:,LM_RAD+1))
-
-               RRTMG_SW_CUTOFF_PRINTED = .true.
             endif
 
          endif

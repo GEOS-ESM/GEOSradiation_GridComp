@@ -1219,6 +1219,16 @@ class MLRadDriver(UserCode):
                         f"Check MAPL_AddExportSpec and runtime allocation."
                     )
 
+                # Reject invalid ML fields before exporting to Fortran.
+                bad_mask = ~np.isfinite(pred_geos)
+                if np.any(bad_mask):
+                    bad_indices = np.argwhere(bad_mask)
+                    raise RuntimeError(
+                        f"[MLRAD] {export_name}: nonfinite prediction "
+                        f"count={bad_indices.shape[0]}, "
+                        f"first_indices={bad_indices[:10].tolist()}"
+                    )
+
                 out[:, :, :] = pred_geos[:, :, :]
 
                 if PRINT_OUTPUT_MINMAX and _MLRAD_RANK == 0:

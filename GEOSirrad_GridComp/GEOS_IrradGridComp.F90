@@ -1437,6 +1437,7 @@ contains
 
    ! RRTMGP module uses
    use mo_rte_kind,                only: wp
+   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
    use mo_gas_concentrations,      only: ty_gas_concs
    use mo_cloud_optics_rrtmgp,     only: ty_cloud_optics_rrtmgp
    use mo_cloud_sampling,          only: draw_samples, &
@@ -1589,6 +1590,12 @@ contains
    integer, allocatable, dimension(:,:)   :: CLEARCOUNTS
    real,    allocatable, dimension(:)     :: ALAT
    real,    allocatable, dimension(:,:)   :: OLRBRG, DOLRBRG_DTS
+
+   ! GEOS_MLT_RRTMG_LW_REDUCED_COLUMN
+   logical :: GEOS_MLT_LW
+   integer :: LM_RAD, K_RAD
+   real :: RRTMG_LW_TOP_PRESSURE_HPA
+
 
    ! pmn: should we update these?
    real, parameter :: O2   = 0.2090029E+00 ! preexisting
@@ -3378,6 +3385,36 @@ contains
 
 ! pmn: consider putting futher up calling tree?
 ! pmn: only needs to be done once per run, but does consume memory
+      ! GEOS_MLT_RRTMG_LW_REDUCED_COLUMN
+      ! Preserve original RRTMG behavior unless GEOS-MLT is enabled.
+      LM_RAD = LM
+      call MAPL_GetResource(MAPL, GEOS_MLT_LW, 'GEOS_MLT:', &
+           DEFAULT=.false., __RC__)
+      if (GEOS_MLT_LW) then
+         call MAPL_GetResource(MAPL, RRTMG_LW_TOP_PRESSURE_HPA, &
+              'RRTMG_LW_TOP_PRESSURE_HPA:', &
+              DEFAULT=0.01, __RC__)
+         if (RRTMG_LW_TOP_PRESSURE_HPA > 0.0) then
+            LM_RAD = 0
+            ! RRTMG LW uses bottom-to-top order and 0:LM interfaces.
+            ! Keep only native layers whose upper interfaces are safely
+            ! at or above the requested pressure, in every column.
+            do K_RAD = 1, LM
+               if (minval(PLE_R(:,K_RAD)) < &
+                    RRTMG_LW_TOP_PRESSURE_HPA) exit
+               LM_RAD = K_RAD
+            enddo
+            if (LM_RAD < 1) then
+               error stop 'RRTMG LW: no layers below pressure cutoff'
+            endif
+            ! The cloud-overlap super-layer boundaries are indexed from
+            ! the surface. They must remain inside the reduced column.
+            if (LM_RAD < max(LCLDLM,LCLDMH)) then
+               error stop 'RRTMG LW: cutoff excludes cloud-layer boundary'
+            endif
+         endif
+      endif
+
       call RRTMG_LW_INI
 
       call MAPL_TimerOff(MAPL,"---RRTMG_INIT",RC=STATUS)
@@ -3436,6 +3473,19 @@ contains
          end select
 
          ! Call the long wave code with a given RAT set to zero
+         if (GEOS_MLT_LW .and. LM_RAD < LM) then
+         call RRTMG_LW (IM*JM, LM_RAD, PARTITION_SIZE, TS_DERIVS, &
+              PL_R(:,1:LM_RAD), PLE_R(:,0:LM_RAD), T_R(:,1:LM_RAD), TLEV_R(:,0:LM_RAD), TSFC, EMISS, &
+              Q_R(:,1:LM_RAD), O3_R(:,1:LM_RAD), CO2_R(:,1:LM_RAD), CH4_R(:,1:LM_RAD), N2O_R(:,1:LM_RAD), &
+              O2_R(:,1:LM_RAD), &
+              CFC11_R(:,1:LM_RAD), CFC12_R(:,1:LM_RAD), CFC22_R(:,1:LM_RAD), CCL4_R(:,1:LM_RAD), &
+              FCLD_R(:,1:LM_RAD), CICEWP(:,1:LM_RAD), CLIQWP(:,1:LM_RAD), REICE(:,1:LM_RAD), RELIQ(:,1:LM_RAD), &
+              ICEFLGLW, LIQFLGLW, &
+              TAUAER(:,1:LM_RAD,:), ZM_R(:,1:LM_RAD), ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
+              UFLXRAT(:,1:LM_RAD+1,n), DFLXRAT(:,1:LM_RAD+1,n), UFLXC(:,1:LM_RAD+1), DFLXC(:,1:LM_RAD+1), &
+              DUFLX_DT_RAT(:,1:LM_RAD+1,n), DUFLXC_DTS(:,1:LM_RAD+1), &
+              BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+         else
          call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
               PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
               Q_R, O3_R, CO2_R, CH4_R, N2O_R, O2_R, &
@@ -3444,6 +3494,17 @@ contains
               TAUAER, ZM_R, ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
               UFLXRAT(:,:,n), DFLXRAT(:,:,n), UFLXC, DFLXC, DUFLX_DT_RAT(:,:,n), DUFLXC_DTS, &
               BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+         endif
+
+         ! Extend truncated RAT fluxes through excluded upper layers.
+         ! This imposes zero native LW divergence above the cutoff.
+         if (GEOS_MLT_LW .and. LM_RAD < LM) then
+            do K_RAD = LM_RAD + 2, LM + 1
+               UFLXRAT(:,K_RAD,n) = UFLXRAT(:,LM_RAD+1,n)
+               DFLXRAT(:,K_RAD,n) = DFLXRAT(:,LM_RAD+1,n)
+               DUFLX_DT_RAT(:,K_RAD,n) = DUFLX_DT_RAT(:,LM_RAD+1,n)
+            enddo
+         endif
 
          ! Make sure to set the RAT gas column back to correct vals
          select case(nameRATS(n))
@@ -3467,6 +3528,20 @@ contains
 
       enddo
       ! <<>> end RATS analysis
+      if (GEOS_MLT_LW .and. LM_RAD < LM) then
+
+      call RRTMG_LW (IM*JM, LM_RAD, PARTITION_SIZE, TS_DERIVS, &
+              PL_R(:,1:LM_RAD), PLE_R(:,0:LM_RAD), T_R(:,1:LM_RAD), TLEV_R(:,0:LM_RAD), TSFC, EMISS, &
+              Q_R(:,1:LM_RAD), O3_R(:,1:LM_RAD), CO2_R(:,1:LM_RAD), CH4_R(:,1:LM_RAD), N2O_R(:,1:LM_RAD), &
+              O2_R(:,1:LM_RAD), &
+              CFC11_R(:,1:LM_RAD), CFC12_R(:,1:LM_RAD), CFC22_R(:,1:LM_RAD), CCL4_R(:,1:LM_RAD), &
+              FCLD_R(:,1:LM_RAD), CICEWP(:,1:LM_RAD), CLIQWP(:,1:LM_RAD), REICE(:,1:LM_RAD), RELIQ(:,1:LM_RAD), &
+              ICEFLGLW, LIQFLGLW, &
+              TAUAER(:,1:LM_RAD,:), ZM_R(:,1:LM_RAD), ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
+              UFLX(:,1:LM_RAD+1), DFLX(:,1:LM_RAD+1), UFLXC(:,1:LM_RAD+1), DFLXC(:,1:LM_RAD+1), &
+              DUFLX_DTS(:,1:LM_RAD+1), DUFLXC_DTS(:,1:LM_RAD+1), &
+              BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+      else
 
       call RRTMG_LW (IM*JM, LM, PARTITION_SIZE, TS_DERIVS, &
               PL_R, PLE_R, T_R, TLEV_R, TSFC, EMISS, &
@@ -3476,6 +3551,26 @@ contains
               TAUAER, ZM_R, ALAT, DOY, LCLDLM, LCLDMH, CLEARCOUNTS, &
               UFLX, DFLX, UFLXC, DFLXC, DUFLX_DTS, DUFLXC_DTS, &
               BAND_OUTPUT, OLRBRG, DOLRBRG_DTS)
+      endif
+
+      ! Propagate reduced-column fluxes to the model top without extra
+      ! absorption/emission; pure ML LW heating supplies that region.
+      if (GEOS_MLT_LW .and. LM_RAD < LM) then
+         do K_RAD = LM_RAD + 2, LM + 1
+            UFLX(:,K_RAD) = UFLX(:,LM_RAD+1)
+            DFLX(:,K_RAD) = DFLX(:,LM_RAD+1)
+            UFLXC(:,K_RAD) = UFLXC(:,LM_RAD+1)
+            DFLXC(:,K_RAD) = DFLXC(:,LM_RAD+1)
+            DUFLX_DTS(:,K_RAD) = DUFLX_DTS(:,LM_RAD+1)
+            DUFLXC_DTS(:,K_RAD) = DUFLXC_DTS(:,LM_RAD+1)
+         enddo
+         if (.not. all(ieee_is_finite(UFLX)) .or. &
+             .not. all(ieee_is_finite(DFLX)) .or. &
+             .not. all(ieee_is_finite(UFLXC)) .or. &
+             .not. all(ieee_is_finite(DFLXC))) then
+            error stop 'RRTMG LW: nonfinite reduced-column flux'
+         endif
+      endif
 
       call MAPL_TimerOff(MAPL,"---RRTMG_RUN",RC=STATUS)
       VERIFY_(STATUS)
