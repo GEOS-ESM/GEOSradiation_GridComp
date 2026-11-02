@@ -167,7 +167,6 @@ module GEOS_SolarGridCompMod
 
   use ESMF
   use MAPL
-  use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
   use gFTL_StringVector
 
   ! for RRTMGP
@@ -3467,6 +3466,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine SORADCORE(IM,JM,LM,include_aerosols,CURRTIME,MaxPasses,LoadBalance,RC)
+      use, intrinsic :: ieee_arithmetic, only : ieee_is_finite
 
       ! RRTMGP module uses
       use mo_rte_kind,                only: wp
@@ -3617,6 +3617,9 @@ contains
       real    :: ADJES, DIST
       integer :: DYOFYR
       integer :: NCOL
+      integer :: LM_RAD, K_RAD
+      real :: RRTMG_SW_TOP_PRESSURE_HPA
+      logical, save :: RRTMG_SW_CUTOFF_PRINTED = .false.
       integer :: RPART, IAER, NORMFLX
 
       integer                   :: ISOLVAR
@@ -3837,13 +3840,7 @@ contains
 
       if (adjustl(DYCORE)=="DATMO") ZTH = max(.0001,ZTH)
 
-      ! Avoid treating floating-point roundoff near the terminator as daylight.
-      ! Preserve the native GEOS daytime mask outside the GEOS-MLT configuration.
-      if (GEOS_MLT) then
-         daytime = ZTH > 1.0e-4
-      else
-         daytime = ZTH > 0.0
-      endif
+      daytime = ZTH > 0.0
       NumLit = count(daytime)
 
 !  Create a balancing strategy. This is a collective call on the communicator
@@ -6335,6 +6332,53 @@ contains
       ! flip in vertical ...
 
       PLE_R (:,1:LM+1) = PLE (:,LM+1:1:-1) / 100.  ! hPa
+
+
+      ! ==================
+      ! GEOSMLT_RRTMG_SW_CUTOFF_DIAG
+      ! ==================
+
+      ! Preserve the original full-column behavior outside GEOS-MLT.
+      LM_RAD = LM
+
+      if (GEOS_MLT) then
+
+         ! Zero explicitly disables the pressure cutoff.
+         call MAPL_GetResource(MAPL, RRTMG_SW_TOP_PRESSURE_HPA, &
+              'RRTMG_SW_TOP_PRESSURE_HPA:', &
+              DEFAULT=0.01, __RC__)
+
+         if (RRTMG_SW_TOP_PRESSURE_HPA > 0.0 .and. NCOL > 0) then
+
+            LM_RAD = 0
+
+            ! Select the highest common native pressure interface
+            ! that remains at or above the requested cutoff.
+            do K_RAD = 1, LM
+               if (minval(PLE_R(:,K_RAD+1)) < &
+                   RRTMG_SW_TOP_PRESSURE_HPA) exit
+               LM_RAD = K_RAD
+            enddo
+
+            if (LM_RAD < 1) then
+               error stop 'RRTMG SW: no valid layers below cutoff'
+            endif
+
+            if (.not. RRTMG_SW_CUTOFF_PRINTED) then
+               print *, '[RRTMG_SW_CUTOFF] LM, LM_RAD=', LM, LM_RAD
+               print *, '[RRTMG_SW_CUTOFF] Excluded layers=', LM-LM_RAD
+               print *, '[RRTMG_SW_CUTOFF] Requested pressure hPa=', &
+                        RRTMG_SW_TOP_PRESSURE_HPA
+               print *, '[RRTMG_SW_CUTOFF] Actual top pressure min/max=', &
+                        minval(PLE_R(:,LM_RAD+1)), &
+                        maxval(PLE_R(:,LM_RAD+1))
+
+               RRTMG_SW_CUTOFF_PRINTED = .true.
+            endif
+
+         endif
+      endif
+
       TLEV_R(:,1:LM+1) = TLEV(:,LM+1:1:-1)
 
       PL_R  (:,1:LM  ) = PL  (:,LM:1:-1)   / 100.  ! hPa
@@ -6488,6 +6532,106 @@ contains
       ! call RRTMG SW
       ! -------------
 
+      ! ==================
+      ! GEOSMLT_RRTMG_SW_REDUCED_COLUMN
+      ! ==================
+
+      if (GEOS_MLT .and. LM_RAD < LM) then
+
+         ! Cloud super-layer indices remain referenced from the surface.
+         if (LM_RAD < max(LM-LCLDLM+1, LM-LCLDMH+1)) then
+            error stop 'RRTMG SW: cutoff excludes cloud-layer boundary'
+         endif
+
+         ! Calculate RRTMG SW only below the selected pressure interface.
+         call RRTMG_SW (MAPL, &
+            RPART, NCOL, LM_RAD, &
+            SC, ADJES, ZT, ISOLVAR, &
+            PL_R(:,1:LM_RAD), PLE_R(:,1:LM_RAD+1), T_R(:,1:LM_RAD), &
+            Q_R(:,1:LM_RAD), O3_R(:,1:LM_RAD), CO2_R(:,1:LM_RAD), &
+            CH4_R(:,1:LM_RAD), O2_R(:,1:LM_RAD), &
+            ICEFLGSW, LIQFLGSW, &
+            FCLD_R(:,1:LM_RAD), CICEWP(:,1:LM_RAD), &
+            CLIQWP(:,1:LM_RAD), REICE(:,1:LM_RAD), RELIQ(:,1:LM_RAD), &
+            DYOFYR, ZL_R(:,1:LM_RAD), ALAT, &
+            IAER, TAUAER(:,1:LM_RAD,:), SSAAER(:,1:LM_RAD,:), &
+            ASMAER(:,1:LM_RAD,:), &
+            ALBVR, ALBVF, ALBNR, ALBNF, &
+            LM-LCLDLM+1, LM-LCLDMH+1, NORMFLX, &
+            CLEARCOUNTS, &
+            SWUFLX(:,1:LM_RAD+1), SWDFLX(:,1:LM_RAD+1), &
+            SWUFLXC(:,1:LM_RAD+1), SWDFLXC(:,1:LM_RAD+1), &
+            NIRR, NIRF, PARR, PARF, UVRR, UVRF, FSWBAND, &
+
+            COTDTP, COTDHP, COTDMP, COTDLP, &
+            COTNTP, COTNHP, COTNMP, COTNLP, &
+
+#ifdef SOLAR_RADVAL
+            CDSDTP, CDSDHP, CDSDMP, CDSDLP, &
+            CDSNTP, CDSNHP, CDSNMP, CDSNLP, &
+
+            COTLDTP, COTLDHP, COTLDMP, COTLDLP, &
+            COTLNTP, COTLNHP, COTLNMP, COTLNLP, &
+            CDSLDTP, CDSLDHP, CDSLDMP, CDSLDLP, &
+            CDSLNTP, CDSLNHP, CDSLNMP, CDSLNLP, &
+            COTIDTP, COTIDHP, COTIDMP, COTIDLP, &
+            COTINTP, COTINHP, COTINMP, COTINLP, &
+            CDSIDTP, CDSIDHP, CDSIDMP, CDSIDLP, &
+            CDSINTP, CDSINHP, CDSINMP, CDSINLP, &
+
+            SSALDTP, SSALDHP, SSALDMP, SSALDLP, &
+            SSALNTP, SSALNHP, SSALNMP, SSALNLP, &
+            SDSLDTP, SDSLDHP, SDSLDMP, SDSLDLP, &
+            SDSLNTP, SDSLNHP, SDSLNMP, SDSLNLP, &
+            SSAIDTP, SSAIDHP, SSAIDMP, SSAIDLP, &
+            SSAINTP, SSAINHP, SSAINMP, SSAINLP, &
+            SDSIDTP, SDSIDHP, SDSIDMP, SDSIDLP, &
+            SDSINTP, SDSINHP, SDSINMP, SDSINLP, &
+
+            ASMLDTP, ASMLDHP, ASMLDMP, ASMLDLP, &
+            ASMLNTP, ASMLNHP, ASMLNMP, ASMLNLP, &
+            ADSLDTP, ADSLDHP, ADSLDMP, ADSLDLP, &
+            ADSLNTP, ADSLNHP, ADSLNMP, ADSLNLP, &
+            ASMIDTP, ASMIDHP, ASMIDMP, ASMIDLP, &
+            ASMINTP, ASMINHP, ASMINMP, ASMINLP, &
+            ADSIDTP, ADSIDHP, ADSIDMP, ADSIDLP, &
+            ADSINTP, ADSINHP, ADSINMP, ADSINLP, &
+
+            FORLDTP, FORLDHP, FORLDMP, FORLDLP, &
+            FORLNTP, FORLNHP, FORLNMP, FORLNLP, &
+            FORIDTP, FORIDHP, FORIDMP, FORIDLP, &
+            FORINTP, FORINHP, FORINMP, FORINLP, &
+#endif
+
+            SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
+            BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
+            __RC__)
+
+
+         ! Assume no RRTMG-band absorption in the excluded upper layers.
+         ! Extend normalized boundary fluxes without modifying their values.
+         do K_RAD = LM_RAD + 2, LM + 1
+            SWUFLX (:,K_RAD) = SWUFLX (:,LM_RAD+1)
+            SWDFLX (:,K_RAD) = SWDFLX (:,LM_RAD+1)
+            SWUFLXC(:,K_RAD) = SWUFLXC(:,LM_RAD+1)
+            SWDFLXC(:,K_RAD) = SWDFLXC(:,LM_RAD+1)
+         enddo
+
+         ! Fail visibly rather than silently replacing invalid fluxes.
+         if (.not. all(ieee_is_finite(SWUFLX))  .or. &
+             .not. all(ieee_is_finite(SWDFLX))  .or. &
+             .not. all(ieee_is_finite(SWUFLXC)) .or. &
+             .not. all(ieee_is_finite(SWDFLXC))) then
+
+            print *, '[RRTMG_SW_CUTOFF] Nonfinite SW flux after reconstruction'
+            print *, '[RRTMG_SW_CUTOFF] LM, LM_RAD=', LM, LM_RAD
+
+            error stop 'RRTMG SW: nonfinite reduced-column flux'
+         endif
+
+      else
+
+         ! Standard GEOS or disabled cutoff: original RRTMG SW call.
       call RRTMG_SW (MAPL, &
          RPART, NCOL, LM, &
          SC, ADJES, ZT, ISOLVAR, &
@@ -6545,6 +6689,8 @@ contains
          SOLAR_TO_OBIO .and. include_aerosols, DRBAND, DFBAND, &
          BNDSOLVAR, INDSOLVAR, SOLCYCFRAC, &
          __RC__)
+
+      endif
 
       call MAPL_TimerOff(MAPL,"--RRTMG_RUN")
       call MAPL_TimerOn (MAPL,"--RRTMG_FLIP")
@@ -7050,54 +7196,6 @@ contains
       call MAPL_GetPointer(INTERNAL, FSCUNAN,    'FSCUNAN',    __RC__)
       call MAPL_GetPointer(INTERNAL, FSWBANDN,   'FSWBANDN',   __RC__)
       call MAPL_GetPointer(INTERNAL, FSWBANDNAN, 'FSWBANDNAN', __RC__)
-
-      ! Protect GEOS-MLT from nonphysical normalized shortwave fluxes.
-      ! These fields should remain order one; extremely large finite values can
-      ! otherwise produce catastrophic physical fluxes when multiplied by SLR.
-      if (GEOS_MLT) then
-
-         where (.not. ieee_is_finite(FSWN) .or. abs(FSWN) > 10.0)
-            FSWN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSCN) .or. abs(FSCN) > 10.0)
-            FSCN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSWNAN) .or. abs(FSWNAN) > 10.0)
-            FSWNAN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSCNAN) .or. abs(FSCNAN) > 10.0)
-            FSCNAN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSWUN) .or. abs(FSWUN) > 10.0)
-            FSWUN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSCUN) .or. abs(FSCUN) > 10.0)
-            FSCUN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSWUNAN) .or. abs(FSWUNAN) > 10.0)
-            FSWUNAN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSCUNAN) .or. abs(FSCUNAN) > 10.0)
-            FSCUNAN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSWBANDN) .or. abs(FSWBANDN) > 10.0)
-            FSWBANDN = 0.0
-         end where
-
-         where (.not. ieee_is_finite(FSWBANDNAN) .or. &
-                abs(FSWBANDNAN) > 10.0)
-            FSWBANDNAN = 0.0
-         end where
-
-      endif
 
       call MAPL_GetPointer(INTERNAL, DRUVRN,     'DRUVRN',     __RC__)
       call MAPL_GetPointer(INTERNAL, DFUVRN,     'DFUVRN',     __RC__)
