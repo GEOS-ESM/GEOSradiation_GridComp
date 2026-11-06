@@ -10,12 +10,12 @@ elsewhere; paths inside this repository do not change.
 Paths are relative to this repository's root unless they start with `src/`
 (fixture-relative). Statements without a label are Verified and carry a
 `(path, routine-or-key)` citation. *Inferred:* and *Unverified:* mark the weaker cases.
-Parent documents: [Physics](../../ARCHITECTURE.md) (run order, couplers, synchronization),
-[GEOSgcm_GridComp](../../../../docs/ARCHITECTURE.md), [fixture](../../../../../../../docs/ARCHITECTURE.md).
+Parent documents: Physics (`../../ARCHITECTURE.md` in the fixture) (run order, couplers, synchronization),
+GEOSgcm_GridComp (`../../../../docs/ARCHITECTURE.md` in the fixture), fixture (`../../../../../../../docs/ARCHITECTURE.md` in the fixture).
 Children: [`GEOSsolar_GridComp/ARCHITECTURE.md`](../GEOSsolar_GridComp/ARCHITECTURE.md),
 [`GEOSirrad_GridComp/ARCHITECTURE.md`](../GEOSirrad_GridComp/ARCHITECTURE.md).
-Aerosol provider side: [Chemistry](../../@GEOSchem_GridComp/docs/ARCHITECTURE.md), [GOCART](../../@GEOSchem_GridComp/@GOCART/docs/ARCHITECTURE.md).
-Where `AGCM.rc` comes from: [GEOSgcm_App](../../../../../../Applications/@GEOSgcm_App/docs/ARCHITECTURE.md).
+Aerosol provider side: Chemistry (`../../@GEOSchem_GridComp/docs/ARCHITECTURE.md` in the fixture), GOCART (`../../@GEOSchem_GridComp/@GOCART/docs/ARCHITECTURE.md` in the fixture).
+Where `AGCM.rc` comes from: GEOSgcm_App (`../../../../../../Applications/@GEOSgcm_App/docs/ARCHITECTURE.md` in the fixture).
 
 ## 1. Placement
 - Fixture key `GEOSradiation_GridComp`, `local: ./src/Components/@GEOSgcm_GridComp/GEOSagcm_GridComp/GEOSphysics_GridComp/@GEOSradiation_GridComp`, tag `v2.1.0`, `develop: develop` (`components.yaml`, `GEOSradiation_GridComp`).
