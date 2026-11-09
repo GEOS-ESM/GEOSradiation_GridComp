@@ -2965,6 +2965,7 @@ contains
 
     real, parameter :: SSA_MAX = 0.999999
     real, parameter :: ASY_MAX = 0.999
+    type(ESMF_StateItem_Flag) :: item_type
 
 !=============================================================================
 
@@ -3274,28 +3275,24 @@ contains
        if (implements_aerosol_optics) then
 
            ! set RH for aerosol optics
-           call ESMF_AttributeGet(AERO, &
-              name='relative_humidity_for_aerosol_optics', &
-              value=AS_FIELD_NAME,__RC__)
-           if (AS_FIELD_NAME /= '') then
+           call ESMF_StateGet(AERO, 'relative_humidity_for_aerosol_optics', item_type, _RC)
+           if (item_type==ESMF_STATEITEM_FIELD) then
               call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
               call MAPL_GetPointer(IMPORT,AS_PTR_Q,  'QV', __RC__)
               call MAPL_GetPointer(IMPORT,AS_PTR_T,  'T',  __RC__)
               allocate(AS_ARR_RH(IM,JM,LM),AS_ARR_PL(IM,JM,LM),__STAT__)
               AS_ARR_PL = 0.5 * (AS_PTR_PLE(:,:,1:LM) + AS_PTR_PLE(:,:,0:LM-1))
               AS_ARR_RH = AS_PTR_Q / MAPL_EQSAT(AS_PTR_T,PL=AS_ARR_PL)
-              call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              call MAPL_GetPointer(AERO,AS_PTR_3D,'relative_humidity_for_aerosol_optics',__RC__)
               AS_PTR_3D = AS_ARR_RH
               deallocate(AS_ARR_RH,AS_ARR_PL,__STAT__)
            end if
 
            ! set PLE for aerosol optics
-           call ESMF_AttributeGet(AERO, &
-              name='air_pressure_for_aerosol_optics', &
-              value=AS_FIELD_NAME,__RC__)
-           if (AS_FIELD_NAME /= '') then
+           call ESMF_StateGet(AERO, 'air_pressure_for_aerosol_optics', item_type, _RC)
+           if (item_type == ESMF_STATEITEM_FIELD) then
               call MAPL_GetPointer(IMPORT,AS_PTR_PLE,'PLE',__RC__)
-              call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              call MAPL_GetPointer(AERO,AS_PTR_3D,'air_pressure_for_aerosol_optics',__RC__)
               AS_PTR_3D = AS_PTR_PLE
            end if
 
@@ -3326,29 +3323,23 @@ contains
               call MAPL_TimerOff(MAPL,"---AEROSOL_OPTICS")
 
               ! EXT from AERO_PROVIDER
-              call ESMF_AttributeGet(AERO, &
-                 name='extinction_in_air_due_to_ambient_aerosol', &
-                 value=AS_FIELD_NAME,__RC__)
-              if (AS_FIELD_NAME /= '') then
-                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              call ESMF_StateGet(AERO, 'extinction_in_air_due_to_ambient_aerosol',item_type, _RC)
+              if (item_type==ESMF_STATEITEM_FIELD) then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,'extinction_in_air_due_to_ambient_aerosol',__RC__)
                  if (associated(AS_PTR_3D)) AEROSOL_EXT(:,:,:,band) = MAX(AS_PTR_3D,0.0)
               end if
 
               ! SSA from AERO_PROVIDER (actually EXT * SSA)
-              call ESMF_AttributeGet(AERO, &
-                 name='single_scattering_albedo_of_ambient_aerosol', &
-                 value=AS_FIELD_NAME,__RC__)
-              if (AS_FIELD_NAME /= '') then
-                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              call ESMF_StateGet(AERO, 'single_scattering_albedo_of_ambient_aerosol',item_type, _RC)
+              if (item_type==ESMF_STATEITEM_FIELD) then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,'single_scattering_albedo_of_ambient_aerosol',__RC__)
                  if (associated(AS_PTR_3D)) AEROSOL_SSA(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),SSA_MAX)
               end if
 
               ! ASY from AERO_PROVIDER (actually EXT * SSA * ASY)
-              call ESMF_AttributeGet(AERO, &
-                 name='asymmetry_parameter_of_ambient_aerosol', &
-                 value=AS_FIELD_NAME,__RC__)
-              if (AS_FIELD_NAME /= '') then
-                 call MAPL_GetPointer(AERO,AS_PTR_3D,trim(AS_FIELD_NAME),__RC__)
+              call ESMF_StateGet(AERO,'asymmetry_parameter_of_ambient_aerosol',item_type, _RC)
+              if (item_type==ESMF_STATEITEM_FIELD) then
+                 call MAPL_GetPointer(AERO,AS_PTR_3D,'asymmetry_parameter_of_ambient_aerosol',__RC__)
                  if (associated(AS_PTR_3D)) AEROSOL_ASY(:,:,:,band) = MIN(MAX(AS_PTR_3D,0.0),ASY_MAX)
               end if
 

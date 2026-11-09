@@ -2980,6 +2980,7 @@ contains
       real, allocatable, dimension(:, :, :, :) :: AEROSOL_EXT, AEROSOL_SSA, AEROSOL_ASY
       real, parameter :: SSA_MAX = 0.999999
       real, parameter :: ASY_MAX = 0.999
+      type(ESMF_StateItem_Flag) :: item_type
 
       call ESMF_AttributeGet(AERO, name='implements_aerosol_optics_method', value=aerosol_optics, _RC)
       if (.not. aerosol_optics) then
@@ -2987,16 +2988,16 @@ contains
       end if
 
       ! set RH for aerosol optics
-      call ESMF_AttributeGet(AERO, name='relative_humidity_for_aerosol_optics', value=field_name, _RC)
-      if (field_name /= '') then
-         call MAPL_GetPointer(AERO, ptr3d, trim(field_name), _RC)
+      call ESMF_StateGet(AERO, 'relative_humidity_for_aerosol_optics', item_type, _RC)
+      if (item_type == ESMF_STATEITEM_FIELD) then
+         call MAPL_GetPointer(AERO, ptr3d, 'relative_humidity_for_aerosol_optics', _RC)
          ptr3d = RH
       end if
 
       ! set PLE for aerosol optics
-      call ESMF_AttributeGet(AERO, name='air_pressure_for_aerosol_optics', value=field_name, _RC)
-      if (field_name /= '') then
-         call MAPL_GetPointer(AERO, ptr3d, trim(field_name), _RC)
+      call ESMF_StateGet(AERO, 'air_pressure_for_aerosol_optics', item_type, _RC)
+      if (item_type == ESMF_STATEITEM_FIELD) then
+         call MAPL_GetPointer(AERO, ptr3d, 'air_pressure_for_aerosol_optics', _RC)
          ptr3d = PLE
       end if
 
@@ -3014,23 +3015,23 @@ contains
          call ESMF_MethodExecute(AERO, label="run_aerosol_optics", _RC)
 
          ! EXT from AERO_PROVIDER
-         call ESMF_AttributeGet(AERO, name='extinction_in_air_due_to_ambient_aerosol', value=field_name, _RC)
-         if (field_name /= '') then
-            call MAPL_GetPointer(AERO, ptr3d, trim(field_name), _RC)
+         call ESMF_StateGet(AERO, 'extinction_in_air_due_to_ambient_aerosol', item_type, _RC)
+         if (item_type == ESMF_STATEITEM_FIELD) then
+            call MAPL_GetPointer(AERO, ptr3d, 'extinction_in_air_due_to_ambient_aerosol', _RC)
             if (associated(ptr3d)) AEROSOL_EXT(:, :, :, band) = max(ptr3d, 0.0)
          end if
 
          ! SSA from AERO_PROVIDER
-         call ESMF_AttributeGet(AERO, name='single_scattering_albedo_of_ambient_aerosol', value=field_name, _RC)
-         if (field_name /= '') then
-            call MAPL_GetPointer(AERO, ptr3d, trim(field_name), _RC)
+         call ESMF_StateGet(AERO, 'single_scattering_albedo_of_ambient_aerosol', item_type, _RC)
+         if (item_type == ESMF_STATEITEM_FIELD) then
+            call MAPL_GetPointer(AERO, ptr3d, 'single_scattering_albedo_of_ambient_aerosol', _RC)
             if (associated(ptr3d)) AEROSOL_SSA(:, :, :, band) = min(max(ptr3d, 0.0), SSA_MAX)
          end if
 
          ! ASY from AERO_PROVIDER
-         call ESMF_AttributeGet(AERO, name='asymmetry_parameter_of_ambient_aerosol', value=field_name, _RC)
-         if (field_name /= '') then
-            call MAPL_GetPointer(AERO, ptr3d, trim(field_name), _RC)
+         call ESMF_StateGet(AERO, 'asymmetry_parameter_of_ambient_aerosol', item_type, _RC)
+         if (item_type == ESMF_STATEITEM_FIELD) then
+            call MAPL_GetPointer(AERO, ptr3d, 'asymmetry_parameter_of_ambient_aerosol', _RC)
             if (associated(ptr3d)) AEROSOL_ASY(:, :, :, band) = min(max(ptr3d, 0.0), ASY_MAX)
          end if
 
