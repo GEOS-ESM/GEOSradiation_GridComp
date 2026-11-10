@@ -59,6 +59,7 @@ Parent documents (Physics, GEOSgcm_GridComp, fixture) are linked from the header
   the solar band exports built in loops) is added in `SetServices`.
 - Code owners are in `.github/CODEOWNERS`: the radiation team, and the CMake team for
   `CMakeLists.txt` files.
+- Error handling in code you write or touch uses the MAPL3 macros (`@MAPL/include/MAPL_ErrLog.h`): `_RC` on calls, `_STAT` on `allocate`, `_ASSERT(cond, msg)` with a message, and `_RETURN(_SUCCESS)` at every successful exit. Convert `RC=STATUS`/`VERIFY_`/`ASSERT_`/`RETURN_` in any routine you change. `_RC` expands to two statements (`rc=status);_VERIFY(status`), so it cannot end a one-line `if`; use a block `if`. Do not add decorative `!----` separator lines.
 
 ## Build and test
 
