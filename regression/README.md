@@ -231,6 +231,21 @@ If a case's data directory is missing, `run_case.cmake` prints
 "Regression data not found ... skipping" and the test **passes without
 running**.
 
+## Run time
+
+Measured 2026-11-09 with `ctest -L REGRESSION` (ifx Debug, 6 PEs, `logging.yaml` in place). Times are per-rank means from the MAPL profiler output in the test log.
+
+| Case | Test | Run | RRTMGP | Other |
+|---|---|---|---|---|
+| `irrad-sa` | 8.2 s | 5.3 s | 5.25 s (LW) | checkpoint writes 0.2 s |
+| `solar-sa` | 8.4 s | 5.9 s | 5.46 s (SW) | `BALANCE` 0.24 s |
+| `radiation` | 17.3 s | 11.7 s | 4.8 s (LW) + 5.4 s (SW) | COSP 0.5 s |
+| `satsim-sa` | 3.5 s | 0.7 s | none | COSP 0.6 s |
+
+Unlike the Moist cases, these are dominated by the radiation computation, not by MAPL: MAPL initialize is about 1-1.5 s per case, and the rest of each test (`mpiexec`, startup, `nccmp`) about 2 s. `radiation` is roughly `irrad-sa` plus `solar-sa` plus COSP; nothing runs twice.
+
+A single RRTMGP call takes ~5 s on ~144 columns per rank, with the reduced g-point tables (`rrtmgp-gas-lw-g128.nc`, `rrtmgp-gas-sw-g112.nc`), because RRTMGP is built with the full Debug flags (`-O0 -check all -init=snan,arrays -fpe0 -fno-inline-functions -nolib-inline`; `RRTMGP_cmake/CMakeFiles/RRTMGP.dir/flags.make` in the build). This is inferred: the profiler timers stop at `RRTMGP`, and which kernels or checks cost most has not been profiled. Possible speedups: build the RRTMGP target with `-check none` but keep `-O0` (expected zero-diff, to be verified against the baselines), or with optimization (changes answers, so all four baselines would have to be regenerated).
+
 ## Running
 
 ```
