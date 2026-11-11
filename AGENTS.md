@@ -3,7 +3,7 @@
 **Describes:** the MAPL3 line, branch `release/MAPL-v3`; verified against `GEOSradiation_GridComp` @ `856688c` (2026-11-10).
 **Placement:** `src/Components/@GEOSgcm_GridComp/GEOSagcm_GridComp/GEOSphysics_GridComp/@GEOSradiation_GridComp` in the GEOSgcm fixture (`components.yaml`); other fixtures may place it elsewhere. Paths below are relative to this repository.
 
-> **Built and ported on this line.** `CMakeLists.txt` builds the `RADIATION` composite and `GEOS_RadiationShared`, `GEOSsolar_GridComp`, `GEOSirrad_GridComp` and `GEOSsatsim_GridComp`, all ported to MAPL3, and adds `regression/`. `GEOS_RadiationShared/@RRTMGP` is a separate nested repository; edit it only there. The Physics library that would add `RADIATION` (`GEOS_PhysicsGridComp.F90` in `GEOSgcm_GridComp`) is not compiled on this line, so `RADIATION` runs only in the regression cases; Physics' comment "restricted to IRRAD only" on this repository predates the ports.
+> **Built and ported on this line.** `CMakeLists.txt` builds the `RADIATION` composite and `GEOS_RadiationShared`, `GEOSsolar_GridComp`, `GEOSirrad_GridComp` and `GEOSsatsim_GridComp`, all ported to MAPL3, and adds `regression/`. `GEOS_RadiationShared/@RRTMGP` is a separate nested repository; edit it only there. The Physics library that would add `RADIATION` (`GEOS_PhysicsGridComp.F90` in `GEOSgcm_GridComp`) is not compiled on this line, so `RADIATION` runs only in the regression cases; the comment "restricted to IRRAD only" on this repository in Physics' `CMakeLists.txt` predates the ports.
 
 ## Rules for agents
 

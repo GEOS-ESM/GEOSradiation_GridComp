@@ -72,7 +72,7 @@ Radiation neither provides nor subscribes to any service.
 
 ## Cross-cutting concerns
 
-- **Generated specs:** each component's imports, exports and internals are declared in its `*_StateSpecs.rc` and turned into `*___.h` headers by MAPL's ACG. Added by hand in `SetServices`, because the table cannot express them: the `AERO` state import, `IRRAD`'s `RATS_DIAGNOSTICS` fields, and `SOLAR`'s band exports built in loops.
+- **Generated specs:** each component's imports, exports and internals are declared in its `*_StateSpecs.rc` and turned into `*___.h` headers by MAPL's ACG. Added by hand in `SetServices`, because the table cannot express them: the `AERO` state import, `IRRAD`'s `RATS_DIAGNOSTICS` fields, and `SOLAR`'s per-band internals and exports, built in loops.
 - **Exports only when requested:** most exports are computed only if requested, and some work is too (`SOLAR`'s no-aerosol transfer runs only when a no-aerosol export is requested; `IRRAD`'s choice of flux sets under RRTMGP).
 - **Undefined values:** `SOLAR`, `IRRAD` and `SATSIM` use MAPL2's undefined value (`MAPL2_UNDEF = 1.0e15`), not MAPL3's `MAPL_UNDEF`; for example `SATSIM`'s exports and RRTMG's no-aerosol infrared fluxes.
 - **Build options:** `ENABLE_SOLAR_RADVAL` adds developer diagnostics to `SOLAR` and changes its restart contents; `RRTMGP_SINGLE_PRECISION` builds RRTMGP in single precision; RRTMGP's random numbers come from MKL when it is found, otherwise from a Mersenne Twister.
@@ -89,4 +89,4 @@ Radiation neither provides nor subscribes to any service.
 
 1. If the state's Info key `implements_aerosol_optics_method` is false, no aerosols are used.
 2. Write relative humidity and interface pressure into the provider fields named by `relative_humidity_for_aerosol_optics` and `air_pressure_for_aerosol_optics`.
-3. For each band, set `band_for_aerosol_optics`, run the callback `run_aerosol_optics` (`ESMF_MethodExecute`, checking both `rc` and `userRC`), and read the fields named by `extinction_in_air_due_to_ambient_aerosol`, `single_scattering_albedo_of_ambient_aerosol` and `asymmetry_parameter_of_ambient_aerosol`. They hold extinction, extinction times albedo, and extinction times albedo times asymmetry; `SOLAR` divides to get albedo and asymmetry; both children clip the values (albedo at most 0.999999, asymmetry at most 0.999).
+3. For each band, set `band_for_aerosol_optics`, run the callback `run_aerosol_optics` (`ESMF_MethodExecute`, checking both `rc` and `userRC`), and read the fields named by `extinction_in_air_due_to_ambient_aerosol`, `single_scattering_albedo_of_ambient_aerosol` and `asymmetry_parameter_of_ambient_aerosol`. They hold extinction, extinction times albedo, and extinction times albedo times asymmetry; `SOLAR` divides to get albedo and asymmetry. Both children clip these fields as received, before any division: all three at zero below, the second at 0.999999 and the third at 0.999 above (as in MAPL2).
