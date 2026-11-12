@@ -89,3 +89,137 @@ mapl:
         units: 1
         vertical_dim_spec: "n"
         standard_name: "fraction_of_ocean"
+
+  connections:
+    - src_comp: <self>
+      src_name: T
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: T
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QV
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QV
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FCLD
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FCLD
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RL
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RL
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RI
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RI
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RG
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RG
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: PLE
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: PLE
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ZLE
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ZLE
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QL
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QL
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QI
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QI
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QG
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QG
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: TS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: TS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: MCOSZ
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: MCOSZ
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FRLAND
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FRLAND
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FROCEAN
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FROCEAN
+      dst_intent: export
