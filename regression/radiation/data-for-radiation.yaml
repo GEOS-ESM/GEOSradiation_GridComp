@@ -149,3 +149,228 @@ mapl:
         vertical_dim_spec: "n"
         standard_name: "fraction_of_ocean"
       # AERO comes from FakeGOCART (see root.yaml connections)
+
+  connections:
+    - src_comp: <self>
+      src_name: PLEINST
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: PLEINST
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: PLE
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: PLE
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: T
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: T
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QV
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QV
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QL
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QL
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QI
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QI
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: QG
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: QG
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RL
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RL
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RI
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RI
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: RG
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: RG
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: O3
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: O3
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: CH4
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: CH4
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: N2O
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: N2O
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: CFC11
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: CFC11
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: CFC12
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: CFC12
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: HCFC22
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: HCFC22
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FCLD
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FCLD
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: TS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: TS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: EMIS
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: EMIS
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: PREF
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: PREF
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: TSINST
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: TSINST
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ALBVR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ALBVR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ALBVF
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ALBVF
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ALBNR
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ALBNR
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ALBNF
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ALBNF
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: ZLE
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: ZLE
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FRLAND
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FRLAND
+      dst_intent: export
+
+    - src_comp: <self>
+      src_name: FROCEAN
+      src_intent: internal
+      dst_comp: <self>
+      dst_name: FROCEAN
+      dst_intent: export
